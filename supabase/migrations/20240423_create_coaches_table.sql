@@ -1,5 +1,5 @@
--- Create coaches table
-create table if not exists public.coaches (
+-- Create coaches table if it doesn't exist
+CREATE TABLE IF NOT EXISTS public.coaches (
     id uuid default gen_random_uuid() primary key,
     created_at timestamp with time zone default timezone('utc'::text, now()) not null,
     name text not null,
@@ -9,27 +9,46 @@ create table if not exists public.coaches (
     admin_id uuid references auth.users(id) on delete cascade not null
 );
 
--- Enable RLS
-alter table public.coaches enable row level security;
+-- Enable RLS if not already enabled
+ALTER TABLE public.coaches ENABLE ROW LEVEL SECURITY;
 
--- Create policies
-create policy "Coaches are viewable by admin who created them"
-    on public.coaches for select
-    using (auth.uid() = admin_id);
+-- Create policies if they don't exist
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'coaches' AND policyname = 'Coaches are viewable by admin who created them') THEN
+        CREATE POLICY "Coaches are viewable by admin who created them"
+            ON public.coaches FOR SELECT
+            USING (auth.uid() = admin_id);
+    END IF;
 
-create policy "Coaches are insertable by admin"
-    on public.coaches for insert
-    with check (auth.uid() = admin_id);
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'coaches' AND policyname = 'Coaches are insertable by admin') THEN
+        CREATE POLICY "Coaches are insertable by admin"
+            ON public.coaches FOR INSERT
+            WITH CHECK (auth.uid() = admin_id);
+    END IF;
 
-create policy "Coaches are updatable by admin who created them"
-    on public.coaches for update
-    using (auth.uid() = admin_id)
-    with check (auth.uid() = admin_id);
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'coaches' AND policyname = 'Coaches are updatable by admin who created them') THEN
+        CREATE POLICY "Coaches are updatable by admin who created them"
+            ON public.coaches FOR UPDATE
+            USING (auth.uid() = admin_id)
+            WITH CHECK (auth.uid() = admin_id);
+    END IF;
 
-create policy "Coaches are deletable by admin who created them"
-    on public.coaches for delete
-    using (auth.uid() = admin_id);
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'coaches' AND policyname = 'Coaches are deletable by admin who created them') THEN
+        CREATE POLICY "Coaches are deletable by admin who created them"
+            ON public.coaches FOR DELETE
+            USING (auth.uid() = admin_id);
+    END IF;
+END $$;
 
--- Create index for faster lookups
-create index coaches_admin_id_idx on public.coaches(admin_id);
-create index coaches_access_code_idx on public.coaches(access_code); 
+-- Create indexes if they don't exist
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE tablename = 'coaches' AND indexname = 'coaches_admin_id_idx') THEN
+        CREATE INDEX coaches_admin_id_idx ON public.coaches(admin_id);
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE tablename = 'coaches' AND indexname = 'coaches_access_code_idx') THEN
+        CREATE INDEX coaches_access_code_idx ON public.coaches(access_code);
+    END IF;
+END $$; 
