@@ -291,13 +291,8 @@ export const AdminRegisterScreen = () => {
           style={styles.content}
         >
           <View style={styles.header}>
-            <MaterialCommunityIcons 
-              name="shield-account" 
-              size={48} 
-              color={COLORS.primary}
-            />
             <Text style={styles.title}>Create Admin Account</Text>
-            <Text style={styles.subtitle}>Please fill in the details below</Text>
+            <Text style={styles.subtitle}>Set up your club and administrator profile</Text>
           </View>
 
           <View style={styles.form}>
@@ -455,17 +450,19 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xl,
   },
   title: {
-    fontSize: FONT_SIZES.xxl,
+    fontSize: 28,
     fontWeight: '700',
     color: COLORS.text,
-    marginTop: SPACING.md,
     marginBottom: SPACING.xs,
     fontFamily: 'Urbanist',
+    textAlign: 'center',
+    lineHeight: 34,
   },
   subtitle: {
     fontSize: FONT_SIZES.md,
     color: COLORS.grey[600],
     fontFamily: 'Urbanist',
+    textAlign: 'center',
   },
   form: {
     gap: SPACING.lg,
