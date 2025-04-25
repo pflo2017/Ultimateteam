@@ -148,23 +148,6 @@ export const AdminRegisterScreen = () => {
         throw new Error('Failed to create user account. Please try again.');
       }
 
-      // Sign in immediately after signup to get a session
-      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-        email: formData.email,
-        password: formData.password,
-      });
-
-      if (signInError) {
-        throw new Error('Account created but failed to establish session. Please try logging in.');
-      }
-
-      // Verify we have a valid session
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      
-      if (sessionError || !session) {
-        throw new Error('Failed to establish a valid session. Please try logging in.');
-      }
-
       // Upload image if selected
       let logoUrl = null;
       if (formData.clubLogo) {
@@ -187,53 +170,62 @@ export const AdminRegisterScreen = () => {
           
           if (!response) {
             setIsLoading(false);
-            // Sign out since we won't complete registration
-            await supabase.auth.signOut();
             return;
           }
         }
       }
 
-      // Create admin profile
-      const { data: profileData, error: profileError } = await supabase
+      // First create the club
+      const { data: clubData, error: clubError } = await supabase
+        .from('clubs')
+        .insert([
+          {
+            name: formData.clubName,
+            logo_url: logoUrl,
+            admin_id: authData.user.id,
+            is_active: true,
+            city: formData.clubLocation,
+          }
+        ])
+        .select()
+        .single();
+
+      if (clubError) {
+        console.error('Club creation error:', clubError);
+        throw new Error(`Failed to create club: ${clubError.message}`);
+      }
+
+      // Then create admin profile
+      const { error: profileError } = await supabase
         .from('admin_profiles')
         .insert([
           {
-            user_id: session.user.id, // Use the session user ID instead of authData
+            user_id: authData.user.id,
             club_name: formData.clubName,
             club_location: formData.clubLocation,
             admin_name: formData.adminName,
             club_logo: logoUrl,
-          },
-        ])
-        .select();
+          }
+        ]);
 
       if (profileError) {
         console.error('Profile creation error:', profileError);
-        console.error('Profile error details:', {
-          code: profileError.code,
-          message: profileError.message,
-          details: profileError.details,
-          hint: profileError.hint
-        });
-        // Sign out since profile creation failed
-        await supabase.auth.signOut();
+        // Clean up the created club since profile creation failed
+        await supabase.from('clubs').delete().eq('id', clubData.id);
         throw new Error(`Failed to create admin profile: ${profileError.message}`);
       }
-
-      // Sign out after successful registration
-      await supabase.auth.signOut();
 
       setRegistrationSuccess(true);
       Alert.alert(
         'Success',
-        'Account created successfully! You can now log in.',
+        'Account created successfully!',
         [{ text: 'OK' }]
       );
       
-      setTimeout(() => {
-        navigation.navigate('AdminLogin');
-      }, 2000);
+      // Remove the navigation to AdminLogin since we're already logged in
+      // setTimeout(() => {
+      //   navigation.navigate('AdminLogin');
+      // }, 2000);
 
     } catch (error: any) {
       console.error('Registration error:', error);
@@ -259,7 +251,7 @@ export const AdminRegisterScreen = () => {
           />
           <Text style={styles.successTitle}>Congratulations!</Text>
           <Text style={styles.successMessage}>
-            Your administrator account has been created successfully. You can now log in.
+            Your administrator account has been created successfully.
           </Text>
         </Animated.View>
       </View>

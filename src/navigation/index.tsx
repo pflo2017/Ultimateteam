@@ -7,9 +7,11 @@ import { AdminRegisterScreen } from '../screens/AdminRegisterScreen';
 import { CoachLoginScreen } from '../screens/CoachLoginScreen';
 import { ParentLoginScreen } from '../screens/ParentLoginScreen';
 import { AdminNavigator } from './AdminTabNavigator';
+import { CoachNavigator } from './CoachNavigator';
 import { supabase } from '../lib/supabase';
 import { Session } from '@supabase/supabase-js';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type RootStackParamList = {
   Home: undefined;
@@ -18,21 +20,32 @@ type RootStackParamList = {
   CoachLogin: undefined;
   ParentLogin: undefined;
   AdminDashboard: undefined;
+  Coach: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export const Navigation = () => {
   const [session, setSession] = useState<Session | null>(null);
+  const [coachData, setCoachData] = useState<any>(null);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
-    // Clear any existing session on app start
-    supabase.auth.signOut();
-    
-    // Check current session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-    });
+    const initializeApp = async () => {
+      try {
+        // Clear all data on app start for a clean slate
+        await AsyncStorage.clear(); // Clear all stored data
+        await supabase.auth.signOut();
+        setSession(null);
+        setCoachData(null);
+        setIsInitialized(true);
+      } catch (error) {
+        console.error('Error initializing app:', error);
+        setIsInitialized(true);
+      }
+    };
+
+    initializeApp();
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -42,6 +55,39 @@ export const Navigation = () => {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Listen for coach data changes
+  useEffect(() => {
+    const checkCoachData = async () => {
+      try {
+        const storedCoachData = await AsyncStorage.getItem('coach_data');
+        if (storedCoachData) {
+          setCoachData(JSON.parse(storedCoachData));
+        } else {
+          setCoachData(null);
+        }
+      } catch (error) {
+        console.error('Error checking coach data:', error);
+        setCoachData(null);
+      }
+    };
+
+    // Check immediately
+    checkCoachData();
+
+    // Set up interval to check for changes
+    const interval = setInterval(checkCoachData, 1000);
+
+    // Cleanup
+    return () => {
+      clearInterval(interval);
+    };
+  }, []);
+
+  if (!isInitialized) {
+    // You could show a splash screen here
+    return null;
+  }
+
   return (
     <SafeAreaProvider>
       <NavigationContainer>
@@ -50,6 +96,15 @@ export const Navigation = () => {
             <Stack.Screen 
               name="AdminDashboard" 
               component={AdminNavigator}
+              options={{
+                headerShown: false,
+                gestureEnabled: false,
+              }}
+            />
+          ) : coachData ? (
+            <Stack.Screen 
+              name="Coach" 
+              component={CoachNavigator}
               options={{
                 headerShown: false,
                 gestureEnabled: false,

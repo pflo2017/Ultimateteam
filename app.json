@@ -8,12 +8,21 @@
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "backgroundColor": "#ffffff",
+      "statusBar": {
+        "style": "dark-content",
+        "backgroundColor": "#ffffff"
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
+      },
+      "statusBar": {
+        "backgroundColor": "#ffffff",
+        "barStyle": "dark-content"
       }
     },
     "web": {

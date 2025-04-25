@@ -109,7 +109,7 @@ export const HomeScreen = () => {
             onPress={() => navigation.navigate('ParentLogin')}
           >
             <View style={styles.iconContainer}>
-              <MaterialCommunityIcons name="account-group" size={24} color={COLORS.white} />
+              <MaterialCommunityIcons name="account-child" size={24} color={COLORS.white} />
             </View>
             <Text style={styles.buttonText}>Login As Parent</Text>
           </AnimatedPressable>

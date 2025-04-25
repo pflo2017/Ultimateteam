@@ -1,102 +1,108 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, KeyboardAvoidingView, Platform, Pressable, Alert } from 'react-native';
 import { Text, TextInput } from 'react-native-paper';
 import { COLORS, SPACING, FONT_SIZES } from '../../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { supabase } from '../../lib/supabase';
+import type { RouteProp } from '@react-navigation/native';
+import type { AdminStackParamList } from '../../types/navigation';
 
-export const AddCoachScreen = () => {
+type EditCoachScreenRouteProp = RouteProp<AdminStackParamList, 'EditCoach'>;
+
+export const EditCoachScreen = () => {
   const [coachName, setCoachName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const navigation = useNavigation();
+  const route = useRoute<EditCoachScreenRouteProp>();
+  const { coachId } = route.params;
 
-  const generateAccessCode = () => {
-    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let code = 'C-'; // Prefix to distinguish coach codes
-    for (let i = 0; i < 6; i++) {
-      code += characters.charAt(Math.floor(Math.random() * characters.length));
+  useEffect(() => {
+    loadCoachData();
+  }, []);
+
+  const loadCoachData = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('coaches')
+        .select('name, phone_number')
+        .eq('id', coachId)
+        .single();
+
+      if (error) throw error;
+      if (data) {
+        setCoachName(data.name);
+        setPhoneNumber(data.phone_number);
+      }
+    } catch (error) {
+      console.error('Error loading coach data:', error);
+      Alert.alert('Error', 'Failed to load coach data');
     }
-    return code;
   };
 
-  const handleCreateCoach = async () => {
+  const handleUpdateCoach = async () => {
     if (!coachName.trim() || !phoneNumber.trim()) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
 
     setIsLoading(true);
-
     try {
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      
-      if (userError || !user) {
-        throw new Error('Authentication error');
-      }
-
-      // First get the club_id for the current admin
-      const { data: clubData, error: clubError } = await supabase
-        .from('clubs')
-        .select('id')
-        .eq('admin_id', user.id)
-        .single();
-
-      if (clubError) throw clubError;
-      if (!clubData) throw new Error('No club found for this admin');
-
-      const accessCode = generateAccessCode();
-
-      // Check if access code already exists
-      const { data: existingCode } = await supabase
-        .from('coaches')
-        .select('id')
-        .eq('access_code', accessCode)
-        .single();
-
-      if (existingCode) {
-        // In the rare case of a collision, generate a new code
-        throw new Error('Access code collision, please try again');
-      }
-
       const { error } = await supabase
         .from('coaches')
-        .insert([
-          {
-            name: coachName.trim(),
-            phone_number: phoneNumber.trim(),
-            admin_id: user.id,
-            club_id: clubData.id,
-            is_active: true,
-            access_code: accessCode
-          }
-        ]);
+        .update({
+          name: coachName.trim(),
+          phone_number: phoneNumber.trim(),
+        })
+        .eq('id', coachId);
 
       if (error) throw error;
 
-      // Show success message with the access code
-      Alert.alert(
-        'Coach Created',
-        `Coach has been created successfully!\n\nAccess Code: ${accessCode}\n\nPlease share this code with the coach.`,
-        [
-          { 
-            text: 'OK',
-            onPress: () => navigation.goBack()
-          }
-        ]
-      );
-
+      Alert.alert('Success', 'Coach updated successfully');
+      navigation.goBack();
     } catch (error) {
-      console.error('Error creating coach:', error);
-      Alert.alert(
-        'Error',
-        'Failed to create coach. Please try again.',
-        [{ text: 'OK' }]
-      );
+      console.error('Error updating coach:', error);
+      Alert.alert('Error', 'Failed to update coach');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleDeleteCoach = () => {
+    Alert.alert(
+      'Delete Coach',
+      'Are you sure you want to delete this coach? This action cannot be undone.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setIsLoading(true);
+            try {
+              const { error } = await supabase
+                .from('coaches')
+                .delete()
+                .eq('id', coachId);
+
+              if (error) throw error;
+
+              Alert.alert('Success', 'Coach deleted successfully');
+              navigation.goBack();
+            } catch (error) {
+              console.error('Error deleting coach:', error);
+              Alert.alert('Error', 'Failed to delete coach');
+            } finally {
+              setIsLoading(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -117,8 +123,8 @@ export const AddCoachScreen = () => {
 
       <View style={styles.content}>
         <View style={styles.header}>
-          <Text style={styles.title}>Add New Coach</Text>
-          <Text style={styles.subtitle}>Enter coach details</Text>
+          <Text style={styles.title}>Edit Coach</Text>
+          <Text style={styles.subtitle}>Update coach information or delete coach</Text>
         </View>
 
         <View style={styles.form}>
@@ -131,7 +137,6 @@ export const AddCoachScreen = () => {
             outlineStyle={styles.inputOutline}
             contentStyle={styles.inputContent}
             theme={{ colors: { primary: COLORS.primary }}}
-            placeholder="Enter full name"
             left={<TextInput.Icon icon="account-tie" color={COLORS.primary} />}
           />
 
@@ -144,18 +149,27 @@ export const AddCoachScreen = () => {
             outlineStyle={styles.inputOutline}
             contentStyle={styles.inputContent}
             theme={{ colors: { primary: COLORS.primary }}}
-            placeholder="Enter phone number"
-            keyboardType="phone-pad"
             left={<TextInput.Icon icon="phone" color={COLORS.primary} />}
+            keyboardType="phone-pad"
           />
 
           <Pressable 
-            onPress={handleCreateCoach}
+            onPress={handleUpdateCoach}
             disabled={isLoading}
-            style={[styles.createButton, isLoading && styles.createButtonDisabled]}
+            style={[styles.updateButton, isLoading && styles.buttonDisabled]}
           >
             <Text style={styles.buttonText}>
-              {isLoading ? 'Creating Coach...' : 'Create Coach'}
+              {isLoading ? 'Updating...' : 'Update Coach'}
+            </Text>
+          </Pressable>
+
+          <Pressable 
+            onPress={handleDeleteCoach}
+            disabled={isLoading}
+            style={[styles.deleteButton, isLoading && styles.buttonDisabled]}
+          >
+            <Text style={[styles.buttonText, styles.deleteButtonText]}>
+              Delete Coach
             </Text>
           </Pressable>
         </View>
@@ -214,7 +228,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Urbanist',
     fontSize: FONT_SIZES.md,
   },
-  createButton: {
+  updateButton: {
     backgroundColor: COLORS.primary,
     borderRadius: 100,
     height: 58,
@@ -222,7 +236,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: SPACING.md,
   },
-  createButtonDisabled: {
+  deleteButton: {
+    backgroundColor: COLORS.white,
+    borderRadius: 100,
+    height: 58,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.error,
+  },
+  buttonDisabled: {
     opacity: 0.7,
   },
   buttonText: {
@@ -231,5 +254,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontFamily: 'Urbanist',
     letterSpacing: 0.2,
+  },
+  deleteButtonText: {
+    color: COLORS.error,
   },
 }); 

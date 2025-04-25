@@ -16,14 +16,23 @@ export default {
     ],
     ios: {
       supportsTablet: true,
-      bundleIdentifier: "com.ultimateteam.app"
+      bundleIdentifier: "com.ultimateteam.app",
+      backgroundColor: "#ffffff",
+      statusBar: {
+        style: "dark-content",
+        backgroundColor: "#ffffff"
+      }
     },
     android: {
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",
         backgroundColor: "#ffffff"
       },
-      package: "com.ultimateteam.app"
+      package: "com.ultimateteam.app",
+      statusBar: {
+        backgroundColor: "#ffffff",
+        barStyle: "dark-content"
+      }
     },
     web: {
       favicon: "./assets/favicon.png"

@@ -34,6 +34,16 @@ export const AddTeamScreen = () => {
       if (userError) throw userError;
       if (!user) throw new Error('No user found');
 
+      // Get the club_id for the current admin
+      const { data: club, error: clubError } = await supabase
+        .from('clubs')
+        .select('id')
+        .eq('admin_id', user.id)
+        .single();
+
+      if (clubError) throw clubError;
+      if (!club) throw new Error('No club found for this admin');
+
       const access_code = generateAccessCode();
       console.log('Generated access code:', access_code);
       
@@ -42,12 +52,13 @@ export const AddTeamScreen = () => {
         access_code,
         created_at: new Date().toISOString(),
         admin_id: user.id,
+        club_id: club.id,
         is_active: true
       };
       
       console.log('Attempting to create team:', newTeam);
       
-      // Insert the team with the admin_id
+      // Insert the team with the admin_id and club_id
       const { data, error } = await supabase
         .from('teams')
         .insert([newTeam])
@@ -115,7 +126,7 @@ export const AddTeamScreen = () => {
             contentStyle={styles.inputContent}
             theme={{ colors: { primary: COLORS.primary }}}
             placeholder="e.g., Grupa 2016-2017"
-            left={<TextInput.Icon icon="domain" color={COLORS.primary} />}
+            left={<TextInput.Icon icon="account-multiple-plus" color={COLORS.primary} />}
           />
 
           <Pressable 

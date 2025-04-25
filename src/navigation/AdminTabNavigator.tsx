@@ -11,15 +11,17 @@ import { AdminAnnouncementsScreen } from '../screens/admin/AnnouncementsScreen';
 import { ClubSettingsScreen } from '../screens/admin/ClubSettingsScreen';
 import { AddTeamScreen } from '../screens/admin/AddTeamScreen';
 import { AddCoachScreen } from '../screens/admin/AddCoachScreen';
+import { EditCoachScreen } from '../screens/admin/EditCoachScreen';
+import { EditTeamScreen } from '../screens/admin/EditTeamScreen';
 import { TeamDetailsScreen } from '../screens/admin/TeamDetailsScreen';
-import { Image, Pressable, View, ActivityIndicator, Alert, StyleSheet, Text } from 'react-native';
+import { Image, Pressable, View, ActivityIndicator, Alert, StyleSheet, Text, Platform, StatusBar } from 'react-native';
 import { Menu } from 'react-native-paper';
 import { supabase } from '../lib/supabase';
 import { SUPABASE_URL } from '@env';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { AdminStackParamList, AdminTabParamList } from '../types/navigation';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
 
@@ -28,33 +30,92 @@ const Stack = createNativeStackNavigator<AdminStackParamList>();
 
 type AdminNavigationProp = NativeStackNavigationProp<AdminStackParamList>;
 
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.white,
+  },
+  safeArea: {
+    backgroundColor: COLORS.white,
+  },
+  headerWrapper: {
+    backgroundColor: COLORS.white,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  headerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    height: 44,
+    backgroundColor: COLORS.white,
+    marginTop: Platform.OS === 'ios' ? 47 : 0,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  clubName: {
+    fontSize: 22,
+    fontWeight: '500',
+    color: COLORS.primary,
+  },
+  profileButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  profileImage: {
+    width: '100%',
+    height: '100%',
+  },
+  menuContent: {
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+  menu: {
+    marginTop: 46,
+  },
+});
+
 const AdminHeader = () => {
   const [visible, setVisible] = useState(false);
   const [clubLogo, setClubLogo] = useState<string | null>(null);
+  const [clubName, setClubName] = useState<string>('');
   const [isUploading, setIsLoading] = useState(false);
   const navigation = useNavigation<AdminNavigationProp>();
 
   useEffect(() => {
-    loadClubLogo();
+    loadClubInfo();
+
+    // Add focus listener to reload club info when returning to screen
+    const unsubscribe = navigation.addListener('focus', () => {
+      loadClubInfo();
+    });
+
+    return unsubscribe;
   }, []);
 
-  const loadClubLogo = async () => {
+  const loadClubInfo = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
       const { data: profile } = await supabase
         .from('admin_profiles')
-        .select('club_logo')
+        .select('club_logo, club_name')
         .eq('user_id', user.id)
         .single();
 
-      if (profile?.club_logo) {
-        // Fix the URL by using just the filename
+      if (profile) {
         setClubLogo(profile.club_logo);
+        setClubName(profile.club_name);
       }
     } catch (error) {
-      console.error('Error loading club logo:', error);
+      console.error('Error loading club info:', error);
     }
   };
 
@@ -118,7 +179,7 @@ const AdminHeader = () => {
         if (updateError) throw updateError;
 
         // Reload the logo
-        loadClubLogo();
+        loadClubInfo();
       }
     } catch (error) {
       console.error('Error changing photo:', error);
@@ -129,223 +190,188 @@ const AdminHeader = () => {
   };
 
   return (
-    <Menu
-      visible={visible}
-      onDismiss={() => setVisible(false)}
-      anchor={
-        <Pressable 
-          onPress={() => setVisible(true)}
-          style={styles.profileButton}
+    <View style={styles.headerWrapper}>
+      <View style={styles.headerContainer}>
+        <Text style={styles.clubName}>{clubName}</Text>
+        <Menu
+          visible={visible}
+          onDismiss={() => setVisible(false)}
+          anchor={
+            <Pressable 
+              onPress={() => setVisible(true)}
+              style={styles.profileButton}
+            >
+              {isUploading ? (
+                <ActivityIndicator size="small" color={COLORS.white} />
+              ) : clubLogo ? (
+                <Image
+                  source={{ 
+                    uri: `${SUPABASE_URL}/storage/v1/object/public/club-logos/${clubLogo}`,
+                  }}
+                  style={styles.profileImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <MaterialCommunityIcons
+                  name="shield-account"
+                  size={20}
+                  color={COLORS.white}
+                />
+              )}
+            </Pressable>
+          }
+          contentStyle={styles.menuContent}
+          style={styles.menu}
         >
-          {isUploading ? (
-            <ActivityIndicator size="small" color={COLORS.primary} />
-          ) : clubLogo ? (
-            <Image
-              source={{ 
-                uri: `${SUPABASE_URL}/storage/v1/object/public/club-logos/${clubLogo}`,
-              }}
-              style={styles.profileImage}
-              resizeMode="cover"
-            />
-          ) : (
-            <MaterialCommunityIcons
-              name="shield-account"
-              size={24}
-              color={COLORS.primary}
-            />
-          )}
-        </Pressable>
-      }
-      contentStyle={styles.menuContent}
-      style={styles.menu}
-    >
-      <Menu.Item
-        onPress={() => {
-          setVisible(false);
-          navigation.navigate('ClubSettings');
-        }}
-        title="Settings"
-        leadingIcon="cog"
-        titleStyle={{ color: COLORS.text }}
-      />
-      <Menu.Item
-        onPress={() => {
-          setVisible(false);
-          handleLogout();
-        }}
-        title="Logout"
-        leadingIcon="logout"
-        titleStyle={{ color: COLORS.text }}
-        style={{ borderTopWidth: 1, borderTopColor: COLORS.grey[200] }}
-      />
-    </Menu>
+          <Menu.Item
+            onPress={() => {
+              setVisible(false);
+              navigation.navigate('ClubSettings');
+            }}
+            title="Settings"
+            leadingIcon="cog"
+            titleStyle={{ color: COLORS.text }}
+          />
+          <Menu.Item
+            onPress={() => {
+              setVisible(false);
+              handleLogout();
+            }}
+            title="Logout"
+            leadingIcon="logout"
+            titleStyle={{ color: COLORS.text }}
+            style={{ borderTopWidth: 1, borderTopColor: COLORS.grey[200] }}
+          />
+        </Menu>
+      </View>
+    </View>
   );
 };
 
 const TabNavigator = () => {
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.background }}>
-      <Tab.Navigator
-        screenOptions={({ route }) => ({
-          tabBarActiveTintColor: COLORS.primary,
-          tabBarInactiveTintColor: '#212121',
-          tabBarStyle: {
-            borderTopWidth: 1,
-            borderTopColor: COLORS.grey[200],
-            height: 60,
-            paddingBottom: 8,
-            paddingTop: 8,
-          },
-          header: ({ navigation, route, options }) => {
-            return (
-              <View style={styles.header}>
-                <Text style={styles.headerTitle}>{options.title}</Text>
-                <View style={styles.headerRight}>
-                  <AdminHeader />
-                </View>
-              </View>
-            );
-          },
-        })}
-      >
-        <Tab.Screen
-          name="Home"
-          component={AdminHomeScreen}
-          options={{
-            title: 'Dashboard',
-            tabBarIcon: ({ color, size }) => (
-              <MaterialCommunityIcons name="view-dashboard-outline" size={size} color={color} />
-            ),
-          }}
-        />
-        <Tab.Screen
-          name="Manage"
-          component={AdminManageScreen}
-          options={{
-            title: 'Manage',
-            tabBarIcon: ({ color, size }) => (
-              <MaterialCommunityIcons name="account-group-outline" size={size} color={color} />
-            ),
-          }}
-        />
-        <Tab.Screen
-          name="Payments"
-          component={AdminPaymentsScreen}
-          options={{
-            tabBarIcon: ({ color, size }) => (
-              <MaterialCommunityIcons name="credit-card-outline" size={size} color={color} />
-            ),
-          }}
-        />
-        <Tab.Screen
-          name="Chat"
-          component={AdminChatScreen}
-          options={{
-            tabBarIcon: ({ color, size }) => (
-              <MaterialCommunityIcons name="message-text-outline" size={size} color={color} />
-            ),
-          }}
-        />
-        <Tab.Screen
-          name="Announcements"
-          component={AdminAnnouncementsScreen}
-          options={{
-            tabBarIcon: ({ color, size }) => (
-              <MaterialCommunityIcons name="bullhorn-outline" size={size} color={color} />
-            ),
-          }}
-        />
-      </Tab.Navigator>
-    </SafeAreaView>
+    <Tab.Navigator
+      screenOptions={{
+        tabBarActiveTintColor: COLORS.primary,
+        tabBarInactiveTintColor: '#212121',
+        tabBarStyle: {
+          height: 60,
+          backgroundColor: COLORS.white,
+          borderTopWidth: 1,
+          borderTopColor: COLORS.grey[200],
+        },
+        headerShown: false
+      }}
+    >
+      <Tab.Screen
+        name="Home"
+        component={AdminHomeScreen}
+        options={{
+          tabBarLabel: 'Dashboard',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="view-dashboard-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Manage"
+        component={AdminManageScreen}
+        options={{
+          tabBarLabel: 'Manage',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="account-group-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Payments"
+        component={AdminPaymentsScreen}
+        options={{
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="credit-card-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Chat"
+        component={AdminChatScreen}
+        options={{
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="message-text-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Announcements"
+        component={AdminAnnouncementsScreen}
+        options={{
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="bullhorn-outline" size={size} color={color} />
+          ),
+        }}
+      />
+    </Tab.Navigator>
   );
 };
 
-const styles = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 60, // Increased top padding
-    paddingBottom: 20,
-    backgroundColor: COLORS.background,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: COLORS.text,
-  },
-  headerRight: {
-    position: 'absolute',
-    right: 16,
-    top: 12, // Position it higher
-  },
-  profileButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    overflow: 'hidden',
-    backgroundColor: 'transparent',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: COLORS.grey[200],
-  },
-  profileImage: {
-    width: '100%',
-    height: '100%',
-  },
-  menuContent: {
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
-    marginTop: 8,
-  },
-  menu: {
-    marginTop: 46,
-  },
-});
-
 export const AdminNavigator = () => {
   return (
-    <Stack.Navigator>
-      <Stack.Screen
-        name="AdminTabs"
-        component={TabNavigator}
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen
-        name="ClubSettings"
-        component={ClubSettingsScreen}
-        options={{
-          title: 'Club Settings',
-          headerStyle: {
-            backgroundColor: COLORS.background,
-          },
-          headerTintColor: COLORS.text,
-          headerShadowVisible: false,
-        }}
-      />
-      <Stack.Screen
-        name="AddTeam"
-        component={AddTeamScreen}
-        options={{
-          headerShown: false,
-        }}
-      />
-      <Stack.Screen
-        name="AddCoach"
-        component={AddCoachScreen}
-        options={{
-          headerShown: false,
-        }}
-      />
-      <Stack.Screen
-        name="TeamDetails"
-        component={TeamDetailsScreen}
-        options={{
-          headerShown: false,
-        }}
-      />
-    </Stack.Navigator>
+    <SafeAreaView style={[styles.container, styles.safeArea]} edges={['right', 'left', 'bottom']}>
+      <View style={styles.container}>
+        <Stack.Navigator>
+          <Stack.Screen
+            name="AdminTabs"
+            component={TabNavigator}
+            options={{
+              header: () => <AdminHeader />,
+              headerTransparent: false,
+              headerStyle: {
+                backgroundColor: COLORS.white,
+              }
+            }}
+          />
+          <Stack.Screen
+            name="ClubSettings"
+            component={ClubSettingsScreen}
+            options={{
+              title: 'Club Settings',
+              headerStyle: {
+                backgroundColor: COLORS.background,
+              },
+              headerTintColor: COLORS.text,
+              headerShadowVisible: false,
+            }}
+          />
+          <Stack.Screen
+            name="AddTeam"
+            component={AddTeamScreen}
+            options={{
+              headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name="AddCoach"
+            component={AddCoachScreen}
+            options={{
+              headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name="EditCoach"
+            component={EditCoachScreen}
+            options={{
+              headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name="EditTeam"
+            component={EditTeamScreen}
+            options={{
+              headerShown: false,
+            }}
+          />
+        </Stack.Navigator>
+      </View>
+    </SafeAreaView>
   );
 }; 

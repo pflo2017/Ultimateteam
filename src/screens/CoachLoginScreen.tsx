@@ -1,14 +1,59 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, KeyboardAvoidingView, Platform, Pressable } from 'react-native';
+import { View, StyleSheet, KeyboardAvoidingView, Platform, Pressable, Alert } from 'react-native';
 import { Text, TextInput } from 'react-native-paper';
 import { COLORS, SPACING, FONT_SIZES, SHADOWS } from '../constants/theme';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { supabase } from '../lib/supabase';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+type RootStackParamList = {
+  Home: undefined;
+  Coach: undefined;
+};
+
+type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
+
+interface CoachData {
+  id: string;
+  name: string;
+  club_id: string;
+  is_active: boolean;
+}
 
 export const CoachLoginScreen = () => {
   const [accessCode, setAccessCode] = useState('');
-  const navigation = useNavigation();
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const navigation = useNavigation<NavigationProp>();
+
+  const handleLogin = async () => {
+    try {
+      setIsLoading(true);
+      const cleanAccessCode = accessCode.trim().toUpperCase();
+
+      // Verify the coach
+      const { data, error } = await supabase
+        .rpc('verify_coach_access', { p_access_code: cleanAccessCode });
+
+      if (error || !data?.is_valid || !data.coach) {
+        console.error('Error verifying coach:', error);
+        Alert.alert('Error', 'Invalid access code. Please try again.');
+        return;
+      }
+
+      // Store coach data - the root navigator will handle navigation
+      await AsyncStorage.setItem('coach_data', JSON.stringify(data.coach));
+      console.log('Coach verified:', data.coach);
+    } catch (error) {
+      console.error('Login error:', error);
+      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <KeyboardAvoidingView
@@ -58,9 +103,13 @@ export const CoachLoginScreen = () => {
             entering={FadeInDown.delay(400).duration(1000).springify()}
           >
             <Pressable 
-              style={[styles.loginButton, SHADOWS.button]}
+              onPress={handleLogin}
+              disabled={isLoading}
+              style={[styles.loginButton, SHADOWS.button, isLoading && styles.loginButtonDisabled]}
             >
-              <Text style={styles.buttonText}>Login</Text>
+              <Text style={styles.buttonText}>
+                {isLoading ? 'Logging in...' : 'Login'}
+              </Text>
             </Pressable>
           </Animated.View>
         </View>
@@ -126,6 +175,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: SPACING.md,
+  },
+  loginButtonDisabled: {
+    opacity: 0.7,
   },
   buttonText: {
     color: COLORS.white,

@@ -32,7 +32,7 @@ export const ParentLoginScreen = () => {
       >
         <View style={styles.header}>
           <MaterialCommunityIcons 
-            name="account-group" 
+            name="account-child" 
             size={48} 
             color={COLORS.primary}
           />

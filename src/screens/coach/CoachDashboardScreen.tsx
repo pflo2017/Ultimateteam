@@ -7,112 +7,120 @@ import { useNavigation } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { MaterialCommunityIcons as IconType } from '@expo/vector-icons';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { AdminStackParamList } from '../../types/navigation';
+import type { CoachTabParamList } from '../../navigation/CoachNavigator';
 import Animated, { 
   FadeInUp,
   useAnimatedStyle, 
-  withSpring,
-  withTiming,
   useSharedValue,
+  withSpring,
   WithSpringConfig,
 } from 'react-native-reanimated';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-type CardType = 'teams' | 'coaches' | 'players' | 'payments';
+interface Team {
+  id: string;
+  name: string;
+  player_count: number;
+}
 
-type ScreenType = keyof AdminStackParamList | 'Payments';
+interface RawTeam {
+  team_id: string;
+  team_name: string;
+  player_count: number;
+}
 
-export const AdminHomeScreen = () => {
-  const [clubName, setClubName] = useState<string>('');
-  const [adminName, setAdminName] = useState<string>('');
+type CardType = 'teams' | 'players' | 'payments';
+
+export const CoachDashboardScreen = () => {
   const [stats, setStats] = useState({
-    teams: 0,
-    coaches: 0,
-    players: 0,
+    teams: [] as Team[],
+    totalPlayers: 0,
     pendingPayments: 0
   });
-  const navigation = useNavigation<NativeStackNavigationProp<AdminStackParamList>>();
+  const navigation = useNavigation<NativeStackNavigationProp<CoachTabParamList>>();
 
   useEffect(() => {
-    loadProfile();
     loadStats();
   }, []);
 
-  const loadProfile = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data: profile } = await supabase
-        .from('admin_profiles')
-        .select('club_name, admin_name')
-        .eq('user_id', user.id)
-        .single();
-
-      if (profile) {
-        setClubName(profile.club_name);
-        setAdminName(profile.admin_name);
-      }
-    } catch (error) {
-      console.error('Error loading profile:', error);
-    }
-  };
-
   const loadStats = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      console.log('=== Starting loadStats ===');
+      
+      const storedCoachData = await AsyncStorage.getItem('coach_data');
+      if (!storedCoachData) {
+        console.log('No stored coach data found');
+        return;
+      }
 
-      // Get club ID
-      const { data: club } = await supabase
-        .from('clubs')
-        .select('id')
-        .eq('admin_id', user.id)
-        .single();
+      const coachData = JSON.parse(storedCoachData);
+      console.log('Coach data from storage:', coachData);
 
-      if (!club) return;
+      // Get teams using the get_coach_teams function
+      const { data: teamsData, error: teamsError } = await supabase
+        .rpc('get_coach_teams', { p_coach_id: coachData.id });
 
-      // Get teams count
-      const { count: teamsCount } = await supabase
-        .from('teams')
-        .select('*', { count: 'exact', head: true })
-        .eq('club_id', club.id);
+      console.log('Teams query result:', {
+        query: {
+          coach_id: coachData.id,
+          is_active: true
+        },
+        teams: teamsData,
+        error: teamsError,
+        errorMessage: teamsError?.message,
+        errorDetails: teamsError?.details
+      });
 
-      // Get coaches count
-      const { count: coachesCount } = await supabase
-        .from('coaches')
-        .select('*', { count: 'exact', head: true })
-        .eq('club_id', club.id);
+      if (teamsError) {
+        console.error('Error fetching teams:', teamsError);
+        return;
+      }
 
-      // Get players count
-      const { count: playersCount } = await supabase
-        .from('players')
-        .select('*', { count: 'exact', head: true })
-        .eq('club_id', club.id);
+      if (!teamsData || teamsData.length === 0) {
+        console.log('No teams returned from query');
+        setStats({
+          teams: [],
+          totalPlayers: 0,
+          pendingPayments: 0
+        });
+        return;
+      }
+
+      console.log('Found teams:', teamsData);
+
+      // Transform teams with player counts
+      const transformedTeams = teamsData.map((team: { team_id: string; team_name: string; player_count?: number }) => ({
+        id: team.team_id,
+        name: team.team_name,
+        player_count: team.player_count || 0
+      }));
+
+      console.log('Transformed teams:', transformedTeams);
+
+      // Calculate total players
+      const totalPlayers = transformedTeams.reduce((sum: number, team: Team) => sum + team.player_count, 0);
+
+      console.log('Setting stats:', {
+        teams: transformedTeams,
+        totalPlayers,
+        pendingPayments: 0
+      });
 
       setStats({
-        teams: teamsCount || 0,
-        coaches: coachesCount || 0,
-        players: playersCount || 0,
-        pendingPayments: 0 // We'll implement this later
+        teams: transformedTeams,
+        totalPlayers,
+        pendingPayments: 0
       });
     } catch (error) {
-      console.error('Error loading stats:', error);
+      console.error('Error in loadStats:', error);
+      if (error instanceof Error) {
+        console.error('Error details:', error.message, error.stack);
+      }
     }
   };
 
-  const handleCardPress = (screen: ScreenType, type: CardType) => {
-    if (screen === 'Manage') {
-      navigation.navigate('Manage', { activeTab: type });
-    } else if (screen === 'Payments') {
-      // Handle payments navigation when implemented
-      console.log('Payments screen not implemented yet');
-    } else if (screen === 'TeamDetails') {
-      // TeamDetails requires teamId parameter
-      console.log('TeamDetails navigation not implemented here');
-    } else {
-      // @ts-ignore - We know these screens don't require params
-      navigation.navigate(screen);
-    }
+  const handleCardPress = (screen: keyof CoachTabParamList, type: CardType) => {
+    navigation.navigate(screen);
   };
 
   const renderCard = (
@@ -120,7 +128,7 @@ export const AdminHomeScreen = () => {
     value: number, 
     subtitle: string, 
     icon: keyof typeof IconType.glyphMap, 
-    screen: ScreenType,
+    screen: keyof CoachTabParamList,
     type: CardType,
     delay: number
   ) => {
@@ -151,7 +159,7 @@ export const AdminHomeScreen = () => {
       >
         <Animated.View style={animatedStyle}>
           <TouchableRipple
-            onPress={() => handleCardPress(screen as ScreenType, type)}
+            onPress={() => handleCardPress(screen, type)}
             onPressIn={onPressIn}
             onPressOut={onPressOut}
             style={styles.touchable}
@@ -189,39 +197,30 @@ export const AdminHomeScreen = () => {
         <View style={styles.cardsContainer}>
           {renderCard(
             'Total Players',
-            stats.players,
-            'Registered in your academy',
+            stats.totalPlayers,
+            'In your teams',
             'run',
-            'Manage',
+            'CoachDashboard',
             'players',
             200
           )}
           {renderCard(
-            'Total Teams',
-            stats.teams,
-            'Active in your academy',
+            'Your Teams',
+            stats.teams.length,
+            'Your teams',
             'account-multiple',
             'Manage',
             'teams',
             400
           )}
           {renderCard(
-            'Total Coaches',
-            stats.coaches,
-            'Active in your academy',
-            'account-tie',
-            'Manage',
-            'coaches',
-            600
-          )}
-          {renderCard(
-            'Payment status',
+            'Payment Status',
             stats.pendingPayments,
             'Pending payments',
-            'credit-card-outline',
+            'cash-multiple',
             'Payments',
             'payments',
-            800
+            600
           )}
         </View>
       </View>
