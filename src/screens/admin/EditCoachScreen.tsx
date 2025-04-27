@@ -3,18 +3,20 @@ import { View, StyleSheet, KeyboardAvoidingView, Platform, Pressable, Alert } fr
 import { Text, TextInput } from 'react-native-paper';
 import { COLORS, SPACING, FONT_SIZES } from '../../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, CommonActions } from '@react-navigation/native';
 import { supabase } from '../../lib/supabase';
 import type { RouteProp } from '@react-navigation/native';
 import type { AdminStackParamList } from '../../types/navigation';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 type EditCoachScreenRouteProp = RouteProp<AdminStackParamList, 'EditCoach'>;
+type EditCoachScreenNavigationProp = NativeStackNavigationProp<AdminStackParamList>;
 
 export const EditCoachScreen = () => {
   const [coachName, setCoachName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const navigation = useNavigation();
+  const navigation = useNavigation<EditCoachScreenNavigationProp>();
   const route = useRoute<EditCoachScreenRouteProp>();
   const { coachId } = route.params;
 
@@ -59,8 +61,29 @@ export const EditCoachScreen = () => {
 
       if (error) throw error;
 
-      Alert.alert('Success', 'Coach updated successfully');
-      navigation.goBack();
+      Alert.alert(
+        'Success',
+        'Coach updated successfully',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              navigation.dispatch(
+                CommonActions.reset({
+                  index: 1,
+                  routes: [
+                    { name: 'AdminTabs' },
+                    {
+                      name: 'AdminTabs',
+                      params: { screen: 'Manage', params: { activeTab: 'coaches', refresh: true } }
+                    }
+                  ]
+                })
+              );
+            }
+          }
+        ]
+      );
     } catch (error) {
       console.error('Error updating coach:', error);
       Alert.alert('Error', 'Failed to update coach');
@@ -86,13 +109,34 @@ export const EditCoachScreen = () => {
             try {
               const { error } = await supabase
                 .from('coaches')
-                .delete()
+                .update({ is_active: false })
                 .eq('id', coachId);
 
               if (error) throw error;
 
-              Alert.alert('Success', 'Coach deleted successfully');
-              navigation.goBack();
+              Alert.alert(
+                'Success',
+                'Coach deleted successfully',
+                [
+                  {
+                    text: 'OK',
+                    onPress: () => {
+                      navigation.dispatch(
+                        CommonActions.reset({
+                          index: 1,
+                          routes: [
+                            { name: 'AdminTabs' },
+                            {
+                              name: 'AdminTabs',
+                              params: { screen: 'Manage', params: { activeTab: 'coaches', refresh: true } }
+                            }
+                          ]
+                        })
+                      );
+                    }
+                  }
+                ]
+              );
             } catch (error) {
               console.error('Error deleting coach:', error);
               Alert.alert('Error', 'Failed to delete coach');

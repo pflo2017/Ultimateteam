@@ -283,5 +283,7 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     flex: 1,
     marginRight: SPACING.sm,
+    height: 40,
+    lineHeight: 20,
   },
 }); 

@@ -9,5 +9,16 @@ CREATE POLICY "Teams are viewable by assigned coach"
         )
     );
 
+-- Drop existing verification policy if it exists
+DROP POLICY IF EXISTS "Allow team code verification" ON public.teams;
+
+-- Create policy to allow public access for team code verification
+CREATE POLICY "Allow team code verification"
+ON public.teams
+FOR SELECT
+USING (
+    is_active = true
+);
+
 -- Grant necessary permissions
 GRANT SELECT ON public.teams TO anon; 

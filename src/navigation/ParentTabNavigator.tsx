@@ -1,51 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { ParentDashboardScreen } from '../screens/parent/ParentDashboardScreen';
+import { ParentManageScreen } from '../screens/parent/ParentManageScreen';
+import { ParentEventsScreen } from '../screens/parent/ParentEventsScreen';
+import { ParentChatScreen } from '../screens/parent/ParentChatScreen';
+import { ParentNewsScreen } from '../screens/parent/ParentNewsScreen';
+import { ParentSettingsScreen } from '../screens/parent/ParentSettingsScreen';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../constants/theme';
-import { CoachDashboardScreen } from '../screens/coach/CoachDashboardScreen';
-import { CoachManageScreen } from '../screens/coach/CoachManageScreen';
-import { CoachScheduleScreen } from '../screens/coach/CoachScheduleScreen';
-import { CoachPaymentsScreen } from '../screens/coach/CoachPaymentsScreen';
-import { CoachChatScreen } from '../screens/coach/CoachChatScreen';
-import { CoachNewsScreen } from '../screens/coach/NewsScreen';
-import { CoachSettingsScreen } from '../screens/coach/CoachSettingsScreen';
-import { Image, Pressable, View, StyleSheet, Text, Platform, Alert } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, Text, Platform, Alert, Pressable } from 'react-native';
 import { Menu } from 'react-native-paper';
-import { supabase } from '../lib/supabase';
-import { useNavigation, CommonActions } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList, ParentStackParamList, ParentTabParamList } from '../types/navigation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export type CoachStackParamList = {
-  CoachTabs: undefined;
-  Settings: undefined;
-};
+const Tab = createBottomTabNavigator<ParentTabParamList>();
+const Stack = createNativeStackNavigator<ParentStackParamList>();
 
-export type CoachTabParamList = {
-  CoachDashboard: undefined;
-  Manage: undefined;
-  Schedule: undefined;
-  Payments: undefined;
-  Chat: undefined;
-  News: undefined;
-};
-
-type RootStackParamList = {
-  CoachDashboard: undefined;
-  Manage: undefined;
-  Payments: undefined;
-  Profile: undefined;
-  Teams: undefined;
-  Players: undefined;
-};
-
-const Tab = createBottomTabNavigator<CoachTabParamList>();
-const Stack = createNativeStackNavigator<CoachStackParamList>();
-
-type CoachNavigationProp = NativeStackNavigationProp<CoachStackParamList>;
-type RootNavigationProp = NativeStackNavigationProp<RootStackParamList>;
+type ParentNavigationProp = NativeStackNavigationProp<ParentStackParamList>;
 
 const styles = StyleSheet.create({
   container: {
@@ -58,7 +33,7 @@ const styles = StyleSheet.create({
   headerWrapper: {
     backgroundColor: COLORS.white,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: COLORS.grey[200],
   },
   headerContainer: {
     flexDirection: 'row',
@@ -69,12 +44,13 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     marginTop: Platform.OS === 'ios' ? 47 : 0,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: COLORS.grey[200],
   },
-  coachName: {
+  parentName: {
     fontSize: 22,
     fontWeight: '500',
     color: COLORS.primary,
+    fontFamily: 'Urbanist',
   },
   profileButton: {
     width: 32,
@@ -94,33 +70,32 @@ const styles = StyleSheet.create({
   },
 });
 
-const CoachHeader = () => {
+const ParentHeader = () => {
   const [visible, setVisible] = useState(false);
-  const [coachName, setCoachName] = useState<string>('');
-  const coachNavigation = useNavigation<CoachNavigationProp>();
-  const rootNavigation = useNavigation<RootNavigationProp>();
+  const [parentName, setParentName] = useState<string>('');
+  const navigation = useNavigation<ParentNavigationProp>();
 
   useEffect(() => {
-    loadCoachInfo();
+    loadParentInfo();
   }, []);
 
-  const loadCoachInfo = async () => {
+  const loadParentInfo = async () => {
     try {
-      const storedCoachData = await AsyncStorage.getItem('coach_data');
-      if (storedCoachData) {
-        const coachData = JSON.parse(storedCoachData);
-        setCoachName(coachData.name);
+      const storedParentData = await AsyncStorage.getItem('parent_data');
+      if (storedParentData) {
+        const parentData = JSON.parse(storedParentData);
+        setParentName(parentData.name);
       }
     } catch (error) {
-      console.error('Error loading coach info:', error);
+      console.error('Error loading parent info:', error);
     }
   };
 
   const handleLogout = async () => {
     try {
-      await AsyncStorage.removeItem('coach_data');
+      await AsyncStorage.removeItem('parent_data');
       // The navigation container will automatically handle the navigation
-      // when coach data is cleared
+      // when parent data is cleared
     } catch (error) {
       console.error('Error signing out:', error);
       Alert.alert('Error', 'Failed to log out. Please try again.');
@@ -130,7 +105,7 @@ const CoachHeader = () => {
   return (
     <View style={styles.headerWrapper}>
       <View style={styles.headerContainer}>
-        <Text style={styles.coachName}>{coachName}</Text>
+        <Text style={styles.parentName}>{parentName}</Text>
         <Menu
           visible={visible}
           onDismiss={() => setVisible(false)}
@@ -152,7 +127,7 @@ const CoachHeader = () => {
           <Menu.Item
             onPress={() => {
               setVisible(false);
-              coachNavigation.navigate('Settings');
+              navigation.navigate('Settings');
             }}
             title="Settings"
             leadingIcon="cog"
@@ -188,62 +163,52 @@ const TabNavigator = () => {
           paddingBottom: 8,
           paddingTop: 8,
         },
-        headerShown: false
+        headerShown: false,
       }}
     >
       <Tab.Screen
-        name="CoachDashboard"
-        component={CoachDashboardScreen}
+        name="Dashboard"
+        component={ParentDashboardScreen}
         options={{
           tabBarLabel: 'Dashboard',
           tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="view-dashboard-outline" size={size} color={color} />
+            <MaterialCommunityIcons name="view-dashboard-outline" size={24} color={color} />
           ),
         }}
       />
       <Tab.Screen
         name="Manage"
-        component={CoachManageScreen}
+        component={ParentManageScreen}
         options={{
-          tabBarLabel: 'Manage',
+          tabBarLabel: 'My Children',
           tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="account-group-outline" size={size} color={color} />
+            <MaterialCommunityIcons name="account-multiple-outline" size={24} color={color} />
           ),
         }}
       />
       <Tab.Screen
-        name="Schedule"
-        component={CoachScheduleScreen}
+        name="Events"
+        component={ParentEventsScreen}
         options={{
-          tabBarLabel: 'Schedule',
+          tabBarLabel: 'Events',
           tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="calendar-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Payments"
-        component={CoachPaymentsScreen}
-        options={{
-          tabBarLabel: 'Payments',
-          tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="credit-card-outline" size={size} color={color} />
+            <MaterialCommunityIcons name="calendar-outline" size={24} color={color} />
           ),
         }}
       />
       <Tab.Screen
         name="Chat"
-        component={CoachChatScreen}
+        component={ParentChatScreen}
         options={{
           tabBarLabel: 'Chat',
           tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="message-text-outline" size={size} color={color} />
+            <MaterialCommunityIcons name="message-text-outline" size={24} color={color} />
           ),
         }}
       />
       <Tab.Screen
         name="News"
-        component={CoachNewsScreen}
+        component={ParentNewsScreen}
         options={{
           tabBarLabel: 'News',
           tabBarIcon: ({ color, size }) => (
@@ -255,25 +220,21 @@ const TabNavigator = () => {
   );
 };
 
-export const CoachNavigator = () => {
+export const ParentNavigator = () => {
   return (
     <SafeAreaView style={[styles.container, styles.safeArea]} edges={['right', 'left', 'bottom']}>
       <View style={styles.container}>
         <Stack.Navigator>
           <Stack.Screen
-            name="CoachTabs"
+            name="ParentTabs"
             component={TabNavigator}
             options={{
-              header: () => <CoachHeader />,
-              headerTransparent: false,
-              headerStyle: {
-                backgroundColor: COLORS.white,
-              }
+              header: () => <ParentHeader />,
             }}
           />
           <Stack.Screen
             name="Settings"
-            component={CoachSettingsScreen}
+            component={ParentSettingsScreen}
             options={{
               title: 'Settings',
               headerStyle: {

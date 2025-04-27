@@ -5,12 +5,16 @@ import { COLORS, SPACING, FONT_SIZES } from '../../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../../lib/supabase';
+import { RootStackParamList } from '../../types/navigation';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+
+type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 export const AddCoachScreen = () => {
   const [coachName, setCoachName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const navigation = useNavigation();
+  const navigation = useNavigation<NavigationProp>();
 
   const generateAccessCode = () => {
     const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -82,7 +86,7 @@ export const AddCoachScreen = () => {
         [
           { 
             text: 'OK',
-            onPress: () => navigation.goBack()
+            onPress: () => navigation.navigate('AdminManage', { refresh: true })
           }
         ]
       );

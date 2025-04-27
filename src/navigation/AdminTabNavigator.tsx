@@ -7,13 +7,12 @@ import { AdminHomeScreen } from '../screens/admin/HomeScreen';
 import { AdminManageScreen } from '../screens/admin/ManageScreen';
 import { AdminPaymentsScreen } from '../screens/admin/PaymentsScreen';
 import { AdminChatScreen } from '../screens/admin/ChatScreen';
-import { AdminAnnouncementsScreen } from '../screens/admin/AnnouncementsScreen';
+import { AdminNewsScreen } from '../screens/admin/NewsScreen';
 import { ClubSettingsScreen } from '../screens/admin/ClubSettingsScreen';
 import { AddTeamScreen } from '../screens/admin/AddTeamScreen';
 import { AddCoachScreen } from '../screens/admin/AddCoachScreen';
 import { EditCoachScreen } from '../screens/admin/EditCoachScreen';
 import { EditTeamScreen } from '../screens/admin/EditTeamScreen';
-import { TeamDetailsScreen } from '../screens/admin/TeamDetailsScreen';
 import { Image, Pressable, View, ActivityIndicator, Alert, StyleSheet, Text, Platform, StatusBar } from 'react-native';
 import { Menu } from 'react-native-paper';
 import { supabase } from '../lib/supabase';
@@ -302,11 +301,12 @@ const TabNavigator = () => {
         }}
       />
       <Tab.Screen
-        name="Announcements"
-        component={AdminAnnouncementsScreen}
+        name="News"
+        component={AdminNewsScreen}
         options={{
+          tabBarLabel: 'News',
           tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="bullhorn-outline" size={size} color={color} />
+            <MaterialCommunityIcons name="bullhorn-outline" size={24} color={color} />
           ),
         }}
       />

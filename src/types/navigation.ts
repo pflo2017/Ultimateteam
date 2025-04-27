@@ -3,12 +3,15 @@ type CardType = 'teams' | 'coaches' | 'players' | 'payments';
 export type AdminStackParamList = {
   AdminTabs: undefined;
   ClubSettings: undefined;
+  AdminManage: { refresh?: boolean };
   AddTeam: undefined;
   AddCoach: undefined;
+  AddPlayer: undefined;
   EditCoach: { coachId: string };
   EditTeam: { teamId: string };
+  EditPlayer: { playerId: string };
   TeamDetails: { teamId: string };
-  Manage: { activeTab?: CardType };
+  Manage: { activeTab?: CardType; refresh?: boolean };
 };
 
 export type AdminTabParamList = {
@@ -16,5 +19,64 @@ export type AdminTabParamList = {
   Manage: { activeTab?: CardType };
   Payments: undefined;
   Chat: undefined;
-  Announcements: undefined;
+  News: undefined;
+};
+
+export type ParentTabParamList = {
+  Dashboard: undefined;
+  Manage: undefined;
+  Events: undefined;
+  Chat: undefined;
+  News: undefined;
+};
+
+export type RootStackParamList = {
+  Home: undefined;
+  AdminDashboard: undefined;
+  Coach: undefined;
+  AdminLogin: undefined;
+  AdminRegister: undefined;
+  CoachLogin: undefined;
+  AdminTabs: undefined;
+  ClubSettings: undefined;
+  AddTeam: undefined;
+  AddCoach: undefined;
+  AddPlayer: undefined;
+  EditCoach: { coachId: string };
+  EditTeam: { teamId: string };
+  EditPlayer: { playerId: string };
+  TeamDetails: { teamId: string };
+  Manage: { activeTab?: CardType };
+  ParentLogin: undefined;
+  ParentPasswordLogin: {
+    phoneNumber: string;
+  };
+  ParentTeamCode: {
+    phoneNumber: string;
+    teamId?: string;
+  };
+  ParentRegistration: {
+    phoneNumber: string;
+    teamCode: string;
+    teamId: string;
+  };
+  ParentVerification: {
+    phoneNumber: string;
+    isRegistration: boolean;
+  };
+  ParentResetPassword: {
+    phoneNumber: string;
+  };
+  ParentDashboard: undefined;
+  ParentProfile: undefined;
+  ParentNavigator: {
+    screen?: keyof ParentTabParamList;
+  };
+  Settings: undefined;
+  AdminManage: { refresh?: boolean };
+};
+
+export type ParentStackParamList = {
+  ParentTabs: undefined;
+  Settings: undefined;
 }; 

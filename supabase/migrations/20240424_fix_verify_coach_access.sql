@@ -21,7 +21,7 @@ BEGIN
                 'name', c.name,
                 'club_id', c.club_id,
                 'is_active', c.is_active,
-                'access_code', c.access_code
+                'phone_number', c.phone_number
             )
         ELSE
             null

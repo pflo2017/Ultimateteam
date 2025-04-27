@@ -6,28 +6,25 @@ import { AdminLoginScreen } from '../screens/AdminLoginScreen';
 import { AdminRegisterScreen } from '../screens/AdminRegisterScreen';
 import { CoachLoginScreen } from '../screens/CoachLoginScreen';
 import { ParentLoginScreen } from '../screens/ParentLoginScreen';
+import { ParentTeamCodeScreen } from '../screens/ParentTeamCode';
+import { ParentRegistrationScreen } from '../screens/ParentRegistration';
+import ParentVerificationScreen from '../screens/ParentVerification';
+import { ParentPasswordLoginScreen } from '../screens/ParentPasswordLogin';
 import { AdminNavigator } from './AdminTabNavigator';
 import { CoachNavigator } from './CoachNavigator';
+import { ParentNavigator } from './ParentTabNavigator';
 import { supabase } from '../lib/supabase';
 import { Session } from '@supabase/supabase-js';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-type RootStackParamList = {
-  Home: undefined;
-  AdminLogin: undefined;
-  AdminRegister: undefined;
-  CoachLogin: undefined;
-  ParentLogin: undefined;
-  AdminDashboard: undefined;
-  Coach: undefined;
-};
+import type { RootStackParamList } from '../types/navigation';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export const Navigation = () => {
   const [session, setSession] = useState<Session | null>(null);
   const [coachData, setCoachData] = useState<any>(null);
+  const [parentData, setParentData] = useState<any>(null);
   const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
@@ -38,6 +35,7 @@ export const Navigation = () => {
         await supabase.auth.signOut();
         setSession(null);
         setCoachData(null);
+        setParentData(null);
         setIsInitialized(true);
       } catch (error) {
         console.error('Error initializing app:', error);
@@ -55,27 +53,36 @@ export const Navigation = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Listen for coach data changes
+  // Listen for coach and parent data changes
   useEffect(() => {
-    const checkCoachData = async () => {
+    const checkUserData = async () => {
       try {
         const storedCoachData = await AsyncStorage.getItem('coach_data');
+        const storedParentData = await AsyncStorage.getItem('parent_data');
+        
         if (storedCoachData) {
           setCoachData(JSON.parse(storedCoachData));
         } else {
           setCoachData(null);
         }
+
+        if (storedParentData) {
+          setParentData(JSON.parse(storedParentData));
+        } else {
+          setParentData(null);
+        }
       } catch (error) {
-        console.error('Error checking coach data:', error);
+        console.error('Error checking user data:', error);
         setCoachData(null);
+        setParentData(null);
       }
     };
 
     // Check immediately
-    checkCoachData();
+    checkUserData();
 
     // Set up interval to check for changes
-    const interval = setInterval(checkCoachData, 1000);
+    const interval = setInterval(checkUserData, 1000);
 
     // Cleanup
     return () => {
@@ -110,6 +117,15 @@ export const Navigation = () => {
                 gestureEnabled: false,
               }}
             />
+          ) : parentData ? (
+            <Stack.Screen 
+              name="ParentNavigator" 
+              component={ParentNavigator}
+              options={{
+                headerShown: false,
+                gestureEnabled: false,
+              }}
+            />
           ) : (
             <>
               <Stack.Screen name="Home" component={HomeScreen} />
@@ -117,6 +133,10 @@ export const Navigation = () => {
               <Stack.Screen name="AdminRegister" component={AdminRegisterScreen} />
               <Stack.Screen name="CoachLogin" component={CoachLoginScreen} />
               <Stack.Screen name="ParentLogin" component={ParentLoginScreen} />
+              <Stack.Screen name="ParentTeamCode" component={ParentTeamCodeScreen} />
+              <Stack.Screen name="ParentRegistration" component={ParentRegistrationScreen} />
+              <Stack.Screen name="ParentVerification" component={ParentVerificationScreen} />
+              <Stack.Screen name="ParentPasswordLogin" component={ParentPasswordLoginScreen} />
             </>
           )}
         </Stack.Navigator>

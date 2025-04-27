@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Alert, Pressable, ActivityIndicator, Image } from 'react-native';
-import { Text, TextInput, Button } from 'react-native-paper';
+import { View, StyleSheet, KeyboardAvoidingView, Platform, Alert, Pressable, ActivityIndicator, Image, ScrollView } from 'react-native';
+import { Text, TextInput } from 'react-native-paper';
 import { COLORS, SPACING, FONT_SIZES } from '../../constants/theme';
 import { supabase } from '../../lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
@@ -167,151 +167,163 @@ export const ClubSettingsScreen = () => {
   };
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      <View style={styles.content}>
-        <Text variant="headlineMedium" style={styles.title}>Settings</Text>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={styles.container}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
+    >
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollViewContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.form}>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Club Information</Text>
+            
+            <View style={styles.logoSection}>
+              <Pressable 
+                onPress={pickImage}
+                style={styles.logoContainer}
+              >
+                {isLoading ? (
+                  <ActivityIndicator size="large" color={COLORS.primary} />
+                ) : profile.clubLogo ? (
+                  <Image
+                    source={{ 
+                      uri: `${SUPABASE_URL}/storage/v1/object/public/club-logos/${profile.clubLogo}`,
+                    }}
+                    style={styles.logoImage}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <MaterialCommunityIcons
+                    name="shield-account"
+                    size={48}
+                    color={COLORS.grey[400]}
+                  />
+                )}
+                <View style={styles.changePhotoButton}>
+                  <MaterialCommunityIcons
+                    name="camera"
+                    size={16}
+                    color={COLORS.white}
+                  />
+                </View>
+              </Pressable>
+              <Text style={styles.logoHint}>Tap to change club logo</Text>
+            </View>
 
-        <View style={styles.section}>
-          <Text variant="titleLarge" style={styles.sectionTitle}>Profile Information</Text>
-          
-          <View style={styles.logoSection}>
+            <TextInput
+              label="Club Name"
+              value={profile.clubName}
+              onChangeText={(text) => setProfile(prev => ({ ...prev, clubName: text }))}
+              mode="outlined"
+              style={styles.input}
+              outlineStyle={styles.inputOutline}
+              contentStyle={styles.inputContent}
+              theme={{ colors: { primary: COLORS.primary }}}
+              left={<TextInput.Icon icon="shield" color={COLORS.primary} />}
+            />
+
+            <TextInput
+              label="Club Location"
+              value={profile.clubLocation}
+              onChangeText={(text) => setProfile(prev => ({ ...prev, clubLocation: text }))}
+              mode="outlined"
+              style={styles.input}
+              outlineStyle={styles.inputOutline}
+              contentStyle={styles.inputContent}
+              theme={{ colors: { primary: COLORS.primary }}}
+              left={<TextInput.Icon icon="map-marker" color={COLORS.primary} />}
+            />
+
+            <TextInput
+              label="Administrator Name"
+              value={profile.adminName}
+              onChangeText={(text) => setProfile(prev => ({ ...prev, adminName: text }))}
+              mode="outlined"
+              style={styles.input}
+              outlineStyle={styles.inputOutline}
+              contentStyle={styles.inputContent}
+              theme={{ colors: { primary: COLORS.primary }}}
+              left={<TextInput.Icon icon="account" color={COLORS.primary} />}
+            />
+
+            <TextInput
+              label="Email"
+              value={profile.email}
+              mode="outlined"
+              style={styles.input}
+              outlineStyle={styles.inputOutline}
+              contentStyle={styles.inputContent}
+              theme={{ colors: { primary: COLORS.primary }}}
+              disabled
+              left={<TextInput.Icon icon="email" color={COLORS.primary} />}
+            />
+
             <Pressable 
-              onPress={pickImage}
-              style={styles.logoContainer}
+              onPress={handleUpdateProfile}
+              disabled={isLoading}
+              style={[styles.updateButton, isLoading && styles.buttonDisabled]}
             >
-              {isLoading ? (
-                <ActivityIndicator size="large" color={COLORS.primary} />
-              ) : profile.clubLogo ? (
-                <Image
-                  source={{ 
-                    uri: `${SUPABASE_URL}/storage/v1/object/public/club-logos/${profile.clubLogo}`,
-                  }}
-                  style={styles.logoImage}
-                  resizeMode="cover"
-                />
-              ) : (
-                <MaterialCommunityIcons
-                  name="shield-account"
-                  size={48}
-                  color={COLORS.grey[400]}
-                />
-              )}
-              <View style={styles.changePhotoButton}>
-                <MaterialCommunityIcons
-                  name="camera"
-                  size={16}
-                  color={COLORS.white}
-                />
-              </View>
+              <Text style={styles.buttonText}>
+                {isLoading ? 'Updating...' : 'Update Profile'}
+              </Text>
             </Pressable>
-            <Text style={styles.logoHint}>Tap to change club logo</Text>
           </View>
 
-          <TextInput
-            label="Club Name"
-            value={profile.clubName}
-            onChangeText={(text) => setProfile(prev => ({ ...prev, clubName: text }))}
-            mode="outlined"
-            style={styles.input}
-            outlineColor={COLORS.grey[300]}
-            activeOutlineColor={COLORS.primary}
-            contentStyle={styles.inputContent}
-          />
-
-          <TextInput
-            label="Club Location"
-            value={profile.clubLocation}
-            onChangeText={(text) => setProfile(prev => ({ ...prev, clubLocation: text }))}
-            mode="outlined"
-            style={styles.input}
-            outlineColor={COLORS.grey[300]}
-            activeOutlineColor={COLORS.primary}
-            contentStyle={styles.inputContent}
-          />
-
-          <TextInput
-            label="Administrator Name"
-            value={profile.adminName}
-            onChangeText={(text) => setProfile(prev => ({ ...prev, adminName: text }))}
-            mode="outlined"
-            style={styles.input}
-            outlineColor={COLORS.grey[300]}
-            activeOutlineColor={COLORS.primary}
-            contentStyle={styles.inputContent}
-          />
-
-          <TextInput
-            label="Email"
-            value={profile.email}
-            mode="outlined"
-            style={styles.input}
-            disabled
-            outlineColor={COLORS.grey[300]}
-            contentStyle={styles.inputContent}
-          />
-
-          <Button
-            mode="contained"
-            onPress={handleUpdateProfile}
-            loading={isLoading}
-            style={styles.button}
-            buttonColor={COLORS.primary}
-          >
-            Update Profile
-          </Button>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Change Password</Text>
+            <TextInput
+              label="Current Password"
+              value={currentPassword}
+              onChangeText={setCurrentPassword}
+              mode="outlined"
+              style={styles.input}
+              outlineStyle={styles.inputOutline}
+              contentStyle={styles.inputContent}
+              theme={{ colors: { primary: COLORS.primary }}}
+              secureTextEntry
+              left={<TextInput.Icon icon="lock" color={COLORS.primary} />}
+            />
+            <TextInput
+              label="New Password"
+              value={newPassword}
+              onChangeText={setNewPassword}
+              mode="outlined"
+              style={styles.input}
+              outlineStyle={styles.inputOutline}
+              contentStyle={styles.inputContent}
+              theme={{ colors: { primary: COLORS.primary }}}
+              secureTextEntry
+              left={<TextInput.Icon icon="lock-plus" color={COLORS.primary} />}
+            />
+            <TextInput
+              label="Confirm New Password"
+              value={confirmNewPassword}
+              onChangeText={setConfirmNewPassword}
+              mode="outlined"
+              style={styles.input}
+              outlineStyle={styles.inputOutline}
+              contentStyle={styles.inputContent}
+              theme={{ colors: { primary: COLORS.primary }}}
+              secureTextEntry
+              left={<TextInput.Icon icon="lock-check" color={COLORS.primary} />}
+            />
+            <Pressable 
+              onPress={handleChangePassword}
+              disabled={isLoading}
+              style={[styles.updateButton, isLoading && styles.buttonDisabled]}
+            >
+              <Text style={styles.buttonText}>
+                {isLoading ? 'Changing Password...' : 'Change Password'}
+              </Text>
+            </Pressable>
+          </View>
         </View>
-
-        <View style={styles.section}>
-          <Text variant="titleLarge" style={styles.sectionTitle}>Change Password</Text>
-          
-          <TextInput
-            label="Current Password"
-            value={currentPassword}
-            onChangeText={setCurrentPassword}
-            mode="outlined"
-            style={styles.input}
-            secureTextEntry
-            outlineColor={COLORS.grey[300]}
-            activeOutlineColor={COLORS.primary}
-            contentStyle={styles.inputContent}
-          />
-
-          <TextInput
-            label="New Password"
-            value={newPassword}
-            onChangeText={setNewPassword}
-            mode="outlined"
-            style={styles.input}
-            secureTextEntry
-            outlineColor={COLORS.grey[300]}
-            activeOutlineColor={COLORS.primary}
-            contentStyle={styles.inputContent}
-          />
-
-          <TextInput
-            label="Confirm New Password"
-            value={confirmNewPassword}
-            onChangeText={setConfirmNewPassword}
-            mode="outlined"
-            style={styles.input}
-            secureTextEntry
-            outlineColor={COLORS.grey[300]}
-            activeOutlineColor={COLORS.primary}
-            contentStyle={styles.inputContent}
-          />
-
-          <Button
-            mode="contained"
-            onPress={handleChangePassword}
-            loading={isLoading}
-            style={styles.button}
-            buttonColor={COLORS.primary}
-          >
-            Change Password
-          </Button>
-        </View>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 };
 
@@ -320,57 +332,57 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
-  content: {
+  scrollView: {
+    flex: 1,
+  },
+  scrollViewContent: {
     padding: SPACING.xl,
   },
-  title: {
-    fontSize: FONT_SIZES.xl,
-    fontWeight: '700',
-    color: COLORS.text,
-    marginBottom: SPACING.xl,
-    textAlign: 'left',
+  form: {
+    gap: SPACING.xl * 2,
   },
   section: {
-    marginBottom: SPACING.xl * 1.5,
-    backgroundColor: COLORS.white,
-    padding: SPACING.lg,
-    borderRadius: 12,
-    shadowColor: COLORS.grey[900],
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5,
+    gap: SPACING.lg,
   },
   sectionTitle: {
     fontSize: FONT_SIZES.lg,
     fontWeight: '600',
     color: COLORS.text,
-    marginBottom: SPACING.lg,
+    fontFamily: 'Urbanist',
   },
   input: {
-    marginBottom: SPACING.md,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.background,
+    height: 58,
   },
-  inputContent: {
-    backgroundColor: COLORS.white,
-    fontSize: FONT_SIZES.md,
-  },
-  imageButton: {
-    marginBottom: SPACING.md,
-    borderColor: COLORS.primary,
+  inputOutline: {
+    borderRadius: 100,
     borderWidth: 1,
   },
-  button: {
-    marginTop: SPACING.md,
-    height: 48,
+  inputContent: {
+    fontFamily: 'Urbanist',
+    fontSize: FONT_SIZES.md,
+  },
+  updateButton: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 100,
+    height: 58,
     justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: SPACING.md,
+  },
+  buttonDisabled: {
+    opacity: 0.7,
+  },
+  buttonText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.md,
+    fontWeight: '700',
+    fontFamily: 'Urbanist',
+    letterSpacing: 0.2,
   },
   logoSection: {
     alignItems: 'center',
-    marginBottom: SPACING.xl,
+    marginBottom: SPACING.lg,
   },
   logoContainer: {
     width: 120,
@@ -405,5 +417,6 @@ const styles = StyleSheet.create({
     color: COLORS.grey[600],
     fontSize: FONT_SIZES.sm,
     marginTop: SPACING.xs,
+    fontFamily: 'Urbanist',
   },
 }); 

@@ -3,12 +3,12 @@ import { View, StyleSheet, Platform } from 'react-native';
 import { Text } from 'react-native-paper';
 import { COLORS, SPACING } from '../../constants/theme';
 
-export const CoachPostsScreen = () => {
+export const CoachNewsScreen = () => {
   return (
     <View style={styles.container}>
       <View style={styles.content}>
         <Text variant="headlineMedium" style={styles.title}>
-          Posts
+          News
         </Text>
       </View>
     </View>

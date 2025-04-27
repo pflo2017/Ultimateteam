@@ -21,6 +21,8 @@ interface CoachData {
   name: string;
   club_id: string;
   is_active: boolean;
+  phone_number: string;
+  access_code: string;
 }
 
 export const CoachLoginScreen = () => {
@@ -34,19 +36,25 @@ export const CoachLoginScreen = () => {
       setIsLoading(true);
       const cleanAccessCode = accessCode.trim().toUpperCase();
 
-      // Verify the coach
-      const { data, error } = await supabase
+      // Verify the coach and get complete data
+      const { data: verifyData, error: verifyError } = await supabase
         .rpc('verify_coach_access', { p_access_code: cleanAccessCode });
 
-      if (error || !data?.is_valid || !data.coach) {
-        console.error('Error verifying coach:', error);
+      if (verifyError || !verifyData?.is_valid || !verifyData.coach) {
+        console.error('Error verifying coach:', verifyError);
         Alert.alert('Error', 'Invalid access code. Please try again.');
         return;
       }
 
-      // Store coach data - the root navigator will handle navigation
-      await AsyncStorage.setItem('coach_data', JSON.stringify(data.coach));
-      console.log('Coach verified:', data.coach);
+      // Store coach data with access code
+      const coachData = {
+        ...verifyData.coach,
+        access_code: cleanAccessCode // Add the access code to the stored data
+      };
+      
+      await AsyncStorage.setItem('coach_data', JSON.stringify(coachData));
+      console.log('Coach data stored:', coachData);
+
     } catch (error) {
       console.error('Login error:', error);
       Alert.alert('Error', 'An unexpected error occurred. Please try again.');

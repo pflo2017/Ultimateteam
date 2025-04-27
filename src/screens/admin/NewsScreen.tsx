@@ -3,10 +3,10 @@ import { View, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
 import { COLORS, SPACING } from '../../constants/theme';
 
-export const AdminAnnouncementsScreen = () => {
+export const AdminNewsScreen = () => {
   return (
     <View style={styles.container}>
-      <Text style={styles.text}>Team Announcements</Text>
+      <Text style={styles.text}>News Screen</Text>
     </View>
   );
 };

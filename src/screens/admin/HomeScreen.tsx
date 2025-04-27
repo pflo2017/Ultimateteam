@@ -3,7 +3,7 @@ import { View, StyleSheet, ScrollView, Platform } from 'react-native';
 import { Text, Card, TouchableRipple } from 'react-native-paper';
 import { COLORS, SPACING } from '../../constants/theme';
 import { supabase } from '../../lib/supabase';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { MaterialCommunityIcons as IconType } from '@expo/vector-icons';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -31,11 +31,14 @@ export const AdminHomeScreen = () => {
     pendingPayments: 0
   });
   const navigation = useNavigation<NativeStackNavigationProp<AdminStackParamList>>();
+  const isFocused = useIsFocused();
 
   useEffect(() => {
-    loadProfile();
-    loadStats();
-  }, []);
+    if (isFocused) {
+      loadProfile();
+      loadStats();
+    }
+  }, [isFocused]);
 
   const loadProfile = async () => {
     try {
@@ -59,8 +62,12 @@ export const AdminHomeScreen = () => {
 
   const loadStats = async () => {
     try {
+      console.log('Loading stats...');
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        console.error('No user found');
+        return;
+      }
 
       // Get club ID
       const { data: club } = await supabase
@@ -69,30 +76,69 @@ export const AdminHomeScreen = () => {
         .eq('admin_id', user.id)
         .single();
 
-      if (!club) return;
+      if (!club) {
+        console.error('No club found');
+        return;
+      }
 
-      // Get teams count
-      const { count: teamsCount } = await supabase
+      console.log('Loading stats for club:', club.id);
+
+      // Get teams data and count
+      const { data: teamsData, error: teamsError } = await supabase
         .from('teams')
-        .select('*', { count: 'exact', head: true })
-        .eq('club_id', club.id);
+        .select('id')
+        .eq('club_id', club.id)
+        .eq('is_active', true);
+
+      if (teamsError) {
+        console.error('Error fetching teams:', teamsError);
+        return;
+      }
+
+      const teamsCount = teamsData?.length || 0;
+      console.log('Active teams data:', teamsData);
+      console.log('Active teams count:', teamsCount);
 
       // Get coaches count
-      const { count: coachesCount } = await supabase
+      const { data: coachesData, error: coachesError } = await supabase
         .from('coaches')
-        .select('*', { count: 'exact', head: true })
-        .eq('club_id', club.id);
+        .select('id')
+        .eq('club_id', club.id)
+        .eq('is_active', true);
+
+      if (coachesError) {
+        console.error('Error fetching coaches:', coachesError);
+        return;
+      }
+
+      const coachesCount = coachesData?.length || 0;
+      console.log('Active coaches count:', coachesCount);
 
       // Get players count
-      const { count: playersCount } = await supabase
+      const { data: playersData, error: playersError } = await supabase
         .from('players')
-        .select('*', { count: 'exact', head: true })
-        .eq('club_id', club.id);
+        .select('id')
+        .eq('club_id', club.id)
+        .eq('is_active', true);
+
+      if (playersError) {
+        console.error('Error fetching players:', playersError);
+        return;
+      }
+
+      const playersCount = playersData?.length || 0;
+      console.log('Active players count:', playersCount);
+
+      console.log('Setting stats:', {
+        teams: teamsCount,
+        coaches: coachesCount,
+        players: playersCount
+      });
 
       setStats({
-        teams: teamsCount || 0,
-        coaches: coachesCount || 0,
-        players: playersCount || 0,
+        teams: teamsCount,
+        coaches: coachesCount,
+        players: playersCount,
         pendingPayments: 0 // We'll implement this later
       });
     } catch (error) {
@@ -284,5 +330,7 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     flex: 1,
     marginRight: SPACING.sm,
+    height: 40,
+    lineHeight: 20,
   },
 }); 
