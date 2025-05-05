@@ -150,14 +150,7 @@ export const AdminHomeScreen = () => {
     if (screen === 'Manage') {
       navigation.navigate('Manage', { activeTab: type });
     } else if (screen === 'Payments') {
-      // Handle payments navigation when implemented
-      console.log('Payments screen not implemented yet');
-    } else if (screen === 'TeamDetails') {
-      // TeamDetails requires teamId parameter
-      console.log('TeamDetails navigation not implemented here');
-    } else {
-      // @ts-ignore - We know these screens don't require params
-      navigation.navigate(screen);
+      navigation.navigate('AdminTabs', { screen: 'Payments' } as any);
     }
   };
 
@@ -230,48 +223,50 @@ export const AdminHomeScreen = () => {
   };
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.content}>
-        <View style={styles.cardsContainer}>
-          {renderCard(
-            'Total Players',
-            stats.players,
-            'Registered in your academy',
-            'run',
-            'Manage',
-            'players',
-            200
-          )}
-          {renderCard(
-            'Total Teams',
-            stats.teams,
-            'Active in your academy',
-            'account-multiple',
-            'Manage',
-            'teams',
-            400
-          )}
-          {renderCard(
-            'Total Coaches',
-            stats.coaches,
-            'Active in your academy',
-            'account-tie',
-            'Manage',
-            'coaches',
-            600
-          )}
-          {renderCard(
-            'Payment status',
-            stats.pendingPayments,
-            'Pending payments',
-            'credit-card-outline',
-            'Payments',
-            'payments',
-            800
-          )}
+    <View style={styles.container}>
+      <ScrollView style={styles.container}>
+        <View style={styles.content}>
+          <View style={styles.cardsContainer}>
+            {renderCard(
+              'Total Players',
+              stats.players,
+              'Registered in your academy',
+              'run',
+              'Manage',
+              'players',
+              200
+            )}
+            {renderCard(
+              'Total Teams',
+              stats.teams,
+              'Active in your academy',
+              'account-group',
+              'Manage',
+              'teams',
+              400
+            )}
+            {renderCard(
+              'Total Coaches',
+              stats.coaches,
+              'Active in your academy',
+              'account-tie',
+              'Manage',
+              'coaches',
+              600
+            )}
+            {renderCard(
+              'Payment status',
+              stats.pendingPayments,
+              'Pending payments',
+              'credit-card-outline',
+              'Payments',
+              'payments',
+              800
+            )}
+          </View>
         </View>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 };
 

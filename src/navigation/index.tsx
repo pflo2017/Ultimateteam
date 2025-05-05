@@ -30,12 +30,14 @@ export const Navigation = () => {
   useEffect(() => {
     const initializeApp = async () => {
       try {
-        // Clear all data on app start for a clean slate
-        await AsyncStorage.clear(); // Clear all stored data
-        await supabase.auth.signOut();
-        setSession(null);
-        setCoachData(null);
-        setParentData(null);
+        // Check for any inconsistent auth state on startup
+        const { data } = await supabase.auth.getSession();
+        
+        if (!data.session) {
+          // If no valid session exists, make sure we clear admin state
+          await supabase.auth.signOut();
+        }
+        
         setIsInitialized(true);
       } catch (error) {
         console.error('Error initializing app:', error);

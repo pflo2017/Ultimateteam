@@ -35,63 +35,65 @@ export const CoachSettingsScreen = () => {
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
-    >
-      <ScrollView 
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollViewContent}
-        showsVerticalScrollIndicator={false}
+    <View style={styles.container}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.container}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
       >
-        <View style={styles.form}>
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Profile Information</Text>
-            
-            <View style={styles.infoMessageContainer}>
-              <Text style={styles.infoMessage}>
-                To update your account details, please contact your administrator.
-              </Text>
-            </View>
+        <ScrollView 
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollViewContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.form}>
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Profile Information</Text>
+              
+              <View style={styles.infoMessageContainer}>
+                <Text style={styles.infoMessage}>
+                  To update your account details, please contact your administrator.
+                </Text>
+              </View>
 
-            <TextInput
-              label="Name"
-              value={profile.name}
-              mode="outlined"
-              style={styles.input}
-              outlineStyle={styles.inputOutline}
-              contentStyle={styles.inputContent}
-              theme={{ colors: { primary: COLORS.primary }}}
-              left={<TextInput.Icon icon="account" color={COLORS.primary} />}
-              disabled
-            />
-            <TextInput
-              label="Phone Number"
-              value={profile.phone_number}
-              mode="outlined"
-              style={styles.input}
-              outlineStyle={styles.inputOutline}
-              contentStyle={styles.inputContent}
-              theme={{ colors: { primary: COLORS.primary }}}
-              left={<TextInput.Icon icon="phone" color={COLORS.primary} />}
-              disabled
-            />
-            <TextInput
-              label="Access Code"
-              value={profile.accessCode}
-              mode="outlined"
-              style={styles.input}
-              outlineStyle={styles.inputOutline}
-              contentStyle={styles.inputContent}
-              theme={{ colors: { primary: COLORS.primary }}}
-              left={<TextInput.Icon icon="key" color={COLORS.primary} />}
-              disabled
-            />
+              <TextInput
+                label="Name"
+                value={profile.name}
+                mode="outlined"
+                style={styles.input}
+                outlineStyle={styles.inputOutline}
+                contentStyle={styles.inputContent}
+                theme={{ colors: { primary: COLORS.primary }}}
+                left={<TextInput.Icon icon="account" color={COLORS.primary} />}
+                disabled
+              />
+              <TextInput
+                label="Phone Number"
+                value={profile.phone_number}
+                mode="outlined"
+                style={styles.input}
+                outlineStyle={styles.inputOutline}
+                contentStyle={styles.inputContent}
+                theme={{ colors: { primary: COLORS.primary }}}
+                left={<TextInput.Icon icon="phone" color={COLORS.primary} />}
+                disabled
+              />
+              <TextInput
+                label="Access Code"
+                value={profile.accessCode}
+                mode="outlined"
+                style={styles.input}
+                outlineStyle={styles.inputOutline}
+                contentStyle={styles.inputContent}
+                theme={{ colors: { primary: COLORS.primary }}}
+                left={<TextInput.Icon icon="key" color={COLORS.primary} />}
+                disabled
+              />
+            </View>
           </View>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 };
 

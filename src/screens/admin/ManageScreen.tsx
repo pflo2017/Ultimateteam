@@ -50,6 +50,17 @@ interface Player {
   team: {
     name: string;
   } | null;
+  medicalVisaStatus: string;
+  paymentStatus: string;
+}
+
+interface ParentChild {
+  id: string;
+  parent_id: string;
+  full_name: string;
+  medical_visa_status: string;
+  medical_visa_issue_date: string | null;
+  team_id: string;
 }
 
 type ManageScreenParams = {
@@ -73,7 +84,7 @@ interface SupabaseTeam {
 export const AdminManageScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<AdminStackParamList>>();
   const route = useRoute<RouteProp<AdminStackParamList, 'Manage'>>();
-  const [activeTab, setActiveTab] = useState<CardType>(route.params?.activeTab || 'teams');
+  const [activeTab, setActiveTab] = useState<CardType>('teams');
   const [teams, setTeams] = useState<Team[]>([]);
   const [coaches, setCoaches] = useState<Coach[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
@@ -81,6 +92,12 @@ export const AdminManageScreen = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const isFocused = useIsFocused();
+
+  useEffect(() => {
+    if (route.params?.activeTab) {
+      setActiveTab(route.params.activeTab);
+    }
+  }, [route.params?.activeTab]);
 
   const fetchTeams = async () => {
     try {
@@ -203,7 +220,8 @@ export const AdminManageScreen = () => {
 
   const fetchPlayers = async () => {
     try {
-      const { data, error } = await supabase
+      // First get players data
+      const { data: playersData, error: playersError } = await supabase
         .from('players')
         .select(`
           id,
@@ -211,21 +229,112 @@ export const AdminManageScreen = () => {
           created_at,
           is_active,
           team_id,
-          team:teams(name)
+          parent_id,
+          teams:team_id(id, name)
         `)
         .eq('is_active', true)
         .order('name');
 
-      if (error) throw error;
+      if (playersError) throw playersError;
 
-      const transformedPlayers: Player[] = data.map(player => ({
-        id: player.id,
-        name: player.name,
-        created_at: player.created_at,
-        is_active: player.is_active,
-        team_id: player.team_id,
-        team: player.team?.[0] || null
-      }));
+      console.log('Raw players data from DB:', JSON.stringify(playersData, null, 2));
+      
+      // Fetch related parent_children data for medical visa status
+      const playerIds = playersData.map(player => player.id);
+      const parentIds = playersData
+        .filter(player => player.parent_id)
+        .map(player => player.parent_id);
+
+      const { data: parentChildrenData, error: parentChildrenError } = await supabase
+        .from('parent_children')
+        .select(`
+          id,
+          parent_id,
+          full_name,
+          medical_visa_status,
+          medical_visa_issue_date,
+          team_id
+        `)
+        .in('parent_id', parentIds)
+        .eq('is_active', true);
+
+      if (parentChildrenError) throw parentChildrenError;
+
+      console.log('Parent children data:', JSON.stringify(parentChildrenData, null, 2));
+
+      // Create a map for quick lookup
+      const childrenMap = new Map<string, ParentChild[]>();
+      (parentChildrenData as ParentChild[]).forEach(child => {
+        if (!childrenMap.has(child.parent_id)) {
+          childrenMap.set(child.parent_id, []);
+        }
+        childrenMap.get(child.parent_id)!.push(child);
+      });
+
+      // Get all team data
+      const { data: teamsData, error: teamsError } = await supabase
+        .from('teams')
+        .select('id, name');
+      
+      if (teamsError) throw teamsError;
+      
+      console.log('Teams data:', JSON.stringify(teamsData, null, 2));
+      
+      // Create a map of teams for easy lookup
+      const teamsMap = new Map();
+      teamsData.forEach(team => {
+        teamsMap.set(team.id, team);
+      });
+
+      // Transform players data with parent_children data
+      const transformedPlayers = playersData.map(player => {
+        // Find matching child record
+        let medicalVisaStatus = 'unknown';
+        let paymentStatus = 'pending'; // Default value until implemented
+        let teamId = player.team_id;
+        let teamName = null;
+        
+        // Check if player has team_id directly
+        if (player.team_id && teamsMap.has(player.team_id)) {
+          teamName = teamsMap.get(player.team_id).name;
+        }
+        
+        if (player.parent_id && childrenMap.has(player.parent_id)) {
+          const childrenForParent = childrenMap.get(player.parent_id);
+          // Find child with matching name
+          const matchingChild = childrenForParent?.find(
+            child => child.full_name.toLowerCase() === player.name.toLowerCase()
+          );
+          
+          if (matchingChild) {
+            medicalVisaStatus = matchingChild.medical_visa_status;
+            
+            // If no team from player record, try to get it from parent_children
+            if (!teamName && matchingChild.team_id && teamsMap.has(matchingChild.team_id)) {
+              teamId = matchingChild.team_id;
+              teamName = teamsMap.get(matchingChild.team_id).name;
+            }
+          }
+        }
+
+        console.log(`Player ${player.name} team details:`, {
+          player_team_id: player.team_id,
+          teams_field: player.teams,
+          final_team_name: teamName
+        });
+
+        return {
+          id: player.id,
+          name: player.name,
+          created_at: player.created_at,
+          is_active: player.is_active,
+          team_id: teamId,
+          team: teamName ? { name: teamName } : null,
+          medicalVisaStatus,
+          paymentStatus,
+          parent_id: player.parent_id
+        };
+      });
 
       setPlayers(transformedPlayers);
     } catch (error) {

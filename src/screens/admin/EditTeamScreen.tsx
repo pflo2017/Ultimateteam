@@ -202,182 +202,184 @@ export const EditTeamScreen = () => {
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
-      <Pressable 
-        style={styles.backButton} 
-        onPress={() => navigation.goBack()}
+    <View style={styles.container}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.container}
       >
-        <MaterialCommunityIcons 
-          name="arrow-left" 
-          size={24} 
-          color={COLORS.primary}
-        />
-      </Pressable>
-
-      <View style={styles.content}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Edit Team</Text>
-          <Text style={styles.subtitle}>Update team information or delete team</Text>
-        </View>
-
-        <View style={styles.form}>
-          <TextInput
-            label="Team Name"
-            value={teamName}
-            onChangeText={setTeamName}
-            mode="outlined"
-            style={styles.input}
-            outlineStyle={styles.inputOutline}
-            contentStyle={styles.inputContent}
-            theme={{ colors: { primary: COLORS.primary }}}
-            left={<TextInput.Icon icon="account-multiple" color={COLORS.primary} />}
+        <Pressable 
+          style={styles.backButton} 
+          onPress={() => navigation.goBack()}
+        >
+          <MaterialCommunityIcons 
+            name="arrow-left" 
+            size={24} 
+            color={COLORS.primary}
           />
+        </Pressable>
 
-          <Pressable
-            style={styles.coachSelector}
-            onPress={handleCoachSelectorPress}
-          >
-            <View style={styles.coachSelectorContent}>
-              <MaterialCommunityIcons
-                name="account-tie"
-                size={24}
-                color={COLORS.primary}
-              />
-              <Text style={styles.coachSelectorText}>
-                {selectedCoach ? selectedCoach.name : 'Select Coach'}
-              </Text>
-            </View>
-            <MaterialCommunityIcons
-              name="chevron-right"
-              size={24}
-              color={COLORS.grey[400]}
+        <View style={styles.content}>
+          <View style={styles.header}>
+            <Text style={styles.title}>Edit Team</Text>
+            <Text style={styles.subtitle}>Update team information or delete team</Text>
+          </View>
+
+          <View style={styles.form}>
+            <TextInput
+              label="Team Name"
+              value={teamName}
+              onChangeText={setTeamName}
+              mode="outlined"
+              style={styles.input}
+              outlineStyle={styles.inputOutline}
+              contentStyle={styles.inputContent}
+              theme={{ colors: { primary: COLORS.primary }}}
+              left={<TextInput.Icon icon="account-multiple" color={COLORS.primary} />}
             />
-          </Pressable>
 
-          <Pressable 
-            onPress={handleUpdateTeam}
-            disabled={isLoading}
-            style={[styles.updateButton, isLoading && styles.buttonDisabled]}
-          >
-            <Text style={styles.buttonText}>
-              {isLoading ? 'Updating...' : 'Update Team'}
-            </Text>
-          </Pressable>
-
-          <Pressable 
-            onPress={handleDeleteTeam}
-            disabled={isLoading}
-            style={[styles.deleteButton, isLoading && styles.buttonDisabled]}
-          >
-            <Text style={[styles.buttonText, styles.deleteButtonText]}>
-              Delete Team
-            </Text>
-          </Pressable>
-        </View>
-      </View>
-
-      <RNModal
-        visible={isCoachModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => {
-          console.log('Modal closing via back button/gesture');
-          setIsCoachModalVisible(false);
-        }}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Coach</Text>
-              <Pressable 
-                onPress={() => {
-                  console.log('Close button pressed');
-                  setIsCoachModalVisible(false);
-                }}
-                style={styles.closeButton}
-              >
+            <Pressable
+              style={styles.coachSelector}
+              onPress={handleCoachSelectorPress}
+            >
+              <View style={styles.coachSelectorContent}>
                 <MaterialCommunityIcons
-                  name="close"
+                  name="account-tie"
                   size={24}
-                  color={COLORS.text}
+                  color={COLORS.primary}
                 />
-              </Pressable>
-            </View>
-            
-            <ScrollView style={styles.coachesList}>
-              <Pressable
-                style={[
-                  styles.coachItem,
-                  selectedCoachId === null && styles.selectedCoachItem
-                ]}
-                onPress={() => {
-                  console.log('No coach option selected');
-                  setSelectedCoachId(null);
-                  setIsCoachModalVisible(false);
-                }}
-              >
-                <View style={styles.coachItemContent}>
-                  <MaterialCommunityIcons
-                    name="account-off"
-                    size={24}
-                    color={COLORS.primary}
-                  />
-                  <Text style={styles.coachName}>No Coach</Text>
-                </View>
-                {selectedCoachId === null && (
-                  <MaterialCommunityIcons
-                    name="check"
-                    size={24}
-                    color={COLORS.primary}
-                  />
-                )}
-              </Pressable>
-              
-              {coaches.length === 0 ? (
-                <Text style={styles.noCoachesText}>No coaches available</Text>
-              ) : (
-                coaches.map((coach) => {
-                  console.log('Rendering coach:', coach);
-                  return (
-                    <Pressable
-                      key={coach.id}
-                      style={[
-                        styles.coachItem,
-                        selectedCoachId === coach.id && styles.selectedCoachItem
-                      ]}
-                      onPress={() => {
-                        console.log('Coach selected:', coach);
-                        setSelectedCoachId(coach.id);
-                        setIsCoachModalVisible(false);
-                      }}
-                    >
-                      <View style={styles.coachItemContent}>
-                        <MaterialCommunityIcons
-                          name="account-tie"
-                          size={24}
-                          color={COLORS.primary}
-                        />
-                        <Text style={styles.coachName}>{coach.name}</Text>
-                      </View>
-                      {selectedCoachId === coach.id && (
-                        <MaterialCommunityIcons
-                          name="check"
-                          size={24}
-                          color={COLORS.primary}
-                        />
-                      )}
-                    </Pressable>
-                  );
-                })
-              )}
-            </ScrollView>
+                <Text style={styles.coachSelectorText}>
+                  {selectedCoach ? selectedCoach.name : 'Select Coach'}
+                </Text>
+              </View>
+              <MaterialCommunityIcons
+                name="chevron-right"
+                size={24}
+                color={COLORS.grey[400]}
+              />
+            </Pressable>
+
+            <Pressable 
+              onPress={handleUpdateTeam}
+              disabled={isLoading}
+              style={[styles.updateButton, isLoading && styles.buttonDisabled]}
+            >
+              <Text style={styles.buttonText}>
+                {isLoading ? 'Updating...' : 'Update Team'}
+              </Text>
+            </Pressable>
+
+            <Pressable 
+              onPress={handleDeleteTeam}
+              disabled={isLoading}
+              style={[styles.deleteButton, isLoading && styles.buttonDisabled]}
+            >
+              <Text style={[styles.buttonText, styles.deleteButtonText]}>
+                Delete Team
+              </Text>
+            </Pressable>
           </View>
         </View>
-      </RNModal>
-    </KeyboardAvoidingView>
+
+        <RNModal
+          visible={isCoachModalVisible}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => {
+            console.log('Modal closing via back button/gesture');
+            setIsCoachModalVisible(false);
+          }}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Select Coach</Text>
+                <Pressable 
+                  onPress={() => {
+                    console.log('Close button pressed');
+                    setIsCoachModalVisible(false);
+                  }}
+                  style={styles.closeButton}
+                >
+                  <MaterialCommunityIcons
+                    name="close"
+                    size={24}
+                    color={COLORS.text}
+                  />
+                </Pressable>
+              </View>
+              
+              <ScrollView style={styles.coachesList}>
+                <Pressable
+                  style={[
+                    styles.coachItem,
+                    selectedCoachId === null && styles.selectedCoachItem
+                  ]}
+                  onPress={() => {
+                    console.log('No coach option selected');
+                    setSelectedCoachId(null);
+                    setIsCoachModalVisible(false);
+                  }}
+                >
+                  <View style={styles.coachItemContent}>
+                    <MaterialCommunityIcons
+                      name="account-off"
+                      size={24}
+                      color={COLORS.primary}
+                    />
+                    <Text style={styles.coachName}>No Coach</Text>
+                  </View>
+                  {selectedCoachId === null && (
+                    <MaterialCommunityIcons
+                      name="check"
+                      size={24}
+                      color={COLORS.primary}
+                    />
+                  )}
+                </Pressable>
+                
+                {coaches.length === 0 ? (
+                  <Text style={styles.noCoachesText}>No coaches available</Text>
+                ) : (
+                  coaches.map((coach) => {
+                    console.log('Rendering coach:', coach);
+                    return (
+                      <Pressable
+                        key={coach.id}
+                        style={[
+                          styles.coachItem,
+                          selectedCoachId === coach.id && styles.selectedCoachItem
+                        ]}
+                        onPress={() => {
+                          console.log('Coach selected:', coach);
+                          setSelectedCoachId(coach.id);
+                          setIsCoachModalVisible(false);
+                        }}
+                      >
+                        <View style={styles.coachItemContent}>
+                          <MaterialCommunityIcons
+                            name="account-tie"
+                            size={24}
+                            color={COLORS.primary}
+                          />
+                          <Text style={styles.coachName}>{coach.name}</Text>
+                        </View>
+                        {selectedCoachId === coach.id && (
+                          <MaterialCommunityIcons
+                            name="check"
+                            size={24}
+                            color={COLORS.primary}
+                          />
+                        )}
+                      </Pressable>
+                    );
+                  })
+                )}
+              </ScrollView>
+            </View>
+          </View>
+        </RNModal>
+      </KeyboardAvoidingView>
+    </View>
   );
 };
 

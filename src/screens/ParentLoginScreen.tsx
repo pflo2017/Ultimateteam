@@ -48,7 +48,9 @@ export const ParentLoginScreen = () => {
         navigation.navigate('ParentPasswordLogin', { phoneNumber: cleanedPhoneNumber });
       } else {
         // New parent, start registration flow
-        navigation.navigate('ParentTeamCode', { phoneNumber: cleanedPhoneNumber });
+        navigation.navigate('ParentRegistration', { 
+          phoneNumber: cleanedPhoneNumber
+        });
       }
     } catch (error) {
       console.error('Error checking phone number:', error);

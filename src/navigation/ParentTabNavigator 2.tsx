@@ -7,8 +7,6 @@ import { ParentEventsScreen } from '../screens/parent/ParentEventsScreen';
 import { ParentChatScreen } from '../screens/parent/ParentChatScreen';
 import { ParentNewsScreen } from '../screens/parent/ParentNewsScreen';
 import { ParentSettingsScreen } from '../screens/parent/ParentSettingsScreen';
-import { EditChildScreen } from '../screens/parent/EditChildScreen';
-import { AddChildScreen } from '../screens/parent/AddChildScreen';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../constants/theme';
 import { View, TouchableOpacity, StyleSheet, Text, Platform, Alert, Pressable } from 'react-native';
@@ -19,6 +17,8 @@ import type { RootStackParamList, ParentStackParamList, ParentTabParamList } fro
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
+import { AddChildScreen } from '../screens/parent/AddChildScreen';
+import { EditChildScreen } from '../screens/parent/EditChildScreen';
 
 const Tab = createBottomTabNavigator<ParentTabParamList>();
 const Stack = createNativeStackNavigator<ParentStackParamList>();
@@ -96,17 +96,18 @@ const ParentHeader = () => {
 
   const handleLogout = async () => {
     try {
-      // Clear parent data first - this is what the root navigator checks
-      await AsyncStorage.removeItem('parent_data');
-      
       // Sign out from Supabase Auth
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
+
+      // Clear local storage
+      await AsyncStorage.removeItem('parent_data');
+      await AsyncStorage.removeItem('selected_child_id');
       
-      // Don't try to navigate directly - the root navigator will handle showing Home
-      // when parentData is null
+      // The navigation container will automatically handle the navigation
+      // when parent data is cleared
     } catch (error) {
-      console.error('Error logging out:', error);
+      console.error('Error signing out:', error);
       Alert.alert('Error', 'Failed to log out. Please try again.');
     }
   };
@@ -254,27 +255,21 @@ export const ParentNavigator = () => {
             }}
           />
           <Stack.Screen
-            name="EditChild"
-            component={EditChildScreen}
-            options={{
-              title: 'Edit Child',
-              headerStyle: {
-                backgroundColor: COLORS.background,
-              },
-              headerTintColor: COLORS.text,
-              headerShadowVisible: false,
-            }}
-          />
-          <Stack.Screen
             name="AddChild"
             component={AddChildScreen}
             options={{
-              title: 'Add Child',
-              headerStyle: {
-                backgroundColor: COLORS.background,
-              },
-              headerTintColor: COLORS.text,
-              headerShadowVisible: false,
+              headerShown: false,
+              presentation: 'fullScreenModal',
+              animation: 'slide_from_right'
+            }}
+          />
+          <Stack.Screen
+            name="EditChild"
+            component={EditChildScreen}
+            options={{
+              headerShown: false,
+              presentation: 'fullScreenModal',
+              animation: 'slide_from_right'
             }}
           />
         </Stack.Navigator>

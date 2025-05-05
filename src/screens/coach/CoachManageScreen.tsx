@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Platform, Alert } from 'react-native';
+import { View, StyleSheet, Platform, Alert, Text } from 'react-native';
 import { SegmentedButtons } from 'react-native-paper';
 import { COLORS, SPACING } from '../../constants/theme';
 import { supabase } from '../../lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CoachManageTeamsScreen } from './CoachManageTeamsScreen';
 import { CoachManagePlayersScreen } from './CoachManagePlayersScreen';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useRoute, RouteProp } from '@react-navigation/native';
+import type { CoachTabParamList } from '../../navigation/CoachNavigator';
 
 interface Team {
   id: string;
@@ -21,7 +24,8 @@ interface Player {
 }
 
 export const CoachManageScreen = () => {
-  const [activeTab, setActiveTab] = useState<'teams' | 'players'>('teams');
+  const route = useRoute<RouteProp<CoachTabParamList, 'Manage'>>();
+  const [activeTab, setActiveTab] = useState<'teams' | 'players'>(route.params?.activeTab || 'teams');
   const [teams, setTeams] = useState<Team[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -30,8 +34,11 @@ export const CoachManageScreen = () => {
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
+    if (route.params?.activeTab) {
+      setActiveTab(route.params.activeTab);
+    }
     loadData();
-  }, []);
+  }, [route.params?.activeTab]);
 
   const loadData = async () => {
     try {

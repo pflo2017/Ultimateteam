@@ -33,7 +33,7 @@ const PlayerCard = ({ player }: { player: Player }) => (
     <Card.Content>
       <View style={styles.playerCardContent}>
         <View style={styles.playerInfo}>
-          <MaterialCommunityIcons name="account" size={24} color={COLORS.primary} />
+          <MaterialCommunityIcons name="run" size={24} color={COLORS.primary} />
           <View>
             <Text style={styles.playerName}>{player.name}</Text>
             <Text style={styles.teamName}>{player.team_name}</Text>
@@ -65,125 +65,97 @@ export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> =
   });
 
   return (
-    <View style={styles.playersContainer}>
-      <View style={styles.searchContainer}>
-        <MaterialCommunityIcons name="magnify" size={20} color={COLORS.grey[400]} style={styles.searchIcon} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search player"
-          placeholderTextColor={COLORS.grey[400]}
-          value={searchQuery}
-          onChangeText={onSearchChange}
-        />
-      </View>
+    <View style={styles.container}>
+      <View style={styles.playersContainer}>
+        <View style={styles.searchContainer}>
+          <MaterialCommunityIcons name="magnify" size={20} color={COLORS.grey[400]} style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search player"
+            placeholderTextColor={COLORS.grey[400]}
+            value={searchQuery}
+            onChangeText={onSearchChange}
+          />
+        </View>
 
-      <View style={styles.filtersRow}>
-        <Pressable
-          style={styles.teamSelector}
-          onPress={() => setIsTeamModalVisible(true)}
+        <View style={styles.filtersRow}>
+          <Pressable
+            style={styles.teamSelector}
+            onPress={() => setIsTeamModalVisible(true)}
+          >
+            <MaterialCommunityIcons 
+              name="account-group" 
+              size={20} 
+              color={COLORS.primary}
+            />
+            <Text style={styles.teamSelectorText} numberOfLines={1}>
+              {selectedTeam ? selectedTeam.name : 'All Teams'}
+            </Text>
+            <MaterialCommunityIcons 
+              name="chevron-down" 
+              size={20} 
+              color={COLORS.grey[400]}
+            />
+          </Pressable>
+          {/* Space reserved for additional filters */}
+        </View>
+
+        <ScrollView
+          contentContainerStyle={styles.content}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
         >
-          <MaterialCommunityIcons 
-            name="account-multiple" 
-            size={20} 
-            color={COLORS.primary}
-          />
-          <Text style={styles.teamSelectorText} numberOfLines={1}>
-            {selectedTeam ? selectedTeam.name : 'All Teams'}
-          </Text>
-          <MaterialCommunityIcons 
-            name="chevron-down" 
-            size={20} 
-            color={COLORS.grey[400]}
-          />
-        </Pressable>
-        {/* Space reserved for additional filters */}
-      </View>
+          {filteredPlayers.map(player => (
+            <PlayerCard key={player.id} player={player} />
+          ))}
+          {filteredPlayers.length === 0 && !isLoading && (
+            <Text style={styles.emptyText}>No players found</Text>
+          )}
+        </ScrollView>
 
-      <ScrollView
-        contentContainerStyle={styles.content}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-      >
-        {filteredPlayers.map(player => (
-          <PlayerCard key={player.id} player={player} />
-        ))}
-        {filteredPlayers.length === 0 && !isLoading && (
-          <Text style={styles.emptyText}>No players found</Text>
-        )}
-      </ScrollView>
-
-      <Modal
-        visible={isTeamModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setIsTeamModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Team</Text>
-              <Pressable 
-                onPress={() => setIsTeamModalVisible(false)}
-                style={styles.closeButton}
-              >
-                <MaterialCommunityIcons
-                  name="close"
-                  size={24}
-                  color={COLORS.text}
-                />
-              </Pressable>
-            </View>
-
-            <ScrollView style={styles.teamsList}>
-              <Pressable
-                style={[
-                  styles.teamItem,
-                  selectedTeamId === null && styles.selectedTeamItem
-                ]}
-                onPress={() => {
-                  onTeamSelect(null);
-                  setIsTeamModalVisible(false);
-                }}
-              >
-                <View style={styles.teamItemContent}>
+        <Modal
+          visible={isTeamModalVisible}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setIsTeamModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Select Team</Text>
+                <Pressable 
+                  onPress={() => setIsTeamModalVisible(false)}
+                  style={styles.closeButton}
+                >
                   <MaterialCommunityIcons
-                    name="account-multiple"
+                    name="close"
                     size={24}
-                    color={COLORS.primary}
+                    color={COLORS.text}
                   />
-                  <Text style={styles.teamName}>All Teams</Text>
-                </View>
-                {selectedTeamId === null && (
-                  <MaterialCommunityIcons
-                    name="check"
-                    size={24}
-                    color={COLORS.primary}
-                  />
-                )}
-              </Pressable>
+                </Pressable>
+              </View>
 
-              {teams.map((team) => (
+              <ScrollView style={styles.teamsList}>
                 <Pressable
-                  key={team.id}
                   style={[
                     styles.teamItem,
-                    selectedTeamId === team.id && styles.selectedTeamItem
+                    selectedTeamId === null && styles.selectedTeamItem
                   ]}
                   onPress={() => {
-                    onTeamSelect(team.id);
+                    onTeamSelect(null);
                     setIsTeamModalVisible(false);
                   }}
                 >
                   <View style={styles.teamItemContent}>
                     <MaterialCommunityIcons
-                      name="account-multiple"
+                      name="account-group"
                       size={24}
                       color={COLORS.primary}
                     />
-                    <Text style={styles.teamName}>{team.name}</Text>
+                    <Text style={styles.teamName}>All Teams</Text>
                   </View>
-                  {selectedTeamId === team.id && (
+                  {selectedTeamId === null && (
                     <MaterialCommunityIcons
                       name="check"
                       size={24}
@@ -191,16 +163,49 @@ export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> =
                     />
                   )}
                 </Pressable>
-              ))}
-            </ScrollView>
+
+                {teams.map((team) => (
+                  <Pressable
+                    key={team.id}
+                    style={[
+                      styles.teamItem,
+                      selectedTeamId === team.id && styles.selectedTeamItem
+                    ]}
+                    onPress={() => {
+                      onTeamSelect(team.id);
+                      setIsTeamModalVisible(false);
+                    }}
+                  >
+                    <View style={styles.teamItemContent}>
+                      <MaterialCommunityIcons
+                        name="account-group"
+                        size={24}
+                        color={COLORS.primary}
+                      />
+                      <Text style={styles.teamName}>{team.name}</Text>
+                    </View>
+                    {selectedTeamId === team.id && (
+                      <MaterialCommunityIcons
+                        name="check"
+                        size={24}
+                        color={COLORS.primary}
+                      />
+                    )}
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
   playersContainer: {
     flex: 1,
   },

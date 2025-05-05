@@ -33,6 +33,7 @@ export const ParentPasswordLoginScreen = () => {
     setIsLoading(true);
 
     try {
+      console.log('DEBUG: Attempting login with phoneNumber:', phoneNumber, 'password:', password);
       const { data: parent, error: loginError } = await supabase
         .from('parents')
         .select('id, name, phone_number, team_id')

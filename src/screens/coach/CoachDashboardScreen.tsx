@@ -120,7 +120,28 @@ export const CoachDashboardScreen = () => {
   };
 
   const handleCardPress = (screen: keyof CoachTabParamList, type: CardType) => {
-    navigation.navigate(screen);
+    switch (screen) {
+      case 'Manage':
+        if (type === 'teams' || type === 'players') {
+          navigation.navigate('Manage', { activeTab: type });
+        }
+        break;
+      case 'Payments':
+        navigation.navigate('Payments');
+        break;
+      case 'CoachDashboard':
+        navigation.navigate('CoachDashboard');
+        break;
+      case 'Schedule':
+        navigation.navigate('Schedule');
+        break;
+      case 'Chat':
+        navigation.navigate('Chat');
+        break;
+      case 'News':
+        navigation.navigate('News');
+        break;
+    }
   };
 
   const renderCard = (
@@ -192,39 +213,41 @@ export const CoachDashboardScreen = () => {
   };
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.content}>
-        <View style={styles.cardsContainer}>
-          {renderCard(
-            'Total Players',
-            stats.totalPlayers,
-            'In your teams',
-            'run',
-            'CoachDashboard',
-            'players',
-            200
-          )}
-          {renderCard(
-            'Your Teams',
-            stats.teams.length,
-            'Your teams',
-            'account-multiple',
-            'Manage',
-            'teams',
-            400
-          )}
-          {renderCard(
-            'Payment Status',
-            stats.pendingPayments,
-            'Pending payments',
-            'cash-multiple',
-            'Payments',
-            'payments',
-            600
-          )}
+    <View style={styles.container}>
+      <ScrollView style={styles.container}>
+        <View style={styles.content}>
+          <View style={styles.cardsContainer}>
+            {renderCard(
+              'Total Players',
+              stats.totalPlayers,
+              'In your teams',
+              'run',
+              'Manage',
+              'players',
+              200
+            )}
+            {renderCard(
+              'Your Teams',
+              stats.teams.length,
+              'Your teams',
+              'account-group',
+              'Manage',
+              'teams',
+              400
+            )}
+            {renderCard(
+              'Payment Status',
+              stats.pendingPayments,
+              'Pending payments',
+              'cash-multiple',
+              'Payments',
+              'payments',
+              600
+            )}
+          </View>
         </View>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 };
 

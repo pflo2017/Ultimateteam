@@ -22,13 +22,13 @@ const TeamCard = ({ team }: { team: Team }) => (
     <Card.Content>
       <View style={styles.cardHeader}>
         <View style={styles.cardTitleContainer}>
-          <MaterialCommunityIcons name="account-multiple" size={24} color={COLORS.primary} />
+          <MaterialCommunityIcons name="account-group" size={24} color={COLORS.primary} />
           <Text style={styles.cardTitle}>{team.name}</Text>
         </View>
       </View>
       <View style={styles.cardContent}>
         <View style={styles.infoRow}>
-          <MaterialCommunityIcons name="account-multiple" size={20} color={COLORS.primary} />
+          <MaterialCommunityIcons name="run" size={20} color={COLORS.primary} />
           <Text style={styles.infoText}>{team.players_count} players</Text>
         </View>
       </View>
@@ -43,23 +43,28 @@ export const CoachManageTeamsScreen: React.FC<CoachManageTeamsScreenProps> = ({
   refreshing
 }) => {
   return (
-    <ScrollView
-      contentContainerStyle={styles.content}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
-    >
-      {teams.map(team => (
-        <TeamCard key={team.id} team={team} />
-      ))}
-      {teams.length === 0 && !isLoading && (
-        <Text style={styles.emptyText}>No teams assigned yet</Text>
-      )}
-    </ScrollView>
+    <View style={styles.container}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        {teams.map(team => (
+          <TeamCard key={team.id} team={team} />
+        ))}
+        {teams.length === 0 && !isLoading && (
+          <Text style={styles.emptyText}>No teams assigned yet</Text>
+        )}
+      </ScrollView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
   content: {
     padding: SPACING.lg,
     paddingBottom: SPACING.xl * 4,

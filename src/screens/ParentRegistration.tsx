@@ -8,6 +8,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { COLORS } from '../constants/theme';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type ParentRegistrationScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'ParentRegistration'>;
 type ParentRegistrationScreenRouteProp = RouteProp<RootStackParamList, 'ParentRegistration'>;
@@ -24,7 +25,7 @@ export const ParentRegistrationScreen = () => {
   
   const navigation = useNavigation<ParentRegistrationScreenNavigationProp>();
   const route = useRoute<ParentRegistrationScreenRouteProp>();
-  const { phoneNumber, teamCode, teamId } = route.params;
+  const { phoneNumber } = route.params;
 
   const validateEmail = (email: string) => {
     return email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/);
@@ -93,7 +94,6 @@ export const ParentRegistrationScreen = () => {
           email: email.trim().toLowerCase(),
           phone_number: phoneNumber,
           password: password,
-          team_id: teamId,
           is_active: true,
           phone_verified: true // Since we're skipping verification
         }])
@@ -102,8 +102,9 @@ export const ParentRegistrationScreen = () => {
 
       if (createError) throw createError;
 
-      // Navigate to dashboard screen
-      navigation.navigate('ParentDashboard');
+      // Store parent data in AsyncStorage so the root navigator can detect it
+      await AsyncStorage.setItem('parent_data', JSON.stringify(parent));
+      // Do NOT navigate manually. The root navigator will switch automatically.
       
     } catch (error: any) {
       console.error('Error creating account:', error);
@@ -192,18 +193,6 @@ export const ParentRegistrationScreen = () => {
               theme={{ colors: { primary: COLORS.primary }}}
               disabled={true}
               left={<TextInput.Icon icon="phone" color={COLORS.grey[400]} />}
-            />
-
-            <TextInput
-              label="Team Code"
-              value={teamCode}
-              mode="outlined"
-              style={styles.input}
-              outlineStyle={styles.inputOutline}
-              contentStyle={styles.inputContent}
-              theme={{ colors: { primary: COLORS.primary }}}
-              disabled={true}
-              left={<TextInput.Icon icon="account-group" color={COLORS.grey[400]} />}
             />
 
             <TextInput

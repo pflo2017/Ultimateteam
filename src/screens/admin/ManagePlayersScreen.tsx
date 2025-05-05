@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, TextInput, RefreshControl, Modal, Pressable } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, TextInput, RefreshControl, Modal, Pressable, Alert } from 'react-native';
 import { Text, ActivityIndicator, Card } from 'react-native-paper';
 import { COLORS, SPACING } from '../../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { AdminStackParamList } from '../../types/navigation';
+import { supabase } from '../../lib/supabase';
 
 interface Team {
   id: string;
@@ -21,6 +22,9 @@ interface Player {
   team: {
     name: string;
   } | null;
+  medicalVisaStatus: string;
+  paymentStatus: string;
+  parent_id?: string;
 }
 
 interface ManagePlayersScreenProps {
@@ -45,6 +49,11 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
   const navigation = useNavigation<NativeStackNavigationProp<AdminStackParamList>>();
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [isTeamModalVisible, setIsTeamModalVisible] = useState(false);
+  const [isPlayerDetailsModalVisible, setIsPlayerDetailsModalVisible] = useState(false);
+  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  const [parentDetails, setParentDetails] = useState<{ name: string; phone_number: string } | null>(null);
+  const [paymentStatus, setPaymentStatus] = useState<string>('pending');
+  const [isUpdatingPayment, setIsUpdatingPayment] = useState(false);
 
   const selectedTeam = teams.find(team => team.id === selectedTeamId);
 
@@ -53,6 +62,93 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
     const matchesTeam = !selectedTeamId || player.team_id === selectedTeamId;
     return matchesSearch && matchesTeam;
   });
+
+  const handleOpenPlayerDetails = async (player: Player) => {
+    setSelectedPlayer(player);
+    setPaymentStatus(player.paymentStatus);
+    
+    // Fetch parent details if player has parent_id
+    if (player.parent_id) {
+      try {
+        const { data, error } = await supabase
+          .from('parents')
+          .select('name, phone_number')
+          .eq('id', player.parent_id)
+          .single();
+          
+        if (error) throw error;
+        setParentDetails(data);
+      } catch (error) {
+        console.error('Error fetching parent details:', error);
+        setParentDetails(null);
+      }
+    } else {
+      setParentDetails(null);
+    }
+    
+    setIsPlayerDetailsModalVisible(true);
+  };
+  
+  const handleUpdatePaymentStatus = async () => {
+    if (!selectedPlayer) return;
+    
+    setIsUpdatingPayment(true);
+    try {
+      // In a real implementation, you would update this in your database
+      // For now, we'll just simulate the update in the local state
+      
+      // TODO: Add actual API call to update payment status
+      // Example:
+      // const { error } = await supabase
+      //   .from('players')
+      //   .update({ payment_status: paymentStatus })
+      //   .eq('id', selectedPlayer.id);
+      
+      // if (error) throw error;
+      
+      // Update the local state
+      const updatedPlayers = players.map(p => 
+        p.id === selectedPlayer.id ? {...p, paymentStatus} : p
+      );
+      
+      // Refresh the data (this would be handled by the parent component)
+      await onRefresh();
+      
+      setIsPlayerDetailsModalVisible(false);
+      Alert.alert('Success', 'Payment status updated successfully');
+    } catch (error) {
+      console.error('Error updating payment status:', error);
+      Alert.alert('Error', 'Failed to update payment status');
+    } finally {
+      setIsUpdatingPayment(false);
+    }
+  };
+
+  const getMedicalVisaStatusColor = (status: string) => {
+    switch (status) {
+      case 'valid':
+        return COLORS.success;
+      case 'pending':
+        return COLORS.warning;
+      case 'expired':
+        return COLORS.error;
+      default:
+        return COLORS.grey[600];
+    }
+  };
+
+  const getPaymentStatusColor = (status: string) => {
+    switch (status) {
+      case 'paid':
+        return COLORS.success;
+      case 'pending':
+        return COLORS.warning;
+      case 'overdue':
+        return COLORS.error;
+      default:
+        return COLORS.grey[600];
+    }
+  };
 
   if (isLoading) {
     return <ActivityIndicator style={styles.loader} color={COLORS.primary} />;
@@ -84,7 +180,7 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
           onPress={() => setIsTeamModalVisible(true)}
         >
           <MaterialCommunityIcons 
-            name="account-multiple" 
+            name="account-group" 
             size={20} 
             color={COLORS.primary}
           />
@@ -117,17 +213,31 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
                     <Text style={styles.cardTitle}>{player.name}</Text>
                   </View>
                   <TouchableOpacity
-                    onPress={() => navigation.navigate('EditPlayer', { playerId: player.id })}
+                    onPress={() => handleOpenPlayerDetails(player)}
                     style={styles.actionButton}
                   >
-                    <MaterialCommunityIcons name="pencil" size={20} color={COLORS.primary} />
+                    <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.primary} />
                   </TouchableOpacity>
                 </View>
                 <View style={styles.cardContent}>
                   <View style={styles.infoRow}>
                     <MaterialCommunityIcons name="account-group" size={20} color={COLORS.primary} />
                     <Text style={styles.infoText}>
-                      Team: {player.team?.name || 'No team assigned'}
+                      Team: {player.team ? player.team.name : 'No team assigned'}
+                    </Text>
+                  </View>
+                  
+                  <View style={styles.infoRow}>
+                    <MaterialCommunityIcons name="medical-bag" size={20} color={getMedicalVisaStatusColor(player.medicalVisaStatus)} />
+                    <Text style={[styles.infoText, { color: getMedicalVisaStatusColor(player.medicalVisaStatus) }]}>
+                      Visa Status: {player.medicalVisaStatus.charAt(0).toUpperCase() + player.medicalVisaStatus.slice(1)}
+                    </Text>
+                  </View>
+
+                  <View style={styles.infoRow}>
+                    <MaterialCommunityIcons name="cash" size={20} color={getPaymentStatusColor(player.paymentStatus)} />
+                    <Text style={[styles.infoText, { color: getPaymentStatusColor(player.paymentStatus) }]}>
+                      Payment Status: {player.paymentStatus.charAt(0).toUpperCase() + player.paymentStatus.slice(1)}
                     </Text>
                   </View>
                 </View>
@@ -172,7 +282,7 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
               >
                 <View style={styles.teamItemContent}>
                   <MaterialCommunityIcons
-                    name="account-multiple"
+                    name="account-group"
                     size={24}
                     color={COLORS.primary}
                   />
@@ -201,7 +311,7 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
                 >
                   <View style={styles.teamItemContent}>
                     <MaterialCommunityIcons
-                      name="account-multiple"
+                      name="account-group"
                       size={24}
                       color={COLORS.primary}
                     />
@@ -216,6 +326,57 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
                   )}
                 </Pressable>
               ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+      
+      <Modal
+        visible={isPlayerDetailsModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setIsPlayerDetailsModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { padding: 0, borderRadius: 16 }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Player Details</Text>
+              <Pressable 
+                onPress={() => setIsPlayerDetailsModalVisible(false)}
+                style={styles.closeButton}
+              >
+                <MaterialCommunityIcons
+                  name="close"
+                  size={24}
+                  color={COLORS.text}
+                />
+              </Pressable>
+            </View>
+            
+            <ScrollView style={{ maxHeight: '80%' }}>
+              <View style={{ padding: SPACING.lg }}>
+                {/* Parent Info */}
+                <View style={styles.detailSection}>
+                  <Text style={styles.detailSectionTitle}>Parent Information</Text>
+                  {parentDetails ? (
+                    <>
+                      <View style={styles.infoRow}>
+                        <MaterialCommunityIcons name="account" size={20} color={COLORS.primary} />
+                        <Text style={styles.infoText}>{parentDetails.name}</Text>
+                      </View>
+                      <View style={styles.infoRow}>
+                        <MaterialCommunityIcons name="phone" size={20} color={COLORS.primary} />
+                        <Text style={styles.infoText}>{parentDetails.phone_number}</Text>
+                      </View>
+                    </>
+                  ) : (
+                    <View style={styles.infoRow}>
+                      <MaterialCommunityIcons name="information-outline" size={20} color={COLORS.grey[600]} />
+                      <Text style={styles.infoText}>No parent information available</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
             </ScrollView>
           </View>
         </View>
@@ -380,5 +541,70 @@ const styles = StyleSheet.create({
   teamItemText: {
     fontSize: 16,
     color: COLORS.text,
+  },
+  detailSection: {
+    marginBottom: SPACING.lg,
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    padding: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.grey[200],
+  },
+  detailSectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.text,
+    marginBottom: SPACING.md,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: SPACING.xs,
+    marginBottom: SPACING.xs,
+  },
+  detailLabel: {
+    fontSize: 14,
+    color: COLORS.grey[600],
+    flex: 1,
+  },
+  detailValue: {
+    fontSize: 14,
+    color: COLORS.text,
+    fontWeight: '500',
+    flex: 2,
+    textAlign: 'right',
+  },
+  paymentOptions: {
+    marginTop: SPACING.sm,
+  },
+  paymentOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: SPACING.md,
+    marginBottom: SPACING.xs,
+    backgroundColor: COLORS.white,
+    borderRadius: 100,
+    borderWidth: 1,
+    borderColor: COLORS.grey[200],
+  },
+  paymentOptionText: {
+    fontSize: 16,
+    marginLeft: SPACING.sm,
+    fontWeight: '500',
+  },
+  updateButton: {
+    backgroundColor: COLORS.primary,
+    padding: SPACING.md,
+    borderRadius: 100,
+    alignItems: 'center',
+    marginTop: SPACING.xl,
+  },
+  updateButtonText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  disabledButton: {
+    opacity: 0.7,
   },
 }); 

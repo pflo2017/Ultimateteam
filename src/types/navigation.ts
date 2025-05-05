@@ -57,8 +57,6 @@ export type RootStackParamList = {
   };
   ParentRegistration: {
     phoneNumber: string;
-    teamCode: string;
-    teamId: string;
   };
   ParentVerification: {
     phoneNumber: string;
@@ -79,4 +77,6 @@ export type RootStackParamList = {
 export type ParentStackParamList = {
   ParentTabs: undefined;
   Settings: undefined;
+  EditChild: { childId: string };
+  AddChild: undefined;
 }; 

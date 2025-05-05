@@ -96,55 +96,60 @@ export const ManageCoachesScreen: React.FC<ManageCoachesScreenProps> = ({
   }
 
   return (
-    <View style={styles.content}>
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.sectionTitle}>Coaches</Text>
-          <Text style={styles.totalCount}>Total: {coaches.length} coaches</Text>
+    <View style={styles.container}>
+      <View style={styles.content}>
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.sectionTitle}>Coaches</Text>
+            <Text style={styles.totalCount}>Total: {coaches.length} coaches</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={() => navigation.navigate('AddCoach')}
+          >
+            <MaterialCommunityIcons name="plus" size={16} color={COLORS.white} />
+            <Text style={styles.addButtonText}>Add Coach</Text>
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => navigation.navigate('AddCoach')}
+
+        <View style={styles.searchContainer}>
+          <MaterialCommunityIcons name="magnify" size={20} color={COLORS.grey[400]} style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search coach"
+            placeholderTextColor={COLORS.grey[400]}
+          />
+        </View>
+
+        <ScrollView
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+          contentContainerStyle={styles.scrollContent}
         >
-          <MaterialCommunityIcons name="plus" size={16} color={COLORS.white} />
-          <Text style={styles.addButtonText}>Add Coach</Text>
-        </TouchableOpacity>
+          {!coaches?.length ? (
+            <Text style={styles.emptyText}>No coaches found</Text>
+          ) : (
+            coaches.map(renderCoachCard)
+          )}
+        </ScrollView>
+
+        <Snackbar
+          visible={showSnackbar}
+          onDismiss={() => setShowSnackbar(false)}
+          duration={3000}
+        >
+          {snackbarMessage}
+        </Snackbar>
       </View>
-
-      <View style={styles.searchContainer}>
-        <MaterialCommunityIcons name="magnify" size={20} color={COLORS.grey[400]} style={styles.searchIcon} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search coach"
-          placeholderTextColor={COLORS.grey[400]}
-        />
-      </View>
-
-      <ScrollView
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-        contentContainerStyle={styles.scrollContent}
-      >
-        {!coaches?.length ? (
-          <Text style={styles.emptyText}>No coaches found</Text>
-        ) : (
-          coaches.map(renderCoachCard)
-        )}
-      </ScrollView>
-
-      <Snackbar
-        visible={showSnackbar}
-        onDismiss={() => setShowSnackbar(false)}
-        duration={3000}
-      >
-        {snackbarMessage}
-      </Snackbar>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
   content: {
     flex: 1,
     padding: SPACING.lg,

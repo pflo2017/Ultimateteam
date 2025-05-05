@@ -75,7 +75,7 @@ const TeamCard: React.FC<TeamCardProps> = ({ team, onPress, onCopyAccessCode, na
           <View style={styles.infoRow}>
             {team.coach ? (
               <View style={styles.coachContainer}>
-                <MaterialCommunityIcons name="account-tie" size={20} color="#0CC1EC" />
+                <MaterialCommunityIcons name="account-group" size={20} color={COLORS.primary} />
                 <Text style={styles.infoText}>Coach: {team.coach.name}</Text>
               </View>
             ) : (
@@ -127,55 +127,60 @@ export const ManageTeamsScreen: React.FC<ManageTeamsScreenProps> = ({
   }
 
   return (
-    <View style={styles.content}>
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.sectionTitle}>Teams</Text>
-          <Text style={styles.totalCount}>Total: {teams.length} teams</Text>
+    <View style={styles.container}>
+      <View style={styles.content}>
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.sectionTitle}>Teams</Text>
+            <Text style={styles.totalCount}>Total: {teams.length} teams</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={() => navigation.navigate('AddTeam')}
+          >
+            <MaterialCommunityIcons name="plus" size={16} color={COLORS.white} />
+            <Text style={styles.addButtonText}>Add Team</Text>
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => navigation.navigate('AddTeam')}
+
+        <View style={styles.searchContainer}>
+          <MaterialCommunityIcons name="magnify" size={20} color={COLORS.grey[400]} style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search team"
+            placeholderTextColor={COLORS.grey[400]}
+          />
+        </View>
+
+        <ScrollView
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+          contentContainerStyle={styles.scrollContent}
         >
-          <MaterialCommunityIcons name="plus" size={16} color={COLORS.white} />
-          <Text style={styles.addButtonText}>Add Team</Text>
-        </TouchableOpacity>
+          {!teams?.length ? (
+            <Text style={styles.emptyText}>No teams found</Text>
+          ) : (
+            teams.map((team) => (
+              <TeamCard
+                key={team.id}
+                team={team}
+                onPress={() => {}}
+                onCopyAccessCode={onCopyAccessCode}
+                navigation={navigation}
+              />
+            ))
+          )}
+        </ScrollView>
       </View>
-
-      <View style={styles.searchContainer}>
-        <MaterialCommunityIcons name="magnify" size={20} color={COLORS.grey[400]} style={styles.searchIcon} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search team"
-          placeholderTextColor={COLORS.grey[400]}
-        />
-      </View>
-
-      <ScrollView
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-        contentContainerStyle={styles.scrollContent}
-      >
-        {!teams?.length ? (
-          <Text style={styles.emptyText}>No teams found</Text>
-        ) : (
-          teams.map((team) => (
-            <TeamCard
-              key={team.id}
-              team={team}
-              onPress={() => {}}
-              onCopyAccessCode={onCopyAccessCode}
-              navigation={navigation}
-            />
-          ))
-        )}
-      </ScrollView>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
   content: {
     flex: 1,
     padding: SPACING.lg,

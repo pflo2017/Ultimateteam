@@ -125,8 +125,8 @@ export const AddTeamScreen = () => {
             outlineStyle={styles.inputOutline}
             contentStyle={styles.inputContent}
             theme={{ colors: { primary: COLORS.primary }}}
-            placeholder="e.g., Grupa 2016-2017"
-            left={<TextInput.Icon icon="account-multiple-plus" color={COLORS.primary} />}
+            left={<TextInput.Icon icon="account-group" color={COLORS.primary} />}
+            disabled={isLoading}
           />
 
           <Pressable 

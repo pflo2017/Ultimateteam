@@ -25,7 +25,7 @@ export type CoachStackParamList = {
 
 export type CoachTabParamList = {
   CoachDashboard: undefined;
-  Manage: undefined;
+  Manage: { activeTab?: 'teams' | 'players' };
   Schedule: undefined;
   Payments: undefined;
   Chat: undefined;
@@ -207,7 +207,7 @@ const TabNavigator = () => {
         options={{
           tabBarLabel: 'Manage',
           tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="account-group-outline" size={size} color={color} />
+            <MaterialCommunityIcons name="account-multiple-plus-outline" size={size} color={color} />
           ),
         }}
       />
