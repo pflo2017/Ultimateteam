@@ -49,9 +49,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     height: 44,
     backgroundColor: COLORS.white,
-    marginTop: Platform.OS === 'ios' ? 47 : 0,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    // marginTop: Platform.OS === 'ios' ? 47 : StatusBar.currentHeight || 0,
   },
   clubName: {
     fontSize: 22,
@@ -189,7 +187,7 @@ const AdminHeader = () => {
   };
 
   return (
-    <View style={styles.headerWrapper}>
+    <SafeAreaView edges={['top']} style={styles.headerWrapper}>
       <View style={styles.headerContainer}>
         <Text style={styles.clubName}>{clubName}</Text>
         <Menu
@@ -243,7 +241,7 @@ const AdminHeader = () => {
           />
         </Menu>
       </View>
-    </View>
+    </SafeAreaView>
   );
 };
 
@@ -259,7 +257,7 @@ const TabNavigator = () => {
           borderTopWidth: 1,
           borderTopColor: COLORS.grey[200],
         },
-        headerShown: false
+        headerShown: false,
       }}
     >
       <Tab.Screen
