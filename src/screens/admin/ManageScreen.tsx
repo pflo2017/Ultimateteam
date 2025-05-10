@@ -294,35 +294,25 @@ export const AdminManageScreen = () => {
         let teamId = player.team_id;
         let teamName = null;
         
-        // Check if player has team_id directly
-        if (player.team_id && teamsMap.has(player.team_id)) {
-          teamName = teamsMap.get(player.team_id).name;
-        }
-        
+        // Always prefer team from parent_children if available
         if (player.parent_id && childrenMap.has(player.parent_id)) {
           const childrenForParent = childrenMap.get(player.parent_id);
           // Find child with matching name
           const matchingChild = childrenForParent?.find(
             child => child.full_name.toLowerCase() === player.name.toLowerCase()
           );
-          
           if (matchingChild) {
             medicalVisaStatus = matchingChild.medical_visa_status;
-            
-            // If no team from player record, try to get it from parent_children
-            if (!teamName && matchingChild.team_id && teamsMap.has(matchingChild.team_id)) {
+            if (matchingChild.team_id && teamsMap.has(matchingChild.team_id)) {
               teamId = matchingChild.team_id;
               teamName = teamsMap.get(matchingChild.team_id).name;
             }
           }
         }
-
-        console.log(`Player ${player.name} team details:`, {
-          player_team_id: player.team_id,
-          teams_field: player.teams,
-          final_team_name: teamName
-        });
-
+        // Fallback to player's own team if no parent_children match
+        if (!teamName && player.team_id && teamsMap.has(player.team_id)) {
+          teamName = teamsMap.get(player.team_id).name;
+        }
         return {
           id: player.id,
           name: player.name,

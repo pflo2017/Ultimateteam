@@ -112,7 +112,7 @@ const ParentHeader = () => {
   };
 
   return (
-    <View style={styles.headerWrapper}>
+    <SafeAreaView edges={['top']} style={styles.headerWrapper}>
       <View style={styles.headerContainer}>
         <Text style={styles.parentName}>{parentName}</Text>
         <Menu
@@ -154,7 +154,7 @@ const ParentHeader = () => {
           />
         </Menu>
       </View>
-    </View>
+    </SafeAreaView>
   );
 };
 

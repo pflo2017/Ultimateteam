@@ -155,11 +155,9 @@ export const ParentRegistrationScreen = () => {
                 setFullName(text);
                 if (error) setError('');
               }}
-              mode="outlined"
+              mode="flat"
               style={styles.input}
-              outlineStyle={styles.inputOutline}
-              contentStyle={styles.inputContent}
-              theme={{ colors: { primary: COLORS.primary }}}
+              theme={{ colors: { primary: '#0CC1EC' }}}
               error={!!error}
               disabled={isLoading}
             />
@@ -171,28 +169,24 @@ export const ParentRegistrationScreen = () => {
                 setEmail(text);
                 if (error) setError('');
               }}
-              mode="outlined"
+              mode="flat"
               style={styles.input}
-              outlineStyle={styles.inputOutline}
-              contentStyle={styles.inputContent}
-              theme={{ colors: { primary: COLORS.primary }}}
+              theme={{ colors: { primary: '#0CC1EC' }}}
               keyboardType="email-address"
               autoCapitalize="none"
               error={!!error}
               disabled={isLoading}
-              left={<TextInput.Icon icon="email" color={COLORS.grey[400]} />}
+              left={<TextInput.Icon icon="email" color={COLORS.grey[400]} style={{ marginRight: 30 }} />}
             />
 
             <TextInput
               label="Phone Number"
               value={phoneNumber}
-              mode="outlined"
+              mode="flat"
               style={styles.input}
-              outlineStyle={styles.inputOutline}
-              contentStyle={styles.inputContent}
-              theme={{ colors: { primary: COLORS.primary }}}
+              theme={{ colors: { primary: '#0CC1EC' }}}
               disabled={true}
-              left={<TextInput.Icon icon="phone" color={COLORS.grey[400]} />}
+              left={<TextInput.Icon icon="phone" color={COLORS.grey[400]} style={{ marginRight: 30 }} />}
             />
 
             <TextInput
@@ -202,11 +196,9 @@ export const ParentRegistrationScreen = () => {
                 setPassword(text);
                 if (error) setError('');
               }}
-              mode="outlined"
+              mode="flat"
               style={styles.input}
-              outlineStyle={styles.inputOutline}
-              contentStyle={styles.inputContent}
-              theme={{ colors: { primary: COLORS.primary }}}
+              theme={{ colors: { primary: '#0CC1EC' }}}
               secureTextEntry={!showPassword}
               error={!!error}
               disabled={isLoading}
@@ -226,11 +218,9 @@ export const ParentRegistrationScreen = () => {
                 setConfirmPassword(text);
                 if (error) setError('');
               }}
-              mode="outlined"
+              mode="flat"
               style={styles.input}
-              outlineStyle={styles.inputOutline}
-              contentStyle={styles.inputContent}
-              theme={{ colors: { primary: COLORS.primary }}}
+              theme={{ colors: { primary: '#0CC1EC' }}}
               secureTextEntry={!showConfirmPassword}
               error={!!error}
               disabled={isLoading}

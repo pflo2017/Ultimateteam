@@ -229,12 +229,10 @@ export const EditTeamScreen = () => {
               label="Team Name"
               value={teamName}
               onChangeText={setTeamName}
-              mode="outlined"
+              mode="flat"
               style={styles.input}
-              outlineStyle={styles.inputOutline}
-              contentStyle={styles.inputContent}
-              theme={{ colors: { primary: COLORS.primary }}}
-              left={<TextInput.Icon icon="account-multiple" color={COLORS.primary} />}
+              theme={{ colors: { primary: '#0CC1EC' }}}
+              left={<TextInput.Icon icon="account-multiple" color={COLORS.primary} style={{ marginRight: 30 }} />}
             />
 
             <Pressable

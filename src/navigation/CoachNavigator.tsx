@@ -67,9 +67,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     height: 44,
     backgroundColor: COLORS.white,
-    marginTop: Platform.OS === 'ios' ? 47 : 0,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    // marginTop: Platform.OS === 'ios' ? 47 : 0,
   },
   coachName: {
     fontSize: 22,
@@ -128,7 +126,7 @@ const CoachHeader = () => {
   };
 
   return (
-    <View style={styles.headerWrapper}>
+    <SafeAreaView edges={['top']} style={styles.headerWrapper}>
       <View style={styles.headerContainer}>
         <Text style={styles.coachName}>{coachName}</Text>
         <Menu
@@ -170,7 +168,7 @@ const CoachHeader = () => {
           />
         </Menu>
       </View>
-    </View>
+    </SafeAreaView>
   );
 };
 
@@ -188,7 +186,7 @@ const TabNavigator = () => {
           paddingBottom: 8,
           paddingTop: 8,
         },
-        headerShown: false
+        headerShown: false,
       }}
     >
       <Tab.Screen

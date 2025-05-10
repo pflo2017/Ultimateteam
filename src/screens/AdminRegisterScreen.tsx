@@ -292,24 +292,20 @@ export const AdminRegisterScreen = () => {
               label="Club Name"
               value={formData.clubName}
               onChangeText={(text) => setFormData(prev => ({ ...prev, clubName: text }))}
-              mode="outlined"
+              mode="flat"
               style={styles.input}
-              outlineStyle={styles.inputOutline}
-              contentStyle={styles.inputContent}
-              theme={{ colors: { primary: COLORS.primary }}}
-              left={<TextInput.Icon icon="domain" color={COLORS.primary} />}
+              theme={{ colors: { primary: '#0CC1EC' }}}
+              left={<TextInput.Icon icon="domain" color={COLORS.primary} style={{ marginRight: 30 }} />}
             />
 
             <TextInput
               label="Club Location (City)"
               value={formData.clubLocation}
               onChangeText={(text) => setFormData(prev => ({ ...prev, clubLocation: text }))}
-              mode="outlined"
+              mode="flat"
               style={styles.input}
-              outlineStyle={styles.inputOutline}
-              contentStyle={styles.inputContent}
-              theme={{ colors: { primary: COLORS.primary }}}
-              left={<TextInput.Icon icon="map-marker" color={COLORS.primary} />}
+              theme={{ colors: { primary: '#0CC1EC' }}}
+              left={<TextInput.Icon icon="map-marker" color={COLORS.primary} style={{ marginRight: 30 }} />}
             />
 
             <Pressable 
@@ -330,39 +326,33 @@ export const AdminRegisterScreen = () => {
               label="Administrator Name"
               value={formData.adminName}
               onChangeText={(text) => setFormData(prev => ({ ...prev, adminName: text }))}
-              mode="outlined"
+              mode="flat"
               style={styles.input}
-              outlineStyle={styles.inputOutline}
-              contentStyle={styles.inputContent}
-              theme={{ colors: { primary: COLORS.primary }}}
-              left={<TextInput.Icon icon="account" color={COLORS.primary} />}
+              theme={{ colors: { primary: '#0CC1EC' }}}
+              left={<TextInput.Icon icon="account" color={COLORS.primary} style={{ marginRight: 30 }} />}
             />
 
             <TextInput
               label="Email"
               value={formData.email}
               onChangeText={(text) => setFormData(prev => ({ ...prev, email: text }))}
-              mode="outlined"
+              mode="flat"
               keyboardType="email-address"
               autoCapitalize="none"
               style={styles.input}
-              outlineStyle={styles.inputOutline}
-              contentStyle={styles.inputContent}
-              theme={{ colors: { primary: COLORS.primary }}}
-              left={<TextInput.Icon icon="email" color={COLORS.primary} />}
+              theme={{ colors: { primary: '#0CC1EC' }}}
+              left={<TextInput.Icon icon="email" color={COLORS.primary} style={{ marginRight: 30 }} />}
             />
 
             <TextInput
               label="Password"
               value={formData.password}
               onChangeText={(text) => setFormData(prev => ({ ...prev, password: text }))}
-              mode="outlined"
+              mode="flat"
               secureTextEntry={!showPassword}
               style={styles.input}
-              outlineStyle={styles.inputOutline}
-              contentStyle={styles.inputContent}
-              theme={{ colors: { primary: COLORS.primary }}}
-              left={<TextInput.Icon icon="lock" color={COLORS.primary} />}
+              theme={{ colors: { primary: '#0CC1EC' }}}
+              left={<TextInput.Icon icon="lock" color={COLORS.primary} style={{ marginRight: 30 }} />}
               right={
                 <TextInput.Icon
                   icon={showPassword ? "eye-off" : "eye"}
@@ -376,13 +366,11 @@ export const AdminRegisterScreen = () => {
               label="Confirm Password"
               value={formData.confirmPassword}
               onChangeText={(text) => setFormData(prev => ({ ...prev, confirmPassword: text }))}
-              mode="outlined"
+              mode="flat"
               secureTextEntry={!showConfirmPassword}
               style={styles.input}
-              outlineStyle={styles.inputOutline}
-              contentStyle={styles.inputContent}
-              theme={{ colors: { primary: COLORS.primary }}}
-              left={<TextInput.Icon icon="lock-check" color={COLORS.primary} />}
+              theme={{ colors: { primary: '#0CC1EC' }}}
+              left={<TextInput.Icon icon="lock-check" color={COLORS.primary} style={{ marginRight: 30 }} />}
               right={
                 <TextInput.Icon
                   icon={showConfirmPassword ? "eye-off" : "eye"}

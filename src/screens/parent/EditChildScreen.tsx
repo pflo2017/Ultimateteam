@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Alert, Pressable, Modal } from 'react-native';
-import { Text, TextInput, RadioButton } from 'react-native-paper';
+import { Text, TextInput, RadioButton, Button, Portal, Provider, Dialog } from 'react-native-paper';
 import { COLORS, SPACING, FONT_SIZES } from '../../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -9,6 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { ParentStackParamList } from '../../types/navigation';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { CalendarPickerModal } from '../../components/CalendarPickerModal';
 
 type EditChildScreenNavigationProp = NativeStackNavigationProp<ParentStackParamList>;
 type EditChildScreenRouteProp = RouteProp<ParentStackParamList, 'EditChild'>;
@@ -16,11 +17,9 @@ type EditChildScreenRouteProp = RouteProp<ParentStackParamList, 'EditChild'>;
 export const EditChildScreen = () => {
   const [name, setName] = useState('');
   const [birthDate, setBirthDate] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
   const [teamCode, setTeamCode] = useState('');
   const [medicalVisaStatus, setMedicalVisaStatus] = useState<'valid' | 'pending' | 'expired'>('pending');
   const [medicalVisaIssueDate, setMedicalVisaIssueDate] = useState<Date | null>(null);
-  const [showMedicalVisaDatePicker, setShowMedicalVisaDatePicker] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [teamName, setTeamName] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -28,6 +27,12 @@ export const EditChildScreen = () => {
   const [showMedicalVisaDatePickerModal, setShowMedicalVisaDatePickerModal] = useState(false);
   const [tempDate, setTempDate] = useState<Date>(birthDate);
   const [tempMedicalVisaDate, setTempMedicalVisaDate] = useState<Date | null>(medicalVisaIssueDate);
+  const [showChangeTeam, setShowChangeTeam] = useState(false);
+  const [newTeamCode, setNewTeamCode] = useState('');
+  const [isChangingTeam, setIsChangingTeam] = useState(false);
+  const [changeTeamError, setChangeTeamError] = useState<string | null>(null);
+  const [newTeamName, setNewTeamName] = useState<string | null>(null);
+  const [isValidatingTeam, setIsValidatingTeam] = useState(false);
 
   const navigation = useNavigation<EditChildScreenNavigationProp>();
   const route = useRoute<EditChildScreenRouteProp>();
@@ -36,6 +41,40 @@ export const EditChildScreen = () => {
   useEffect(() => {
     loadChildData();
   }, []);
+
+  useEffect(() => {
+    if (!showChangeTeam) return;
+    if (newTeamCode.trim().length !== 6) {
+      setNewTeamName(null);
+      setChangeTeamError(null);
+      return;
+    }
+    setIsValidatingTeam(true);
+    setChangeTeamError(null);
+    setNewTeamName(null);
+    const validate = setTimeout(async () => {
+      try {
+        const { data: team, error } = await supabase
+          .from('teams')
+          .select('id, name')
+          .eq('access_code', newTeamCode.trim())
+          .single();
+        if (error || !team) {
+          setChangeTeamError('Invalid team access code.');
+          setNewTeamName(null);
+        } else {
+          setChangeTeamError(null);
+          setNewTeamName(team.name);
+        }
+      } catch (err) {
+        setChangeTeamError('Error validating team code.');
+        setNewTeamName(null);
+      } finally {
+        setIsValidatingTeam(false);
+      }
+    }, 400); // debounce
+    return () => clearTimeout(validate);
+  }, [newTeamCode, showChangeTeam]);
 
   const openDatePicker = () => {
     setTempDate(birthDate);
@@ -85,10 +124,19 @@ export const EditChildScreen = () => {
 
       if (error) throw error;
 
+      console.log('Fetched child data:', data);
+
       setName(data.full_name);
       setBirthDate(new Date(data.birth_date));
-      setTeamCode(data.teams[0]?.access_code || '');
-      setTeamName(data.teams[0]?.name || '');
+      if (Array.isArray(data.teams)) {
+        const team = (data.teams && data.teams[0]) ? (data.teams[0] as { access_code?: string; name?: string }) : undefined;
+        setTeamCode(team?.access_code || '');
+        setTeamName(team?.name || '');
+      } else {
+        const team = data.teams as { access_code?: string; name?: string };
+        setTeamCode(team?.access_code || '');
+        setTeamName(team?.name || '');
+      }
       setMedicalVisaStatus(data.medical_visa_status);
       if (data.medical_visa_issue_date) {
         setMedicalVisaIssueDate(new Date(data.medical_visa_issue_date));
@@ -96,39 +144,6 @@ export const EditChildScreen = () => {
     } catch (error) {
       console.error('Error loading child data:', error);
       Alert.alert('Error', 'Failed to load child data');
-    }
-  };
-
-  const validateTeamCode = async (code: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('teams')
-        .select('id, name')
-        .eq('access_code', code)
-        .single();
-
-      if (error) throw error;
-      if (data) {
-        setTeamName(data.name);
-        return data.id;
-      }
-      return null;
-    } catch (error) {
-      console.error('Error validating team code:', error);
-      return null;
-    }
-  };
-
-  const handleTeamCodeChange = async (code: string) => {
-    setTeamCode(code);
-    if (code.length === 6) {
-      const teamId = await validateTeamCode(code);
-      if (!teamId) {
-        Alert.alert('Error', 'Invalid team code');
-        setTeamName(null);
-      }
-    } else {
-      setTeamName(null);
     }
   };
 
@@ -225,191 +240,465 @@ export const EditChildScreen = () => {
     );
   };
 
+  // Handler to change the child's team
+  const handleConfirmChangeTeam = async () => {
+    setChangeTeamError(null);
+    setIsChangingTeam(true);
+    try {
+      const { data: team, error: teamError } = await supabase
+        .from('teams')
+        .select('id, name, access_code')
+        .eq('access_code', newTeamCode.trim())
+        .single();
+      if (teamError || !team) {
+        setChangeTeamError('Invalid team access code.');
+        setIsChangingTeam(false);
+        return;
+      }
+      // Update the child's team_id in parent_children
+      const { error: updateError } = await supabase
+        .from('parent_children')
+        .update({ team_id: team.id })
+        .eq('id', childId);
+      if (updateError) {
+        setChangeTeamError('Failed to change team. Please try again.');
+        setIsChangingTeam(false);
+        return;
+      }
+      // Also update the team_id in the players table for this child
+      try {
+        const parentData = await AsyncStorage.getItem('parent_data');
+        let parentId = null;
+        if (parentData) {
+          const parent = JSON.parse(parentData);
+          parentId = parent.id;
+        }
+        if (parentId) {
+          await supabase
+            .from('players')
+            .update({ team_id: team.id })
+            .eq('name', name)
+            .eq('parent_id', parentId);
+        } else {
+          // fallback: update by name only (less safe)
+          await supabase
+            .from('players')
+            .update({ team_id: team.id })
+            .eq('name', name);
+        }
+      } catch (err) {
+        // Log but don't block the main flow
+        console.error('Error updating team_id in players table:', err);
+      }
+      // Success: reload child data and clear input
+      setNewTeamCode('');
+      setShowChangeTeam(false);
+      setNewTeamName(null);
+      await loadChildData();
+      Alert.alert('Success', `Child has been assigned to team: ${team.name}`);
+    } catch (err) {
+      setChangeTeamError('An unexpected error occurred.');
+    } finally {
+      setIsChangingTeam(false);
+    }
+  };
+
+  // Handler to cancel team change
+  const handleCancelChangeTeam = () => {
+    setShowChangeTeam(false);
+    setNewTeamCode('');
+    setChangeTeamError(null);
+    setNewTeamName(null);
+  };
+
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
-      <ScrollView 
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollViewContent}
-        showsVerticalScrollIndicator={false}
+    <Provider>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.container}
       >
-        <View style={styles.header}>
-          <Text style={styles.title}>Edit Child</Text>
-          <Text style={styles.subtitle}>Update your child's information</Text>
-        </View>
+        <ScrollView 
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollViewContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.header}>
+            <Text style={styles.title}>Edit Child</Text>
+            <Text style={styles.subtitle}>Update your child's information</Text>
+          </View>
 
-        <View style={styles.form}>
-          <TextInput
-            label="Full Name"
-            value={name}
-            onChangeText={setName}
-            mode="outlined"
-            style={styles.input}
-            outlineStyle={styles.inputOutline}
-            contentStyle={styles.inputContent}
-            theme={{ colors: { primary: COLORS.primary }}}
-            left={<TextInput.Icon icon="account-circle" color={COLORS.primary} />}
-          />
-
-          <Text style={styles.inputLabel}>Birthdate</Text>
-          <Pressable
-            onPress={openDatePicker}
-            style={styles.dateInput}
-          >
-            <MaterialCommunityIcons 
-              name="calendar" 
-              size={24} 
-              color={COLORS.primary}
+          <View style={styles.form}>
+            <TextInput
+              label="Full Name"
+              value={name}
+              onChangeText={setName}
+              mode="flat"
+              style={styles.input}
+              theme={{ colors: { primary: '#0CC1EC' }}}
+              left={<TextInput.Icon icon="account-circle" color={COLORS.primary} style={{ marginRight: 30 }} />}
             />
-            <Text style={styles.dateText}>
-              {birthDate.toLocaleDateString()}
-            </Text>
-          </Pressable>
 
-          <TextInput
-            label="Team Access Code"
-            value={teamCode}
-            onChangeText={handleTeamCodeChange}
-            mode="outlined"
-            style={styles.input}
-            outlineStyle={styles.inputOutline}
-            contentStyle={styles.inputContent}
-            theme={{ colors: { primary: COLORS.primary }}}
-            left={<TextInput.Icon icon="account-group" color={COLORS.primary} />}
-            maxLength={6}
-            editable={false}
-          />
+            <Text style={styles.inputLabel}>Birthdate</Text>
+            <Pressable
+              onPress={openDatePicker}
+              style={styles.dateInput}
+            >
+              <MaterialCommunityIcons 
+                name="calendar" 
+                size={24} 
+                color={COLORS.primary}
+              />
+              <Text style={styles.dateText}>
+                {birthDate.toLocaleDateString()}
+              </Text>
+            </Pressable>
 
-          {teamName && (
-            <Text style={styles.teamName}>
-              Team: {teamName}
-            </Text>
-          )}
+            <TextInput
+              label="Team Access Code"
+              value={teamCode}
+              onChangeText={setTeamCode}
+              mode="flat"
+              style={styles.input}
+              theme={{ colors: { primary: '#0CC1EC' }}}
+              left={<TextInput.Icon icon="account-group" color={COLORS.primary} style={{ marginRight: 30 }} />}
+              maxLength={6}
+              editable={false}
+            />
 
-          <View style={styles.medicalVisaSection}>
-            <Text style={styles.sectionTitle}>Medical Visa Status</Text>
-            <View style={styles.statusRow}>
-              {['valid', 'pending', 'expired'].map(status => (
-                <Pressable
-                  key={status}
-                  onPress={() => {
-                    setMedicalVisaStatus(status as 'valid' | 'pending' | 'expired');
-                    if (status !== 'valid') setMedicalVisaIssueDate(null);
-                  }}
-                  style={[styles.statusOption, medicalVisaStatus === status && styles.statusOptionSelected]}
+            {teamName && (
+              <Text style={styles.teamName}>
+                Team: {teamName}
+              </Text>
+            )}
+
+            {/* Change Team Section - moved above Medical Visa Status and styled smaller */}
+            <View style={{ marginTop: 8, marginBottom: 8 }}>
+              {!showChangeTeam && (
+                <Button
+                  mode="text"
+                  onPress={() => setShowChangeTeam(true)}
+                  style={{ alignSelf: 'flex-start', paddingHorizontal: 0, minWidth: 0 }}
+                  labelStyle={{ fontWeight: '600', fontSize: FONT_SIZES.sm, color: COLORS.primary }}
+                  compact
                 >
-                  <MaterialCommunityIcons
-                    name={medicalVisaStatus === status ? 'check-circle' : 'checkbox-blank-circle-outline'}
-                    size={20}
-                    color={status === 'valid' ? COLORS.success : status === 'pending' ? COLORS.warning : COLORS.error}
+                  Change Team
+                </Button>
+              )}
+              {showChangeTeam && (
+                <View style={{ marginTop: 4 }}>
+                  <Text style={styles.inputLabel}>New Team Access Code</Text>
+                  <TextInput
+                    label="New Team Access Code"
+                    value={newTeamCode}
+                    onChangeText={setNewTeamCode}
+                    mode="flat"
+                    style={styles.input}
+                    theme={{ colors: { primary: '#0CC1EC' }}}
+                    left={<TextInput.Icon icon="account-group" color={COLORS.primary} style={{ marginRight: 30 }} />}
+                    maxLength={6}
+                    editable={!isChangingTeam}
                   />
-                  <Text style={[styles.statusLabel, { color: status === 'valid' ? COLORS.success : status === 'pending' ? COLORS.warning : COLORS.error }]}> 
-                    {status.charAt(0).toUpperCase() + status.slice(1)}
+                  {isValidatingTeam && <Text style={{ color: COLORS.primary, marginTop: 4 }}>Validating...</Text>}
+                  {newTeamName && !changeTeamError && (
+                    <Text style={{ color: COLORS.primary, marginTop: 4 }}>Team: {newTeamName}</Text>
+                  )}
+                  {changeTeamError && <Text style={{ color: COLORS.error, marginTop: 4 }}>{changeTeamError}</Text>}
+                  <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
+                    <Button
+                      mode="outlined"
+                      onPress={handleConfirmChangeTeam}
+                      loading={isChangingTeam}
+                      disabled={isChangingTeam || !newTeamName || !!changeTeamError}
+                      style={[
+                        { flex: 1, borderRadius: 100, borderWidth: 2 },
+                        (!isChangingTeam && newTeamName && !changeTeamError)
+                          ? { borderColor: '#0CC1EC', backgroundColor: 'white' }
+                          : { borderColor: '#E0E0E0', backgroundColor: '#E0E0E0' }
+                      ]}
+                      contentStyle={{ height: 40 }}
+                      labelStyle={[
+                        { fontWeight: '700', fontSize: FONT_SIZES.sm },
+                        (!isChangingTeam && newTeamName && !changeTeamError)
+                          ? { color: '#0CC1EC' }
+                          : { color: '#A0A0A0' }
+                      ]}
+                      compact
+                    >
+                      Confirm
+                    </Button>
+                    <Button
+                      mode="outlined"
+                      onPress={handleCancelChangeTeam}
+                      disabled={isChangingTeam}
+                      style={{ flex: 1, borderRadius: 100, borderWidth: 2, borderColor: '#E0E0E0', backgroundColor: 'white' }}
+                      contentStyle={{ height: 40 }}
+                      labelStyle={{ fontWeight: '700', fontSize: FONT_SIZES.sm, color: '#222' }}
+                      compact
+                    >
+                      Cancel
+                    </Button>
+                  </View>
+                </View>
+              )}
+            </View>
+
+            <View style={styles.medicalVisaSection}>
+              <Text style={styles.sectionTitle}>Medical Visa Status</Text>
+              <View style={styles.statusRow}>
+                {['valid', 'pending', 'expired'].map(status => (
+                  <Pressable
+                    key={status}
+                    onPress={() => {
+                      setMedicalVisaStatus(status as 'valid' | 'pending' | 'expired');
+                      if (status !== 'valid') setMedicalVisaIssueDate(null);
+                    }}
+                    style={[styles.statusOption, medicalVisaStatus === status && styles.statusOptionSelected]}
+                  >
+                    <MaterialCommunityIcons
+                      name={medicalVisaStatus === status ? 'check-circle' : 'checkbox-blank-circle-outline'}
+                      size={20}
+                      color={status === 'valid' ? COLORS.success : status === 'pending' ? COLORS.warning : COLORS.error}
+                    />
+                    <Text style={[styles.statusLabel, { color: status === 'valid' ? COLORS.success : status === 'pending' ? COLORS.warning : COLORS.error }]}> 
+                      {status.charAt(0).toUpperCase() + status.slice(1)}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              {medicalVisaStatus === 'valid' && (
+                <Pressable
+                  onPress={openMedicalVisaDatePicker}
+                  style={styles.dateInput}
+                >
+                  <MaterialCommunityIcons 
+                    name="calendar-check" 
+                    size={24} 
+                    color={COLORS.success}
+                  />
+                  <Text style={styles.dateText}>
+                    {medicalVisaIssueDate 
+                      ? medicalVisaIssueDate.toLocaleDateString()
+                      : 'Select Issue Date'}
                   </Text>
                 </Pressable>
-              ))}
+              )}
             </View>
 
-            {medicalVisaStatus === 'valid' && (
-              <Pressable
-                onPress={openMedicalVisaDatePicker}
-                style={styles.dateInput}
-              >
-                <MaterialCommunityIcons 
-                  name="calendar-check" 
-                  size={24} 
-                  color={COLORS.success}
-                />
-                <Text style={styles.dateText}>
-                  {medicalVisaIssueDate 
-                    ? medicalVisaIssueDate.toLocaleDateString()
-                    : 'Select Issue Date'}
-                </Text>
-              </Pressable>
-            )}
+            <Pressable 
+              onPress={handleUpdateChild}
+              disabled={isLoading}
+              style={[styles.updateButton, isLoading && styles.buttonDisabled]}
+            >
+              <Text style={styles.buttonText}>
+                {isLoading ? 'Updating...' : 'Update Child'}
+              </Text>
+            </Pressable>
+
+            <Pressable 
+              onPress={handleDeleteChild}
+              disabled={isDeleting}
+              style={[styles.deleteButton, isDeleting && styles.buttonDisabled]}
+            >
+              <MaterialCommunityIcons 
+                name="delete" 
+                size={20} 
+                color={COLORS.error}
+              />
+              <Text style={[styles.buttonText, styles.deleteButtonText]}>
+                Delete Child
+              </Text>
+            </Pressable>
           </View>
+        </ScrollView>
 
-          <Pressable 
-            onPress={handleUpdateChild}
-            disabled={isLoading}
-            style={[styles.updateButton, isLoading && styles.buttonDisabled]}
-          >
-            <Text style={styles.buttonText}>
-              {isLoading ? 'Updating...' : 'Update Child'}
-            </Text>
-          </Pressable>
+        {/* Date Picker Modal using CalendarPickerModal */}
+        <CalendarPickerModal
+          visible={showDatePickerModal}
+          onCancel={cancelDatePicker}
+          onConfirm={confirmDatePicker}
+          value={tempDate}
+          onValueChange={setTempDate}
+        />
 
-          <Pressable 
-            onPress={handleDeleteChild}
-            disabled={isDeleting}
-            style={[styles.deleteButton, isDeleting && styles.buttonDisabled]}
-          >
-            <MaterialCommunityIcons 
-              name="delete" 
-              size={20} 
-              color={COLORS.error}
-            />
-            <Text style={[styles.buttonText, styles.deleteButtonText]}>
-              Delete Child
-            </Text>
-          </Pressable>
-        </View>
-      </ScrollView>
+        {/* Medical Visa Date Picker Modal using CalendarPickerModal */}
+        <CalendarPickerModal
+          visible={showMedicalVisaDatePickerModal}
+          onCancel={cancelMedicalVisaDatePicker}
+          onConfirm={confirmMedicalVisaDatePicker}
+          value={tempMedicalVisaDate || new Date()}
+          onValueChange={setTempMedicalVisaDate}
+        />
+      </KeyboardAvoidingView>
+    </Provider>
+  );
+};
 
-      {/* Date Picker Modal for Birth Date */}
-      <Modal
-        visible={showDatePickerModal}
-        transparent
-        animationType="slide"
-        onRequestClose={cancelDatePicker}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <DateTimePicker
-              value={tempDate}
-              mode="date"
-              display="spinner"
-              onChange={(event, selectedDate) => {
-                if (selectedDate) setTempDate(selectedDate);
-              }}
-              maximumDate={new Date()}
-            />
-            <View style={styles.modalButtons}>
-              <Pressable onPress={cancelDatePicker} style={styles.modalButton}><Text>Cancel</Text></Pressable>
-              <Pressable onPress={confirmDatePicker} style={styles.modalButton}><Text>OK</Text></Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
+// Custom Date Picker Component using react-native-paper Calendar
+interface DatePickerComponentProps {
+  date: Date;
+  onDateChange: (date: Date) => void;
+}
+
+const DatePickerComponent = ({ date, onDateChange }: DatePickerComponentProps) => {
+  // Month names for the header
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  
+  const [currentDate, setCurrentDate] = useState(date);
+  const [currentMonth, setCurrentMonth] = useState(date.getMonth());
+  const [currentYear, setCurrentYear] = useState(date.getFullYear());
+  const [showYearPicker, setShowYearPicker] = useState(false);
+  
+  // Update the parent component when date changes
+  const handleDateChange = (newDate: Date) => {
+    setCurrentDate(newDate);
+    onDateChange(newDate);
+  };
+  
+  // Navigate to previous month
+  const prevMonth = () => {
+    if (currentMonth === 0) {
+      setCurrentMonth(11);
+      setCurrentYear(currentYear - 1);
+    } else {
+      setCurrentMonth(currentMonth - 1);
+    }
+  };
+  
+  // Navigate to next month
+  const nextMonth = () => {
+    if (currentMonth === 11) {
+      setCurrentMonth(0);
+      setCurrentYear(currentYear + 1);
+    } else {
+      setCurrentMonth(currentMonth + 1);
+    }
+  };
+  
+  // Generate days for the current month
+  const generateDays = () => {
+    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+    const firstDayOfMonth = new Date(currentYear, currentMonth, 1).getDay();
+    
+    const days = [];
+    const weekDays = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+    
+    // Add weekday headers
+    days.push(
+      <View key="weekdays" style={styles.weekDaysRow}>
+        {weekDays.map((day, index) => (
+          <Text key={`weekday-${index}`} style={styles.weekDayText}>{day}</Text>
+        ))}
+      </View>
+    );
+    
+    // Add empty cells for days before the first day of the month
+    const firstWeek = [];
+    for (let i = 0; i < firstDayOfMonth; i++) {
+      firstWeek.push(
+        <View key={`empty-${i}`} style={styles.calendarDay} />
+      );
+    }
+    
+    // Add days of the month
+    for (let i = 1; i <= daysInMonth; i++) {
+      const dayDate = new Date(currentYear, currentMonth, i);
+      const isSelected = currentDate && 
+        dayDate.getDate() === currentDate.getDate() && 
+        dayDate.getMonth() === currentDate.getMonth() && 
+        dayDate.getFullYear() === currentDate.getFullYear();
       
-      {/* Date Picker Modal for Medical Visa Issue Date */}
-      <Modal
-        visible={showMedicalVisaDatePickerModal}
-        transparent
-        animationType="slide"
-        onRequestClose={cancelMedicalVisaDatePicker}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <DateTimePicker
-              value={tempMedicalVisaDate || new Date()}
-              mode="date"
-              display="spinner"
-              onChange={(event, selectedDate) => {
-                if (selectedDate) setTempMedicalVisaDate(selectedDate);
-              }}
-              maximumDate={new Date()}
-            />
-            <View style={styles.modalButtons}>
-              <Pressable onPress={cancelMedicalVisaDatePicker} style={styles.modalButton}><Text>Cancel</Text></Pressable>
-              <Pressable onPress={confirmMedicalVisaDatePicker} style={styles.modalButton}><Text>OK</Text></Pressable>
-            </View>
+      firstWeek.push(
+        <Pressable 
+          key={`day-${i}`} 
+          style={[
+            styles.calendarDay,
+            isSelected && styles.selectedDay
+          ]}
+          onPress={() => handleDateChange(dayDate)}
+        >
+          <Text style={[
+            styles.calendarDayText,
+            isSelected && styles.selectedDayText
+          ]}>
+            {i}
+          </Text>
+        </Pressable>
+      );
+      
+      // Start a new row after Saturday (index 6)
+      if ((firstDayOfMonth + i - 1) % 7 === 6 || i === daysInMonth) {
+        days.push(
+          <View key={`week-${Math.floor((firstDayOfMonth + i - 1) / 7)}`} style={styles.calendarRow}>
+            {firstWeek}
           </View>
+        );
+        firstWeek.length = 0;
+      }
+    }
+    
+    return days;
+  };
+  
+  return (
+    <View style={styles.datePickerContainer}>
+      {/* Month/Year Header */}
+      <View style={styles.calendarHeader}>
+        <Pressable onPress={prevMonth}>
+          <MaterialCommunityIcons name="chevron-left" size={24} color="#666" />
+        </Pressable>
+        
+        <Pressable 
+          style={styles.monthYearSelector}
+          onPress={() => setShowYearPicker(!showYearPicker)}
+        >
+          <Text style={styles.monthYearText}>
+            {monthNames[currentMonth]} {currentYear}
+          </Text>
+          <MaterialCommunityIcons name="menu-down" size={24} color="#666" />
+        </Pressable>
+        
+        <Pressable onPress={nextMonth}>
+          <MaterialCommunityIcons name="chevron-right" size={24} color="#666" />
+        </Pressable>
+      </View>
+      
+      {/* Year Picker if shown */}
+      {showYearPicker && (
+        <ScrollView style={styles.yearPickerContainer}>
+          {Array.from({ length: 100 }, (_, i) => new Date().getFullYear() - 80 + i).map((year) => (
+            <Pressable
+              key={`year-${year}`}
+              style={[
+                styles.yearOption,
+                currentYear === year && styles.selectedYear
+              ]}
+              onPress={() => {
+                setCurrentYear(year);
+                setShowYearPicker(false);
+              }}
+            >
+              <Text style={[
+                styles.yearText,
+                currentYear === year && styles.selectedYearText
+              ]}>
+                {year}
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      )}
+      
+      {/* Calendar Grid */}
+      {!showYearPicker && (
+        <View style={styles.calendarGrid}>
+          {generateDays()}
         </View>
-      </Modal>
-    </KeyboardAvoidingView>
+      )}
+    </View>
   );
 };
 
@@ -550,28 +839,90 @@ const styles = StyleSheet.create({
   deleteButtonText: {
     color: COLORS.error,
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    backgroundColor: COLORS.white,
+  datePickerDialog: {
     borderRadius: 16,
-    padding: SPACING.lg,
-    alignItems: 'center',
-    width: 320,
+    backgroundColor: COLORS.white,
+    maxHeight: '80%',
   },
-  modalButtons: {
+  calendarContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  datePickerContainer: {
+    width: '100%',
+    paddingVertical: SPACING.md,
+  },
+  calendarHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    width: '100%',
-    marginTop: SPACING.md,
-  },
-  modalButton: {
-    flex: 1,
     alignItems: 'center',
-    padding: SPACING.md,
+    paddingHorizontal: SPACING.sm,
+    marginBottom: SPACING.md,
+  },
+  monthYearSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  monthYearText: {
+    fontSize: FONT_SIZES.lg,
+    fontWeight: '500',
+    color: COLORS.text,
+  },
+  calendarGrid: {
+    width: '100%',
+  },
+  weekDaysRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: SPACING.sm,
+  },
+  weekDayText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '500',
+    color: COLORS.grey[600],
+    width: 36,
+    textAlign: 'center',
+  },
+  calendarRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: SPACING.xs,
+  },
+  calendarDay: {
+    width: 36,
+    height: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 18,
+  },
+  calendarDayText: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.text,
+  },
+  selectedDay: {
+    backgroundColor: '#7366bd', // Purple color to match your UI
+  },
+  selectedDayText: {
+    color: COLORS.white,
+    fontWeight: '500',
+  },
+  yearPickerContainer: {
+    maxHeight: 200,
+    marginVertical: SPACING.sm,
+  },
+  yearOption: {
+    paddingVertical: SPACING.xs,
+    alignItems: 'center',
+  },
+  yearText: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.text,
+  },
+  selectedYear: {
+    backgroundColor: '#f0f0f0',
+  },
+  selectedYearText: {
+    fontWeight: '600',
+    color: '#7366bd', // Purple color to match your UI
   },
 }); 

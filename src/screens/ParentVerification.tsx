@@ -154,7 +154,7 @@ export default function ParentVerificationScreen({ navigation, route }: Props) {
 
         <TextInput
           ref={inputRef}
-          mode="outlined"
+          mode="flat"
           value={verificationCode}
           onChangeText={text => {
             const numbers = text.replace(/[^0-9]/g, '');
@@ -166,12 +166,10 @@ export default function ParentVerificationScreen({ navigation, route }: Props) {
           keyboardType="number-pad"
           maxLength={SMS_CODE_LENGTH}
           style={styles.input}
-          outlineStyle={styles.inputOutline}
-          contentStyle={styles.inputContent}
           placeholder="000000"
           placeholderTextColor="#999"
           error={!!error}
-          theme={{ colors: { primary: COLORS.primary }}}
+          theme={{ colors: { primary: '#0CC1EC' }}}
           autoFocus
         />
 

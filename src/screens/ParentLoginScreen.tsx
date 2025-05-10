@@ -134,13 +134,11 @@ export const ParentLoginScreen = () => {
             label="Phone Number"
             value={phoneNumber}
             onChangeText={handlePhoneNumberChange}
-            mode="outlined"
+            mode="flat"
             keyboardType="phone-pad"
             style={styles.input}
-            outlineStyle={styles.inputOutline}
-            contentStyle={styles.inputContent}
-            theme={{ colors: { primary: COLORS.primary }}}
-            left={<TextInput.Icon icon="phone" color={COLORS.primary} />}
+            theme={{ colors: { primary: '#0CC1EC' }}}
+            left={<TextInput.Icon icon="phone" color={COLORS.primary} style={{ marginRight: 30 }} />}
             error={!!error}
             maxLength={15} // +40 XXX XXX XXX
             disabled={isLoading}

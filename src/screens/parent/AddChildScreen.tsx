@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Alert, Pressable, Modal } from 'react-native';
-import { Text, TextInput, RadioButton } from 'react-native-paper';
+import { Text, TextInput, RadioButton, Button } from 'react-native-paper';
 import { COLORS, SPACING, FONT_SIZES } from '../../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -9,17 +9,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { ParentStackParamList } from '../../types/navigation';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { CalendarPickerModal } from '../../components/CalendarPickerModal';
 
 type AddChildScreenNavigationProp = NativeStackNavigationProp<ParentStackParamList>;
 
 export const AddChildScreen = () => {
   const [name, setName] = useState('');
   const [birthDate, setBirthDate] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
   const [teamCode, setTeamCode] = useState('');
   const [medicalVisaStatus, setMedicalVisaStatus] = useState<'valid' | 'pending' | 'expired'>('pending');
   const [medicalVisaIssueDate, setMedicalVisaIssueDate] = useState<Date | null>(null);
-  const [showMedicalVisaDatePicker, setShowMedicalVisaDatePicker] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [teamName, setTeamName] = useState<string | null>(null);
   const [showDatePickerModal, setShowDatePickerModal] = useState(false);
@@ -30,7 +29,7 @@ export const AddChildScreen = () => {
   const navigation = useNavigation<AddChildScreenNavigationProp>();
 
   const openDatePicker = () => {
-    setTempDate(birthDate);
+    setTempDate(birthDate || new Date());
     setShowDatePickerModal(true);
   };
 
@@ -186,12 +185,10 @@ export const AddChildScreen = () => {
             label="Full Name"
             value={name}
             onChangeText={setName}
-            mode="outlined"
+            mode="flat"
             style={styles.input}
-            outlineStyle={styles.inputOutline}
-            contentStyle={styles.inputContent}
-            theme={{ colors: { primary: COLORS.primary }}}
-            left={<TextInput.Icon icon="account-child" color={COLORS.primary} />}
+            theme={{ colors: { primary: '#0CC1EC' }}}
+            left={<TextInput.Icon icon="account-child" color={COLORS.primary} style={{ marginRight: 30 }} />}
           />
 
           <Text style={styles.inputLabel}>Birthdate</Text>
@@ -213,12 +210,10 @@ export const AddChildScreen = () => {
             label="Team Access Code"
             value={teamCode}
             onChangeText={handleTeamCodeChange}
-            mode="outlined"
+            mode="flat"
             style={styles.input}
-            outlineStyle={styles.inputOutline}
-            contentStyle={styles.inputContent}
-            theme={{ colors: { primary: COLORS.primary }}}
-            left={<TextInput.Icon icon="account-group" color={COLORS.primary} />}
+            theme={{ colors: { primary: '#0CC1EC' }}}
+            left={<TextInput.Icon icon="account-group" color={COLORS.primary} style={{ marginRight: 30 }} />}
             maxLength={6}
           />
 
@@ -283,56 +278,23 @@ export const AddChildScreen = () => {
         </View>
       </ScrollView>
 
-      {/* Date Picker Modal for Birth Date */}
-      <Modal
+      {/* Date Picker Modal using CalendarPickerModal for both platforms */}
+      <CalendarPickerModal
         visible={showDatePickerModal}
-        transparent
-        animationType="slide"
-        onRequestClose={cancelDatePicker}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <DateTimePicker
-              value={tempDate}
-              mode="date"
-              display="spinner"
-              onChange={(event, selectedDate) => {
-                if (selectedDate) setTempDate(selectedDate);
-              }}
-              maximumDate={new Date()}
-            />
-            <View style={styles.modalButtons}>
-              <Pressable onPress={cancelDatePicker} style={styles.modalButton}><Text>Cancel</Text></Pressable>
-              <Pressable onPress={confirmDatePicker} style={styles.modalButton}><Text>OK</Text></Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
-      {/* Date Picker Modal for Medical Visa Issue Date */}
-      <Modal
+        onCancel={cancelDatePicker}
+        onConfirm={confirmDatePicker}
+        value={tempDate}
+        onValueChange={setTempDate}
+      />
+
+      {/* Medical Visa Date Picker Modal using CalendarPickerModal for both platforms */}
+      <CalendarPickerModal
         visible={showMedicalVisaDatePickerModal}
-        transparent
-        animationType="slide"
-        onRequestClose={cancelMedicalVisaDatePicker}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <DateTimePicker
-              value={tempMedicalVisaDate || new Date()}
-              mode="date"
-              display="spinner"
-              onChange={(event, selectedDate) => {
-                if (selectedDate) setTempMedicalVisaDate(selectedDate);
-              }}
-              maximumDate={new Date()}
-            />
-            <View style={styles.modalButtons}>
-              <Pressable onPress={cancelMedicalVisaDatePicker} style={styles.modalButton}><Text>Cancel</Text></Pressable>
-              <Pressable onPress={confirmMedicalVisaDatePicker} style={styles.modalButton}><Text>OK</Text></Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
+        onCancel={cancelMedicalVisaDatePicker}
+        onConfirm={confirmMedicalVisaDatePicker}
+        value={tempMedicalVisaDate || new Date()}
+        onValueChange={setTempMedicalVisaDate}
+      />
     </KeyboardAvoidingView>
   );
 };
@@ -462,26 +424,88 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   modalContent: {
     backgroundColor: COLORS.white,
-    borderRadius: 16,
     padding: SPACING.lg,
+    borderRadius: 16,
+    width: '80%',
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
-    width: 320,
+    justifyContent: 'space-between',
+    marginBottom: SPACING.md,
+  },
+  modalHeaderText: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: '600',
+    color: COLORS.text,
+    fontFamily: 'Urbanist',
+  },
+  closeButton: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: '700',
+    color: COLORS.text,
   },
   modalButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    width: '100%',
     marginTop: SPACING.md,
   },
   modalButton: {
     flex: 1,
-    alignItems: 'center',
     padding: SPACING.md,
+    borderRadius: 100,
+    backgroundColor: COLORS.grey[300],
+    alignItems: 'center',
+    marginHorizontal: 4,
+  },
+  cancelButtonText: {
+    color: COLORS.error,
+    fontSize: FONT_SIZES.md,
+    fontWeight: '700',
+    fontFamily: 'Urbanist',
+  },
+  saveButton: {
+    backgroundColor: COLORS.primary,
+  },
+  saveButtonText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.md,
+    fontWeight: '700',
+    fontFamily: 'Urbanist',
+  },
+  modalContentCentered: {
+    backgroundColor: COLORS.white,
+    borderRadius: 24,
+    padding: SPACING.lg,
+    width: 340,
+    alignSelf: 'center',
+    alignItems: 'stretch',
+  },
+  modalButtonsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: SPACING.md,
+    gap: 16,
+  },
+  modalTextButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  cancelText: {
+    color: COLORS.error,
+    fontSize: FONT_SIZES.md,
+    fontWeight: '600',
+  },
+  okText: {
+    color: '#7366bd',
+    fontSize: FONT_SIZES.md,
+    fontWeight: '600',
   },
 }); 
