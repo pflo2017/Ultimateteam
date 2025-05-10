@@ -59,34 +59,28 @@ export const CoachSettingsScreen = () => {
               <TextInput
                 label="Name"
                 value={profile.name}
-                mode="outlined"
+                mode="flat"
                 style={styles.input}
-                outlineStyle={styles.inputOutline}
-                contentStyle={styles.inputContent}
-                theme={{ colors: { primary: COLORS.primary }}}
-                left={<TextInput.Icon icon="account" color={COLORS.primary} />}
+                theme={{ colors: { primary: '#0CC1EC' }}}
+                left={<TextInput.Icon icon="account" color={COLORS.primary} style={{ marginRight: 30 }} />}
                 disabled
               />
               <TextInput
                 label="Phone Number"
                 value={profile.phone_number}
-                mode="outlined"
+                mode="flat"
                 style={styles.input}
-                outlineStyle={styles.inputOutline}
-                contentStyle={styles.inputContent}
-                theme={{ colors: { primary: COLORS.primary }}}
-                left={<TextInput.Icon icon="phone" color={COLORS.primary} />}
+                theme={{ colors: { primary: '#0CC1EC' }}}
+                left={<TextInput.Icon icon="phone" color={COLORS.primary} style={{ marginRight: 30 }} />}
                 disabled
               />
               <TextInput
                 label="Access Code"
                 value={profile.accessCode}
-                mode="outlined"
+                mode="flat"
                 style={styles.input}
-                outlineStyle={styles.inputOutline}
-                contentStyle={styles.inputContent}
-                theme={{ colors: { primary: COLORS.primary }}}
-                left={<TextInput.Icon icon="key" color={COLORS.primary} />}
+                theme={{ colors: { primary: '#0CC1EC' }}}
+                left={<TextInput.Icon icon="key" color={COLORS.primary} style={{ marginRight: 30 }} />}
                 disabled
               />
             </View>

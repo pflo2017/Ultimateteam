@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Alert, Pressable, Modal } from 'react-native';
-import { Text, TextInput, RadioButton } from 'react-native-paper';
+import { Text, TextInput, RadioButton, Button, Portal, Provider, Dialog } from 'react-native-paper';
 import { COLORS, SPACING, FONT_SIZES } from '../../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -9,6 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { ParentStackParamList } from '../../types/navigation';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { CalendarPickerModal } from '../../components/CalendarPickerModal';
 
 type EditChildScreenNavigationProp = NativeStackNavigationProp<ParentStackParamList>;
 type EditChildScreenRouteProp = RouteProp<ParentStackParamList, 'EditChild'>;
@@ -16,11 +17,9 @@ type EditChildScreenRouteProp = RouteProp<ParentStackParamList, 'EditChild'>;
 export const EditChildScreen = () => {
   const [name, setName] = useState('');
   const [birthDate, setBirthDate] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
   const [teamCode, setTeamCode] = useState('');
   const [medicalVisaStatus, setMedicalVisaStatus] = useState<'valid' | 'pending' | 'expired'>('pending');
   const [medicalVisaIssueDate, setMedicalVisaIssueDate] = useState<Date | null>(null);
-  const [showMedicalVisaDatePicker, setShowMedicalVisaDatePicker] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [teamName, setTeamName] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -226,190 +225,322 @@ export const EditChildScreen = () => {
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
-      <ScrollView 
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollViewContent}
-        showsVerticalScrollIndicator={false}
+    <Provider>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.container}
       >
-        <View style={styles.header}>
-          <Text style={styles.title}>Edit Child</Text>
-          <Text style={styles.subtitle}>Update your child's information</Text>
-        </View>
+        <ScrollView 
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollViewContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.header}>
+            <Text style={styles.title}>Edit Child</Text>
+            <Text style={styles.subtitle}>Update your child's information</Text>
+          </View>
 
-        <View style={styles.form}>
-          <TextInput
-            label="Full Name"
-            value={name}
-            onChangeText={setName}
-            mode="outlined"
-            style={styles.input}
-            outlineStyle={styles.inputOutline}
-            contentStyle={styles.inputContent}
-            theme={{ colors: { primary: COLORS.primary }}}
-            left={<TextInput.Icon icon="account-circle" color={COLORS.primary} />}
-          />
-
-          <Text style={styles.inputLabel}>Birthdate</Text>
-          <Pressable
-            onPress={openDatePicker}
-            style={styles.dateInput}
-          >
-            <MaterialCommunityIcons 
-              name="calendar" 
-              size={24} 
-              color={COLORS.primary}
+          <View style={styles.form}>
+            <TextInput
+              label="Full Name"
+              value={name}
+              onChangeText={setName}
+              mode="flat"
+              style={styles.input}
+              theme={{ colors: { primary: '#0CC1EC' }}}
+              left={<TextInput.Icon icon="account-circle" color={COLORS.primary} style={{ marginRight: 30 }} />}
             />
-            <Text style={styles.dateText}>
-              {birthDate.toLocaleDateString()}
-            </Text>
-          </Pressable>
 
-          <TextInput
-            label="Team Access Code"
-            value={teamCode}
-            onChangeText={handleTeamCodeChange}
-            mode="outlined"
-            style={styles.input}
-            outlineStyle={styles.inputOutline}
-            contentStyle={styles.inputContent}
-            theme={{ colors: { primary: COLORS.primary }}}
-            left={<TextInput.Icon icon="account-group" color={COLORS.primary} />}
-            maxLength={6}
-            editable={false}
-          />
+            <Text style={styles.inputLabel}>Birthdate</Text>
+            <Pressable
+              onPress={openDatePicker}
+              style={styles.dateInput}
+            >
+              <MaterialCommunityIcons 
+                name="calendar" 
+                size={24} 
+                color={COLORS.primary}
+              />
+              <Text style={styles.dateText}>
+                {birthDate.toLocaleDateString()}
+              </Text>
+            </Pressable>
 
-          {teamName && (
-            <Text style={styles.teamName}>
-              Team: {teamName}
-            </Text>
-          )}
+            <TextInput
+              label="Team Access Code"
+              value={teamCode}
+              onChangeText={handleTeamCodeChange}
+              mode="flat"
+              style={styles.input}
+              theme={{ colors: { primary: '#0CC1EC' }}}
+              left={<TextInput.Icon icon="account-group" color={COLORS.primary} style={{ marginRight: 30 }} />}
+              maxLength={6}
+              editable={false}
+            />
 
-          <View style={styles.medicalVisaSection}>
-            <Text style={styles.sectionTitle}>Medical Visa Status</Text>
-            <View style={styles.statusRow}>
-              {['valid', 'pending', 'expired'].map(status => (
+            {teamName && (
+              <Text style={styles.teamName}>
+                Team: {teamName}
+              </Text>
+            )}
+
+            <View style={styles.medicalVisaSection}>
+              <Text style={styles.sectionTitle}>Medical Visa Status</Text>
+              <View style={styles.statusRow}>
+                {['valid', 'pending', 'expired'].map(status => (
+                  <Pressable
+                    key={status}
+                    onPress={() => {
+                      setMedicalVisaStatus(status as 'valid' | 'pending' | 'expired');
+                      if (status !== 'valid') setMedicalVisaIssueDate(null);
+                    }}
+                    style={[styles.statusOption, medicalVisaStatus === status && styles.statusOptionSelected]}
+                  >
+                    <MaterialCommunityIcons
+                      name={medicalVisaStatus === status ? 'check-circle' : 'checkbox-blank-circle-outline'}
+                      size={20}
+                      color={status === 'valid' ? COLORS.success : status === 'pending' ? COLORS.warning : COLORS.error}
+                    />
+                    <Text style={[styles.statusLabel, { color: status === 'valid' ? COLORS.success : status === 'pending' ? COLORS.warning : COLORS.error }]}> 
+                      {status.charAt(0).toUpperCase() + status.slice(1)}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              {medicalVisaStatus === 'valid' && (
                 <Pressable
-                  key={status}
-                  onPress={() => {
-                    setMedicalVisaStatus(status as 'valid' | 'pending' | 'expired');
-                    if (status !== 'valid') setMedicalVisaIssueDate(null);
-                  }}
-                  style={[styles.statusOption, medicalVisaStatus === status && styles.statusOptionSelected]}
+                  onPress={openMedicalVisaDatePicker}
+                  style={styles.dateInput}
                 >
-                  <MaterialCommunityIcons
-                    name={medicalVisaStatus === status ? 'check-circle' : 'checkbox-blank-circle-outline'}
-                    size={20}
-                    color={status === 'valid' ? COLORS.success : status === 'pending' ? COLORS.warning : COLORS.error}
+                  <MaterialCommunityIcons 
+                    name="calendar-check" 
+                    size={24} 
+                    color={COLORS.success}
                   />
-                  <Text style={[styles.statusLabel, { color: status === 'valid' ? COLORS.success : status === 'pending' ? COLORS.warning : COLORS.error }]}> 
-                    {status.charAt(0).toUpperCase() + status.slice(1)}
+                  <Text style={styles.dateText}>
+                    {medicalVisaIssueDate 
+                      ? medicalVisaIssueDate.toLocaleDateString()
+                      : 'Select Issue Date'}
                   </Text>
                 </Pressable>
-              ))}
+              )}
             </View>
 
-            {medicalVisaStatus === 'valid' && (
-              <Pressable
-                onPress={openMedicalVisaDatePicker}
-                style={styles.dateInput}
-              >
-                <MaterialCommunityIcons 
-                  name="calendar-check" 
-                  size={24} 
-                  color={COLORS.success}
-                />
-                <Text style={styles.dateText}>
-                  {medicalVisaIssueDate 
-                    ? medicalVisaIssueDate.toLocaleDateString()
-                    : 'Select Issue Date'}
-                </Text>
-              </Pressable>
-            )}
+            <Pressable 
+              onPress={handleUpdateChild}
+              disabled={isLoading}
+              style={[styles.updateButton, isLoading && styles.buttonDisabled]}
+            >
+              <Text style={styles.buttonText}>
+                {isLoading ? 'Updating...' : 'Update Child'}
+              </Text>
+            </Pressable>
+
+            <Pressable 
+              onPress={handleDeleteChild}
+              disabled={isDeleting}
+              style={[styles.deleteButton, isDeleting && styles.buttonDisabled]}
+            >
+              <MaterialCommunityIcons 
+                name="delete" 
+                size={20} 
+                color={COLORS.error}
+              />
+              <Text style={[styles.buttonText, styles.deleteButtonText]}>
+                Delete Child
+              </Text>
+            </Pressable>
           </View>
+        </ScrollView>
 
-          <Pressable 
-            onPress={handleUpdateChild}
-            disabled={isLoading}
-            style={[styles.updateButton, isLoading && styles.buttonDisabled]}
-          >
-            <Text style={styles.buttonText}>
-              {isLoading ? 'Updating...' : 'Update Child'}
-            </Text>
-          </Pressable>
+        {/* Date Picker Modal using CalendarPickerModal */}
+        <CalendarPickerModal
+          visible={showDatePickerModal}
+          onCancel={cancelDatePicker}
+          onConfirm={confirmDatePicker}
+          value={tempDate}
+          onValueChange={setTempDate}
+        />
 
-          <Pressable 
-            onPress={handleDeleteChild}
-            disabled={isDeleting}
-            style={[styles.deleteButton, isDeleting && styles.buttonDisabled]}
-          >
-            <MaterialCommunityIcons 
-              name="delete" 
-              size={20} 
-              color={COLORS.error}
-            />
-            <Text style={[styles.buttonText, styles.deleteButtonText]}>
-              Delete Child
-            </Text>
-          </Pressable>
-        </View>
-      </ScrollView>
+        {/* Medical Visa Date Picker Modal using CalendarPickerModal */}
+        <CalendarPickerModal
+          visible={showMedicalVisaDatePickerModal}
+          onCancel={cancelMedicalVisaDatePicker}
+          onConfirm={confirmMedicalVisaDatePicker}
+          value={tempMedicalVisaDate || new Date()}
+          onValueChange={setTempMedicalVisaDate}
+        />
+      </KeyboardAvoidingView>
+    </Provider>
+  );
+};
 
-      {/* Date Picker Modal for Birth Date */}
-      <Modal
-        visible={showDatePickerModal}
-        transparent
-        animationType="slide"
-        onRequestClose={cancelDatePicker}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <DateTimePicker
-              value={tempDate}
-              mode="date"
-              display="spinner"
-              onChange={(event, selectedDate) => {
-                if (selectedDate) setTempDate(selectedDate);
-              }}
-              maximumDate={new Date()}
-            />
-            <View style={styles.modalButtons}>
-              <Pressable onPress={cancelDatePicker} style={styles.modalButton}><Text>Cancel</Text></Pressable>
-              <Pressable onPress={confirmDatePicker} style={styles.modalButton}><Text>OK</Text></Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
+// Custom Date Picker Component using react-native-paper Calendar
+interface DatePickerComponentProps {
+  date: Date;
+  onDateChange: (date: Date) => void;
+}
+
+const DatePickerComponent = ({ date, onDateChange }: DatePickerComponentProps) => {
+  // Month names for the header
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  
+  const [currentDate, setCurrentDate] = useState(date);
+  const [currentMonth, setCurrentMonth] = useState(date.getMonth());
+  const [currentYear, setCurrentYear] = useState(date.getFullYear());
+  const [showYearPicker, setShowYearPicker] = useState(false);
+  
+  // Update the parent component when date changes
+  const handleDateChange = (newDate: Date) => {
+    setCurrentDate(newDate);
+    onDateChange(newDate);
+  };
+  
+  // Navigate to previous month
+  const prevMonth = () => {
+    if (currentMonth === 0) {
+      setCurrentMonth(11);
+      setCurrentYear(currentYear - 1);
+    } else {
+      setCurrentMonth(currentMonth - 1);
+    }
+  };
+  
+  // Navigate to next month
+  const nextMonth = () => {
+    if (currentMonth === 11) {
+      setCurrentMonth(0);
+      setCurrentYear(currentYear + 1);
+    } else {
+      setCurrentMonth(currentMonth + 1);
+    }
+  };
+  
+  // Generate days for the current month
+  const generateDays = () => {
+    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+    const firstDayOfMonth = new Date(currentYear, currentMonth, 1).getDay();
+    
+    const days = [];
+    const weekDays = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+    
+    // Add weekday headers
+    days.push(
+      <View key="weekdays" style={styles.weekDaysRow}>
+        {weekDays.map((day, index) => (
+          <Text key={`weekday-${index}`} style={styles.weekDayText}>{day}</Text>
+        ))}
+      </View>
+    );
+    
+    // Add empty cells for days before the first day of the month
+    const firstWeek = [];
+    for (let i = 0; i < firstDayOfMonth; i++) {
+      firstWeek.push(
+        <View key={`empty-${i}`} style={styles.calendarDay} />
+      );
+    }
+    
+    // Add days of the month
+    for (let i = 1; i <= daysInMonth; i++) {
+      const dayDate = new Date(currentYear, currentMonth, i);
+      const isSelected = currentDate && 
+        dayDate.getDate() === currentDate.getDate() && 
+        dayDate.getMonth() === currentDate.getMonth() && 
+        dayDate.getFullYear() === currentDate.getFullYear();
       
-      {/* Date Picker Modal for Medical Visa Issue Date */}
-      <Modal
-        visible={showMedicalVisaDatePickerModal}
-        transparent
-        animationType="slide"
-        onRequestClose={cancelMedicalVisaDatePicker}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <DateTimePicker
-              value={tempMedicalVisaDate || new Date()}
-              mode="date"
-              display="spinner"
-              onChange={(event, selectedDate) => {
-                if (selectedDate) setTempMedicalVisaDate(selectedDate);
-              }}
-              maximumDate={new Date()}
-            />
-            <View style={styles.modalButtons}>
-              <Pressable onPress={cancelMedicalVisaDatePicker} style={styles.modalButton}><Text>Cancel</Text></Pressable>
-              <Pressable onPress={confirmMedicalVisaDatePicker} style={styles.modalButton}><Text>OK</Text></Pressable>
-            </View>
+      firstWeek.push(
+        <Pressable 
+          key={`day-${i}`} 
+          style={[
+            styles.calendarDay,
+            isSelected && styles.selectedDay
+          ]}
+          onPress={() => handleDateChange(dayDate)}
+        >
+          <Text style={[
+            styles.calendarDayText,
+            isSelected && styles.selectedDayText
+          ]}>
+            {i}
+          </Text>
+        </Pressable>
+      );
+      
+      // Start a new row after Saturday (index 6)
+      if ((firstDayOfMonth + i - 1) % 7 === 6 || i === daysInMonth) {
+        days.push(
+          <View key={`week-${Math.floor((firstDayOfMonth + i - 1) / 7)}`} style={styles.calendarRow}>
+            {firstWeek}
           </View>
+        );
+        firstWeek.length = 0;
+      }
+    }
+    
+    return days;
+  };
+  
+  return (
+    <View style={styles.datePickerContainer}>
+      {/* Month/Year Header */}
+      <View style={styles.calendarHeader}>
+        <Pressable onPress={prevMonth}>
+          <MaterialCommunityIcons name="chevron-left" size={24} color="#666" />
+        </Pressable>
+        
+        <Pressable 
+          style={styles.monthYearSelector}
+          onPress={() => setShowYearPicker(!showYearPicker)}
+        >
+          <Text style={styles.monthYearText}>
+            {monthNames[currentMonth]} {currentYear}
+          </Text>
+          <MaterialCommunityIcons name="menu-down" size={24} color="#666" />
+        </Pressable>
+        
+        <Pressable onPress={nextMonth}>
+          <MaterialCommunityIcons name="chevron-right" size={24} color="#666" />
+        </Pressable>
+      </View>
+      
+      {/* Year Picker if shown */}
+      {showYearPicker && (
+        <ScrollView style={styles.yearPickerContainer}>
+          {Array.from({ length: 100 }, (_, i) => new Date().getFullYear() - 80 + i).map((year) => (
+            <Pressable
+              key={`year-${year}`}
+              style={[
+                styles.yearOption,
+                currentYear === year && styles.selectedYear
+              ]}
+              onPress={() => {
+                setCurrentYear(year);
+                setShowYearPicker(false);
+              }}
+            >
+              <Text style={[
+                styles.yearText,
+                currentYear === year && styles.selectedYearText
+              ]}>
+                {year}
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      )}
+      
+      {/* Calendar Grid */}
+      {!showYearPicker && (
+        <View style={styles.calendarGrid}>
+          {generateDays()}
         </View>
-      </Modal>
-    </KeyboardAvoidingView>
+      )}
+    </View>
   );
 };
 
@@ -550,28 +681,90 @@ const styles = StyleSheet.create({
   deleteButtonText: {
     color: COLORS.error,
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    backgroundColor: COLORS.white,
+  datePickerDialog: {
     borderRadius: 16,
-    padding: SPACING.lg,
-    alignItems: 'center',
-    width: 320,
+    backgroundColor: COLORS.white,
+    maxHeight: '80%',
   },
-  modalButtons: {
+  calendarContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  datePickerContainer: {
+    width: '100%',
+    paddingVertical: SPACING.md,
+  },
+  calendarHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    width: '100%',
-    marginTop: SPACING.md,
-  },
-  modalButton: {
-    flex: 1,
     alignItems: 'center',
-    padding: SPACING.md,
+    paddingHorizontal: SPACING.sm,
+    marginBottom: SPACING.md,
+  },
+  monthYearSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  monthYearText: {
+    fontSize: FONT_SIZES.lg,
+    fontWeight: '500',
+    color: COLORS.text,
+  },
+  calendarGrid: {
+    width: '100%',
+  },
+  weekDaysRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: SPACING.sm,
+  },
+  weekDayText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '500',
+    color: COLORS.grey[600],
+    width: 36,
+    textAlign: 'center',
+  },
+  calendarRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: SPACING.xs,
+  },
+  calendarDay: {
+    width: 36,
+    height: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 18,
+  },
+  calendarDayText: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.text,
+  },
+  selectedDay: {
+    backgroundColor: '#7366bd', // Purple color to match your UI
+  },
+  selectedDayText: {
+    color: COLORS.white,
+    fontWeight: '500',
+  },
+  yearPickerContainer: {
+    maxHeight: 200,
+    marginVertical: SPACING.sm,
+  },
+  yearOption: {
+    paddingVertical: SPACING.xs,
+    alignItems: 'center',
+  },
+  yearText: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.text,
+  },
+  selectedYear: {
+    backgroundColor: '#f0f0f0',
+  },
+  selectedYearText: {
+    fontWeight: '600',
+    color: '#7366bd', // Purple color to match your UI
   },
 }); 

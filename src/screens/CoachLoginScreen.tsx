@@ -98,13 +98,11 @@ export const CoachLoginScreen = () => {
             label="Access Code"
             value={accessCode}
             onChangeText={setAccessCode}
-            mode="outlined"
+            mode="flat"
             autoCapitalize="characters"
             style={styles.input}
-            outlineStyle={styles.inputOutline}
-            contentStyle={styles.inputContent}
-            theme={{ colors: { primary: COLORS.primary }}}
-            left={<TextInput.Icon icon="key" color={COLORS.primary} />}
+            theme={{ colors: { primary: '#0CC1EC' }}}
+            left={<TextInput.Icon icon="key" color={COLORS.primary} style={{ marginRight: 30 }} />}
           />
 
           <Animated.View 

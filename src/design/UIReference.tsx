@@ -96,15 +96,17 @@ export const UIReference = () => {
         <TextInput
           style={styles.input}
           label="Standard Input"
-          mode="outlined"
-          left={<TextInput.Icon icon="account" color={COLORS.primary} />}
+          mode="flat"
+          theme={{ colors: { primary: '#0CC1EC' }}}
+          left={<TextInput.Icon icon="account" color={COLORS.primary} style={{ marginRight: 30 }} />}
         />
         <TextInput
           style={styles.input}
           label="Password Input"
-          mode="outlined"
+          mode="flat"
+          theme={{ colors: { primary: '#0CC1EC' }}}
           secureTextEntry
-          left={<TextInput.Icon icon="lock" color={COLORS.primary} />}
+          left={<TextInput.Icon icon="lock" color={COLORS.primary} style={{ marginRight: 30 }} />}
         />
       </View>
 

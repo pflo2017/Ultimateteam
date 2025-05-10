@@ -218,48 +218,40 @@ export const ClubSettingsScreen = () => {
               label="Club Name"
               value={profile.clubName}
               onChangeText={(text) => setProfile(prev => ({ ...prev, clubName: text }))}
-              mode="outlined"
+              mode="flat"
               style={styles.input}
-              outlineStyle={styles.inputOutline}
-              contentStyle={styles.inputContent}
-              theme={{ colors: { primary: COLORS.primary }}}
-              left={<TextInput.Icon icon="shield" color={COLORS.primary} />}
+              theme={{ colors: { primary: '#0CC1EC' }}}
+              left={<TextInput.Icon icon="shield" color={COLORS.primary} style={{ marginRight: 30 }} />}
             />
 
             <TextInput
               label="Club Location"
               value={profile.clubLocation}
               onChangeText={(text) => setProfile(prev => ({ ...prev, clubLocation: text }))}
-              mode="outlined"
+              mode="flat"
               style={styles.input}
-              outlineStyle={styles.inputOutline}
-              contentStyle={styles.inputContent}
-              theme={{ colors: { primary: COLORS.primary }}}
-              left={<TextInput.Icon icon="map-marker" color={COLORS.primary} />}
+              theme={{ colors: { primary: '#0CC1EC' }}}
+              left={<TextInput.Icon icon="map-marker" color={COLORS.primary} style={{ marginRight: 30 }} />}
             />
 
             <TextInput
               label="Administrator Name"
               value={profile.adminName}
               onChangeText={(text) => setProfile(prev => ({ ...prev, adminName: text }))}
-              mode="outlined"
+              mode="flat"
               style={styles.input}
-              outlineStyle={styles.inputOutline}
-              contentStyle={styles.inputContent}
-              theme={{ colors: { primary: COLORS.primary }}}
-              left={<TextInput.Icon icon="account" color={COLORS.primary} />}
+              theme={{ colors: { primary: '#0CC1EC' }}}
+              left={<TextInput.Icon icon="account" color={COLORS.primary} style={{ marginRight: 30 }} />}
             />
 
             <TextInput
               label="Email"
               value={profile.email}
-              mode="outlined"
+              mode="flat"
               style={styles.input}
-              outlineStyle={styles.inputOutline}
-              contentStyle={styles.inputContent}
-              theme={{ colors: { primary: COLORS.primary }}}
+              theme={{ colors: { primary: '#0CC1EC' }}}
               disabled
-              left={<TextInput.Icon icon="email" color={COLORS.primary} />}
+              left={<TextInput.Icon icon="email" color={COLORS.primary} style={{ marginRight: 30 }} />}
             />
 
             <Pressable 
@@ -279,37 +271,31 @@ export const ClubSettingsScreen = () => {
               label="Current Password"
               value={currentPassword}
               onChangeText={setCurrentPassword}
-              mode="outlined"
+              mode="flat"
               style={styles.input}
-              outlineStyle={styles.inputOutline}
-              contentStyle={styles.inputContent}
-              theme={{ colors: { primary: COLORS.primary }}}
+              theme={{ colors: { primary: '#0CC1EC' }}}
               secureTextEntry
-              left={<TextInput.Icon icon="lock" color={COLORS.primary} />}
+              left={<TextInput.Icon icon="lock" color={COLORS.primary} style={{ marginRight: 30 }} />}
             />
             <TextInput
               label="New Password"
               value={newPassword}
               onChangeText={setNewPassword}
-              mode="outlined"
+              mode="flat"
               style={styles.input}
-              outlineStyle={styles.inputOutline}
-              contentStyle={styles.inputContent}
-              theme={{ colors: { primary: COLORS.primary }}}
+              theme={{ colors: { primary: '#0CC1EC' }}}
               secureTextEntry
-              left={<TextInput.Icon icon="lock-plus" color={COLORS.primary} />}
+              left={<TextInput.Icon icon="lock-plus" color={COLORS.primary} style={{ marginRight: 30 }} />}
             />
             <TextInput
               label="Confirm New Password"
               value={confirmNewPassword}
               onChangeText={setConfirmNewPassword}
-              mode="outlined"
+              mode="flat"
               style={styles.input}
-              outlineStyle={styles.inputOutline}
-              contentStyle={styles.inputContent}
-              theme={{ colors: { primary: COLORS.primary }}}
+              theme={{ colors: { primary: '#0CC1EC' }}}
               secureTextEntry
-              left={<TextInput.Icon icon="lock-check" color={COLORS.primary} />}
+              left={<TextInput.Icon icon="lock-check" color={COLORS.primary} style={{ marginRight: 30 }} />}
             />
             <Pressable 
               onPress={handleChangePassword}

@@ -141,36 +141,30 @@ export const ParentSettingsScreen = () => {
               label="Name"
               value={name}
               onChangeText={setName}
-              mode="outlined"
+              mode="flat"
               style={styles.input}
-              outlineStyle={styles.inputOutline}
-              contentStyle={styles.inputContent}
-              theme={{ colors: { primary: COLORS.primary }}}
-              left={<TextInput.Icon icon="account" color={COLORS.primary} />}
+              theme={{ colors: { primary: '#0CC1EC' }}}
+              left={<TextInput.Icon icon="account" color={COLORS.primary} style={{ marginRight: 30 }} />}
             />
             <TextInput
               label="Email (Optional)"
               value={email}
               onChangeText={setEmail}
-              mode="outlined"
+              mode="flat"
               style={styles.input}
-              outlineStyle={styles.inputOutline}
-              contentStyle={styles.inputContent}
-              theme={{ colors: { primary: COLORS.primary }}}
+              theme={{ colors: { primary: '#0CC1EC' }}}
               keyboardType="email-address"
               autoCapitalize="none"
-              left={<TextInput.Icon icon="email" color={COLORS.primary} />}
+              left={<TextInput.Icon icon="email" color={COLORS.primary} style={{ marginRight: 30 }} />}
             />
             <TextInput
               label="Phone Number"
               value={phoneNumber}
-              mode="outlined"
+              mode="flat"
               style={styles.input}
-              outlineStyle={styles.inputOutline}
-              contentStyle={styles.inputContent}
-              theme={{ colors: { primary: COLORS.primary }}}
+              theme={{ colors: { primary: '#0CC1EC' }}}
               disabled
-              left={<TextInput.Icon icon="phone" color={COLORS.primary} />}
+              left={<TextInput.Icon icon="phone" color={COLORS.primary} style={{ marginRight: 30 }} />}
             />
             <Pressable 
               onPress={handleUpdateProfile}
@@ -189,37 +183,31 @@ export const ParentSettingsScreen = () => {
               label="Current Password"
               value={currentPassword}
               onChangeText={setCurrentPassword}
-              mode="outlined"
+              mode="flat"
               style={styles.input}
-              outlineStyle={styles.inputOutline}
-              contentStyle={styles.inputContent}
-              theme={{ colors: { primary: COLORS.primary }}}
+              theme={{ colors: { primary: '#0CC1EC' }}}
               secureTextEntry
-              left={<TextInput.Icon icon="lock" color={COLORS.primary} />}
+              left={<TextInput.Icon icon="lock" color={COLORS.primary} style={{ marginRight: 30 }} />}
             />
             <TextInput
               label="New Password"
               value={newPassword}
               onChangeText={setNewPassword}
-              mode="outlined"
+              mode="flat"
               style={styles.input}
-              outlineStyle={styles.inputOutline}
-              contentStyle={styles.inputContent}
-              theme={{ colors: { primary: COLORS.primary }}}
+              theme={{ colors: { primary: '#0CC1EC' }}}
               secureTextEntry
-              left={<TextInput.Icon icon="lock-plus" color={COLORS.primary} />}
+              left={<TextInput.Icon icon="lock-plus" color={COLORS.primary} style={{ marginRight: 30 }} />}
             />
             <TextInput
               label="Confirm New Password"
               value={confirmPassword}
               onChangeText={setConfirmPassword}
-              mode="outlined"
+              mode="flat"
               style={styles.input}
-              outlineStyle={styles.inputOutline}
-              contentStyle={styles.inputContent}
-              theme={{ colors: { primary: COLORS.primary }}}
+              theme={{ colors: { primary: '#0CC1EC' }}}
               secureTextEntry
-              left={<TextInput.Icon icon="lock-check" color={COLORS.primary} />}
+              left={<TextInput.Icon icon="lock-check" color={COLORS.primary} style={{ marginRight: 30 }} />}
             />
             <Pressable 
               onPress={handleChangePassword}

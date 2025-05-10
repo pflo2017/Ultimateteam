@@ -103,27 +103,23 @@ export const AdminLoginScreen = () => {
             label="Email"
             value={email}
             onChangeText={setEmail}
-            mode="outlined"
+            mode="flat"
             keyboardType="email-address"
             autoCapitalize="none"
             style={styles.input}
-            outlineStyle={styles.inputOutline}
-            contentStyle={styles.inputContent}
-            theme={{ colors: { primary: COLORS.primary }}}
-            left={<TextInput.Icon icon="email" color={COLORS.primary} />}
+            theme={{ colors: { primary: '#0CC1EC' } }}
+            left={<TextInput.Icon icon="email" color={COLORS.primary} style={{ marginRight: 30 }} />}
           />
 
           <TextInput
             label="Password"
             value={password}
             onChangeText={setPassword}
-            mode="outlined"
+            mode="flat"
             secureTextEntry={!showPassword}
             style={styles.input}
-            outlineStyle={styles.inputOutline}
-            contentStyle={styles.inputContent}
-            theme={{ colors: { primary: COLORS.primary }}}
-            left={<TextInput.Icon icon="lock" color={COLORS.primary} />}
+            theme={{ colors: { primary: '#0CC1EC' } }}
+            left={<TextInput.Icon icon="lock" color={COLORS.primary} style={{ marginRight: 30 }} />}
             right={
               <TextInput.Icon
                 icon={showPassword ? "eye-off" : "eye"}
