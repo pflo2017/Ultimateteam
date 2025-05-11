@@ -166,10 +166,10 @@ export const EditChildScreen = () => {
     setIsLoading(true);
     try {
       const { data: team } = await supabase
-        .from('teams')
-        .select('id')
+          .from('teams')
+          .select('id')
         .eq('access_code', teamCode)
-        .single();
+          .single();
 
       if (!team) throw new Error('Team not found');
 
@@ -313,27 +313,27 @@ export const EditChildScreen = () => {
 
   return (
     <Provider>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.container}
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={styles.container}
+    >
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollViewContent}
+        showsVerticalScrollIndicator={false}
       >
-        <ScrollView 
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollViewContent}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.header}>
-            <Text style={styles.title}>Edit Child</Text>
-            <Text style={styles.subtitle}>Update your child's information</Text>
-          </View>
+        <View style={styles.header}>
+          <Text style={styles.title}>Edit Child</Text>
+          <Text style={styles.subtitle}>Update your child's information</Text>
+        </View>
 
-          <View style={styles.form}>
-            <TextInput
-              label="Full Name"
-              value={name}
-              onChangeText={setName}
+        <View style={styles.form}>
+          <TextInput
+            label="Full Name"
+            value={name}
+            onChangeText={setName}
               mode="flat"
-              style={styles.input}
+            style={styles.input}
               theme={{ colors: { primary: '#0CC1EC' }}}
               left={<TextInput.Icon icon="account-circle" color={COLORS.primary} style={{ marginRight: 30 }} />}
             />
@@ -351,9 +351,9 @@ export const EditChildScreen = () => {
               <Text style={styles.dateText}>
                 {birthDate.toLocaleDateString()}
               </Text>
-            </Pressable>
+          </Pressable>
 
-            <TextInput
+          <TextInput
               label="Team Access Code"
               value={teamCode}
               onChangeText={setTeamCode}
@@ -361,15 +361,15 @@ export const EditChildScreen = () => {
               style={styles.input}
               theme={{ colors: { primary: '#0CC1EC' }}}
               left={<TextInput.Icon icon="account-group" color={COLORS.primary} style={{ marginRight: 30 }} />}
-              maxLength={6}
+            maxLength={6}
               editable={false}
             />
 
             {teamName && (
               <Text style={styles.teamName}>
                 Team: {teamName}
-              </Text>
-            )}
+            </Text>
+          )}
 
             {/* Change Team Section - moved above Medical Visa Status and styled smaller */}
             <View style={{ marginTop: 8, marginBottom: 8 }}>
@@ -442,82 +442,82 @@ export const EditChildScreen = () => {
               )}
             </View>
 
-            <View style={styles.medicalVisaSection}>
-              <Text style={styles.sectionTitle}>Medical Visa Status</Text>
-              <View style={styles.statusRow}>
-                {['valid', 'pending', 'expired'].map(status => (
-                  <Pressable
-                    key={status}
-                    onPress={() => {
-                      setMedicalVisaStatus(status as 'valid' | 'pending' | 'expired');
-                      if (status !== 'valid') setMedicalVisaIssueDate(null);
-                    }}
-                    style={[styles.statusOption, medicalVisaStatus === status && styles.statusOptionSelected]}
-                  >
-                    <MaterialCommunityIcons
-                      name={medicalVisaStatus === status ? 'check-circle' : 'checkbox-blank-circle-outline'}
-                      size={20}
-                      color={status === 'valid' ? COLORS.success : status === 'pending' ? COLORS.warning : COLORS.error}
-                    />
-                    <Text style={[styles.statusLabel, { color: status === 'valid' ? COLORS.success : status === 'pending' ? COLORS.warning : COLORS.error }]}> 
-                      {status.charAt(0).toUpperCase() + status.slice(1)}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-
-              {medicalVisaStatus === 'valid' && (
+          <View style={styles.medicalVisaSection}>
+            <Text style={styles.sectionTitle}>Medical Visa Status</Text>
+            <View style={styles.statusRow}>
+              {['valid', 'pending', 'expired'].map(status => (
                 <Pressable
-                  onPress={openMedicalVisaDatePicker}
-                  style={styles.dateInput}
+                  key={status}
+                  onPress={() => {
+                    setMedicalVisaStatus(status as 'valid' | 'pending' | 'expired');
+                    if (status !== 'valid') setMedicalVisaIssueDate(null);
+                  }}
+                  style={[styles.statusOption, medicalVisaStatus === status && styles.statusOptionSelected]}
                 >
-                  <MaterialCommunityIcons 
-                    name="calendar-check" 
-                    size={24} 
-                    color={COLORS.success}
+                  <MaterialCommunityIcons
+                    name={medicalVisaStatus === status ? 'check-circle' : 'checkbox-blank-circle-outline'}
+                    size={20}
+                    color={status === 'valid' ? COLORS.success : status === 'pending' ? COLORS.warning : COLORS.error}
                   />
-                  <Text style={styles.dateText}>
-                    {medicalVisaIssueDate 
-                      ? medicalVisaIssueDate.toLocaleDateString()
-                      : 'Select Issue Date'}
+                  <Text style={[styles.statusLabel, { color: status === 'valid' ? COLORS.success : status === 'pending' ? COLORS.warning : COLORS.error }]}> 
+                    {status.charAt(0).toUpperCase() + status.slice(1)}
                   </Text>
                 </Pressable>
-              )}
+              ))}
             </View>
 
-            <Pressable 
-              onPress={handleUpdateChild}
-              disabled={isLoading}
-              style={[styles.updateButton, isLoading && styles.buttonDisabled]}
-            >
-              <Text style={styles.buttonText}>
-                {isLoading ? 'Updating...' : 'Update Child'}
-              </Text>
-            </Pressable>
-
-            <Pressable 
-              onPress={handleDeleteChild}
-              disabled={isDeleting}
-              style={[styles.deleteButton, isDeleting && styles.buttonDisabled]}
-            >
-              <MaterialCommunityIcons 
-                name="delete" 
-                size={20} 
-                color={COLORS.error}
-              />
-              <Text style={[styles.buttonText, styles.deleteButtonText]}>
-                Delete Child
-              </Text>
-            </Pressable>
+            {medicalVisaStatus === 'valid' && (
+              <Pressable
+                onPress={openMedicalVisaDatePicker}
+                style={styles.dateInput}
+              >
+                <MaterialCommunityIcons 
+                  name="calendar-check" 
+                  size={24} 
+                  color={COLORS.success}
+                />
+                <Text style={styles.dateText}>
+                  {medicalVisaIssueDate 
+                    ? medicalVisaIssueDate.toLocaleDateString()
+                    : 'Select Issue Date'}
+                </Text>
+              </Pressable>
+            )}
           </View>
-        </ScrollView>
+
+          <Pressable 
+            onPress={handleUpdateChild}
+            disabled={isLoading}
+            style={[styles.updateButton, isLoading && styles.buttonDisabled]}
+          >
+            <Text style={styles.buttonText}>
+              {isLoading ? 'Updating...' : 'Update Child'}
+            </Text>
+          </Pressable>
+
+          <Pressable 
+            onPress={handleDeleteChild}
+            disabled={isDeleting}
+            style={[styles.deleteButton, isDeleting && styles.buttonDisabled]}
+          >
+            <MaterialCommunityIcons 
+              name="delete" 
+              size={20} 
+              color={COLORS.error}
+            />
+            <Text style={[styles.buttonText, styles.deleteButtonText]}>
+              Delete Child
+            </Text>
+          </Pressable>
+        </View>
+      </ScrollView>
 
         {/* Date Picker Modal using CalendarPickerModal */}
         <CalendarPickerModal
-          visible={showDatePickerModal}
+        visible={showDatePickerModal}
           onCancel={cancelDatePicker}
           onConfirm={confirmDatePicker}
-          value={tempDate}
+              value={tempDate}
           onValueChange={setTempDate}
         />
 
@@ -592,7 +592,7 @@ const DatePickerComponent = ({ date, onDateChange }: DatePickerComponentProps) =
         {weekDays.map((day, index) => (
           <Text key={`weekday-${index}`} style={styles.weekDayText}>{day}</Text>
         ))}
-      </View>
+            </View>
     );
     
     // Add empty cells for days before the first day of the month
@@ -664,7 +664,7 @@ const DatePickerComponent = ({ date, onDateChange }: DatePickerComponentProps) =
         <Pressable onPress={nextMonth}>
           <MaterialCommunityIcons name="chevron-right" size={24} color="#666" />
         </Pressable>
-      </View>
+        </View>
       
       {/* Year Picker if shown */}
       {showYearPicker && (

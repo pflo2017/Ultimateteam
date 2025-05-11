@@ -252,11 +252,11 @@ export const AddChildScreen = () => {
                 onPress={openMedicalVisaDatePicker}
                 style={styles.dateInput}
               >
-                <MaterialCommunityIcons 
-                  name="calendar-check" 
-                  size={24} 
-                  color={COLORS.success}
-                />
+                  <MaterialCommunityIcons 
+                    name="calendar-check" 
+                    size={24} 
+                    color={COLORS.success}
+                  />
                 <Text style={styles.dateText}>
                   {medicalVisaIssueDate 
                     ? medicalVisaIssueDate.toLocaleDateString()
@@ -283,7 +283,7 @@ export const AddChildScreen = () => {
         visible={showDatePickerModal}
         onCancel={cancelDatePicker}
         onConfirm={confirmDatePicker}
-        value={tempDate}
+              value={tempDate}
         onValueChange={setTempDate}
       />
 
@@ -292,7 +292,7 @@ export const AddChildScreen = () => {
         visible={showMedicalVisaDatePickerModal}
         onCancel={cancelMedicalVisaDatePicker}
         onConfirm={confirmMedicalVisaDatePicker}
-        value={tempMedicalVisaDate || new Date()}
+              value={tempMedicalVisaDate || new Date()}
         onValueChange={setTempMedicalVisaDate}
       />
     </KeyboardAvoidingView>
