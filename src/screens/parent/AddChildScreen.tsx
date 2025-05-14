@@ -143,7 +143,8 @@ export const AddChildScreen = () => {
         p_team_id: team.id,
         p_admin_id: team.admin_id,
         p_club_id: team.club_id,
-        p_parent_id: parent.id
+        p_parent_id: parent.id,
+        p_is_new_trial: false
       });
 
       if (playerError) {

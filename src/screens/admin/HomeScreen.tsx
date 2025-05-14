@@ -3,11 +3,12 @@ import { View, StyleSheet, ScrollView, Platform } from 'react-native';
 import { Text, Card, TouchableRipple } from 'react-native-paper';
 import { COLORS, SPACING } from '../../constants/theme';
 import { supabase } from '../../lib/supabase';
-import { useNavigation, useIsFocused } from '@react-navigation/native';
+import { useNavigation, useIsFocused, CompositeNavigationProp } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { MaterialCommunityIcons as IconType } from '@expo/vector-icons';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { AdminStackParamList } from '../../types/navigation';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import type { AdminStackParamList, AdminTabParamList } from '../../types/navigation';
 import Animated, { 
   FadeInUp,
   useAnimatedStyle, 
@@ -21,6 +22,12 @@ type CardType = 'teams' | 'coaches' | 'players' | 'payments';
 
 type ScreenType = keyof AdminStackParamList | 'Payments';
 
+// Define a composite navigation type that can access both stack and tab navigators
+type AdminNavigationProp = CompositeNavigationProp<
+  NativeStackNavigationProp<AdminStackParamList>,
+  BottomTabNavigationProp<AdminTabParamList>
+>;
+
 export const AdminHomeScreen = () => {
   const [clubName, setClubName] = useState<string>('');
   const [adminName, setAdminName] = useState<string>('');
@@ -30,7 +37,7 @@ export const AdminHomeScreen = () => {
     players: 0,
     pendingPayments: 0
   });
-  const navigation = useNavigation<NativeStackNavigationProp<AdminStackParamList>>();
+  const navigation = useNavigation<AdminNavigationProp>();
   const isFocused = useIsFocused();
 
   useEffect(() => {
@@ -150,7 +157,9 @@ export const AdminHomeScreen = () => {
     if (screen === 'Manage') {
       navigation.navigate('Manage', { activeTab: type });
     } else if (screen === 'Payments') {
-      navigation.navigate('AdminTabs', { screen: 'Payments' } as any);
+      navigation.navigate('AdminTabs', {
+        screen: 'Payments'
+      });
     }
   };
 

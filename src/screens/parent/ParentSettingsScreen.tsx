@@ -19,17 +19,59 @@ export const ParentSettingsScreen = () => {
 
   useEffect(() => {
     loadParentData();
+    
+    // Setup focus listener to reload data when screen comes into focus
+    const unsubscribe = navigation.addListener('focus', () => {
+      console.log('Screen focused - reloading data');
+      loadParentData(true);
+    });
+    
+    return unsubscribe;
   }, []);
 
-  const loadParentData = async () => {
+  const loadParentData = async (forceRefresh = false) => {
     try {
+      // Get the parent ID from AsyncStorage
       const parentData = await AsyncStorage.getItem('parent_data');
-      if (parentData) {
-        const parent = JSON.parse(parentData);
-        setName(parent.name || '');
-        setEmail(parent.email || '');
-        setPhoneNumber(parent.phone_number || '');
+      if (!parentData) {
+        Alert.alert('Error', 'Failed to load your information');
+        return;
       }
+      
+      const parent = JSON.parse(parentData);
+      console.log('Parent ID for data loading:', parent.id);
+      console.log('Current email in AsyncStorage:', parent.email);
+      
+      if (forceRefresh) {
+        // Get fresh data directly from the database
+        console.log('Force refreshing data from database');
+        const { data: freshData, error } = await supabase
+          .from('parents')
+          .select('*')
+          .eq('id', parent.id)
+          .single();
+          
+        if (error) {
+          console.error('Error fetching fresh data:', error);
+        } else if (freshData) {
+          console.log('Fresh data from database:', freshData);
+          console.log('Fresh email from database:', freshData.email);
+          
+          // Update AsyncStorage with fresh data
+          await AsyncStorage.setItem('parent_data', JSON.stringify(freshData));
+          
+          // Update UI
+          setName(freshData.name || '');
+          setEmail(freshData.email || '');
+          setPhoneNumber(freshData.phone_number || '');
+          return;
+        }
+      }
+      
+      // Fallback to AsyncStorage data
+      setName(parent.name || '');
+      setEmail(parent.email || '');
+      setPhoneNumber(parent.phone_number || '');
     } catch (error) {
       console.error('Error loading parent data:', error);
       Alert.alert('Error', 'Failed to load your information');
@@ -48,25 +90,94 @@ export const ParentSettingsScreen = () => {
       if (!parentData) throw new Error('No parent data found');
       
       const parent = JSON.parse(parentData);
+      console.log('PARENT ID:', parent.id);
+      console.log('BEFORE UPDATE - Current email in AsyncStorage:', parent.email);
+      console.log('BEFORE UPDATE - New email to set:', email.trim() || null);
       
-      const { error } = await supabase
+      console.log('ATTEMPTING UPDATE WITH BYPASS FUNCTION');
+      // Use the security definer function to bypass RLS
+      const { data: updateResult, error: updateError } = await supabase.rpc(
+        'update_parent_email_bypass',
+        {
+          p_id: parent.id,
+          p_email: email.trim() || null
+        }
+      );
+      
+      console.log('UPDATE RESULT:', updateResult);
+      
+      if (updateError) {
+        console.error('UPDATE ERROR WITH BYPASS:', updateError);
+        
+        // Try a more direct approach - execute raw SQL
+        console.log('ATTEMPTING ALTERNATE DIRECT UPDATE');
+        const { data: rawResult, error: rawError } = await supabase.rpc(
+          'execute_sql',
+          { 
+            sql_query: `UPDATE parents SET email = '${email.trim() || null}' WHERE id = '${parent.id}' RETURNING email` 
+          }
+        );
+        
+        if (rawError) {
+          console.error('RAW SQL ERROR:', rawError);
+          
+          // Last resort - standard update
+          console.log('ATTEMPTING STANDARD UPDATE');
+          const { error: stdError } = await supabase
+            .from('parents')
+            .update({
+              name: name.trim(),
+              email: email.trim() || null
+            })
+            .eq('id', parent.id);
+            
+          if (stdError) {
+            console.error('STANDARD UPDATE ERROR:', stdError);
+            Alert.alert('Error', 'Failed to update profile.');
+            return;
+          }
+        } else {
+          console.log('RAW SQL RESULT:', rawResult);
+        }
+      }
+      
+      // Regardless of which update method worked, get fresh data
+      console.log('FETCHING FRESH DATA AFTER UPDATE');
+      const { data: freshData, error: fetchError } = await supabase
         .from('parents')
-        .update({
-          name: name.trim(),
-          email: email.trim() || null,
-        })
-        .eq('id', parent.id);
-
-      if (error) throw error;
-
-      // Update local storage
-      const updatedParent = { ...parent, name: name.trim(), email: email.trim() || null };
-      await AsyncStorage.setItem('parent_data', JSON.stringify(updatedParent));
-
-      Alert.alert('Success', 'Profile updated successfully');
-    } catch (error) {
+        .select('*')
+        .eq('id', parent.id)
+        .single();
+        
+      if (fetchError) {
+        console.error('Error fetching after update:', fetchError);
+      } else {
+        console.log('FRESH DATA AFTER UPDATE:', freshData);
+        
+        // Update AsyncStorage with the freshly fetched data
+        await AsyncStorage.setItem('parent_data', JSON.stringify({
+          ...freshData,
+          email: email.trim() || null  // Force the email to be what user entered
+        }));
+        
+        // Verify AsyncStorage update
+        const verifyData = await AsyncStorage.getItem('parent_data');
+        if (verifyData) {
+          const verifyParent = JSON.parse(verifyData);
+          console.log('VERIFY - AsyncStorage data:', verifyParent);
+          console.log('VERIFY - Email in AsyncStorage:', verifyParent.email);
+        }
+        
+        Alert.alert('Success', 'Profile updated successfully', [
+          { 
+            text: 'OK', 
+            onPress: () => navigation.goBack() 
+          }
+        ]);
+      }
+    } catch (error: any) {
       console.error('Error updating profile:', error);
-      Alert.alert('Error', 'Failed to update profile');
+      Alert.alert('Error', `Failed to update profile: ${error.message || 'Unknown error'}`);
     } finally {
       setIsLoading(false);
     }

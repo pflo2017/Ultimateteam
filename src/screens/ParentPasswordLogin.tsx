@@ -34,20 +34,42 @@ export const ParentPasswordLoginScreen = () => {
 
     try {
       console.log('DEBUG: Attempting login with phoneNumber:', phoneNumber, 'password:', password);
+      
+      // First check if there are multiple accounts with this phone number
+      const { data: allMatches, error: checkError } = await supabase
+        .from('parents')
+        .select('id, email')
+        .eq('phone_number', phoneNumber);
+        
+      if (allMatches && allMatches.length > 1) {
+        console.warn('WARNING: Multiple accounts found with same phone number:', allMatches);
+      }
+      
+      // Get the parent record with full details
       const { data: parent, error: loginError } = await supabase
         .from('parents')
-        .select('id, name, phone_number, team_id')
+        .select('*')  // Select all fields to ensure we have complete data
         .eq('phone_number', phoneNumber)
         .eq('password', password)
+        .order('updated_at', { ascending: false })  // Get the most recently updated record
+        .limit(1)
         .single();
 
       if (loginError || !parent) {
+        console.error('Login error:', loginError);
         setError('Invalid password');
         return;
       }
 
+      console.log('DEBUG: Parent data from database:', JSON.stringify(parent));
+
       // Store parent data in AsyncStorage
       await AsyncStorage.setItem('parent_data', JSON.stringify(parent));
+      
+      // Verify data is stored correctly
+      const storedData = await AsyncStorage.getItem('parent_data');
+      const parsedData = JSON.parse(storedData || '{}');
+      console.log('DEBUG: Stored parent data in AsyncStorage:', JSON.stringify(parsedData));
       
       // No need to navigate - the root navigator will detect parent data and show the parent navigator
       

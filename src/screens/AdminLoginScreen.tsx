@@ -14,7 +14,7 @@ type RootStackParamList = {
   AdminRegister: undefined;
   CoachLogin: undefined;
   ParentLogin: undefined;
-  AdminDashboard: undefined;
+  AdminRoot: undefined;
 };
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -59,7 +59,7 @@ export const AdminLoginScreen = () => {
         return;
       }
 
-      navigation.navigate('AdminDashboard');
+      navigation.navigate('AdminRoot');
     } catch (error) {
       console.error('Login error:', error);
       setError('An error occurred during login');

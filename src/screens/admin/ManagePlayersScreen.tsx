@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, TextInput, RefreshControl, Modal, Pressable, Alert } from 'react-native';
-import { Text, ActivityIndicator, Card } from 'react-native-paper';
+import { Text, ActivityIndicator, Card, IconButton } from 'react-native-paper';
 import { COLORS, SPACING } from '../../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -24,6 +24,9 @@ interface Player {
   } | null;
   medicalVisaStatus: string;
   paymentStatus: string;
+  payment_status?: string;
+  last_payment_date?: string;
+  birth_date?: string | null;
   parent_id?: string;
 }
 
@@ -51,9 +54,11 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
   const [isTeamModalVisible, setIsTeamModalVisible] = useState(false);
   const [isPlayerDetailsModalVisible, setIsPlayerDetailsModalVisible] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
-  const [parentDetails, setParentDetails] = useState<{ name: string; phone_number: string } | null>(null);
+  const [parentDetails, setParentDetails] = useState<{ name: string; phone_number: string; email?: string } | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<string>('pending');
   const [isUpdatingPayment, setIsUpdatingPayment] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [playerMenuVisible, setPlayerMenuVisible] = useState<string | null>(null);
 
   const selectedTeam = teams.find(team => team.id === selectedTeamId);
 
@@ -72,7 +77,7 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
       try {
         const { data, error } = await supabase
           .from('parents')
-          .select('name, phone_number')
+          .select('name, phone_number, email')
           .eq('id', player.parent_id)
           .single();
           
@@ -124,6 +129,51 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
     }
   };
 
+  const handleDeletePlayer = (playerId: string) => {
+    Alert.alert(
+      "Delete Player",
+      "Are you sure you want to delete this player? This action cannot be undone.",
+      [
+        {
+          text: "Cancel",
+          style: "cancel"
+        },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setIsDeleting(true);
+              const { error } = await supabase
+                .from('players')
+                .delete()
+                .eq('id', playerId);
+                
+              if (error) throw error;
+              
+              // If we're deleting from the modal, close it
+              if (isPlayerDetailsModalVisible) {
+                setIsPlayerDetailsModalVisible(false);
+              }
+              
+              Alert.alert("Success", "Player deleted successfully");
+              onRefresh();
+            } catch (error) {
+              console.error('Error deleting player:', error);
+              Alert.alert("Error", "Failed to delete player");
+            } finally {
+              setIsDeleting(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handlePlayerMenuPress = (playerId: string) => {
+    setPlayerMenuVisible(playerId === playerMenuVisible ? null : playerId);
+  };
+
   const getMedicalVisaStatusColor = (status: string) => {
     switch (status) {
       case 'valid':
@@ -138,16 +188,39 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
   };
 
   const getPaymentStatusColor = (status: string) => {
-    switch (status) {
+    switch (status?.toLowerCase()) {
       case 'paid':
         return COLORS.success;
       case 'pending':
         return COLORS.warning;
       case 'overdue':
+      case 'missed':
         return COLORS.error;
+      case 'on_trial':
+        return COLORS.primary;
       default:
         return COLORS.grey[600];
     }
+  };
+
+  const getPaymentStatusText = (status: string) => {
+    switch (status?.toLowerCase()) {
+      case 'paid':
+        return 'Paid';
+      case 'pending':
+        return 'Pending';
+      case 'overdue':
+      case 'missed':
+        return 'Overdue';
+      case 'on_trial':
+        return 'On Trial';
+      default:
+        return status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Unknown';
+    }
+  };
+
+  const getPlayerPaymentStatus = (player: Player): string => {
+    return player.paymentStatus || player.payment_status || 'pending';
   };
 
   if (isLoading) {
@@ -205,44 +278,74 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
           <Text style={styles.emptyText}>No players found</Text>
         ) : (
           filteredPlayers.map(player => (
-            <Card key={player.id} style={[styles.card, { backgroundColor: '#EEFBFF' }]}>
-              <Card.Content>
-                <View style={styles.cardHeader}>
-                  <View style={styles.cardTitleContainer}>
-                    <MaterialCommunityIcons name="account" size={24} color={COLORS.primary} />
-                    <Text style={styles.cardTitle}>{player.name}</Text>
+            <View key={player.id} style={styles.playerCard}>
+              <View style={styles.cardPressable}>
+                <View style={styles.playerCardContent}>
+                  <View style={styles.nameRow}>
+                    <Text style={styles.playerName}>{player.name}</Text>
+                    <TouchableOpacity 
+                      onPress={() => handlePlayerMenuPress(player.id)}
+                      style={styles.menuButton}
+                    >
+                      <MaterialCommunityIcons name="dots-vertical" size={20} color={COLORS.grey[600]} />
+                    </TouchableOpacity>
                   </View>
-                  <TouchableOpacity
-                    onPress={() => handleOpenPlayerDetails(player)}
-                    style={styles.actionButton}
-                  >
-                    <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.primary} />
-                  </TouchableOpacity>
-                </View>
-                <View style={styles.cardContent}>
+                  
                   <View style={styles.infoRow}>
-                    <MaterialCommunityIcons name="account-group" size={20} color={COLORS.primary} />
+                    <MaterialCommunityIcons name="account-group" size={20} color="#0CC1EC" />
                     <Text style={styles.infoText}>
                       Team: {player.team ? player.team.name : 'No team assigned'}
                     </Text>
                   </View>
                   
                   <View style={styles.infoRow}>
-                    <MaterialCommunityIcons name="medical-bag" size={20} color={getMedicalVisaStatusColor(player.medicalVisaStatus)} />
-                    <Text style={[styles.infoText, { color: getMedicalVisaStatusColor(player.medicalVisaStatus) }]}>
-                      Visa Status: {player.medicalVisaStatus.charAt(0).toUpperCase() + player.medicalVisaStatus.slice(1)}
+                    <MaterialCommunityIcons 
+                      name="medical-bag" 
+                      size={20} 
+                      color={COLORS.primary} 
+                    />
+                    <Text style={styles.infoText}>
+                      Medical Visa Status: <Text style={{ color: getMedicalVisaStatusColor(player.medicalVisaStatus) }}>
+                        {player.medicalVisaStatus.charAt(0).toUpperCase() + player.medicalVisaStatus.slice(1)}
+                      </Text>
                     </Text>
                   </View>
 
                   <View style={styles.infoRow}>
-                    <MaterialCommunityIcons name="cash" size={20} color={getPaymentStatusColor(player.paymentStatus)} />
-                    <Text style={[styles.infoText, { color: getPaymentStatusColor(player.paymentStatus) }]}>
-                      Payment Status: {player.paymentStatus.charAt(0).toUpperCase() + player.paymentStatus.slice(1)}
+                    <MaterialCommunityIcons 
+                      name="credit-card-outline" 
+                      size={20} 
+                      color={COLORS.primary} 
+                    />
+                    <Text style={styles.infoText}>
+                      Payment Status: <Text style={{ color: getPaymentStatusColor(getPlayerPaymentStatus(player)) }}>
+                        {getPaymentStatusText(getPlayerPaymentStatus(player))}
+                      </Text>
                     </Text>
                   </View>
+                  
+                  {playerMenuVisible === player.id && (
+                    <View style={styles.menuContainer}>
+                      <TouchableOpacity 
+                        style={styles.menuItem}
+                        onPress={() => handleOpenPlayerDetails(player)}
+                      >
+                        <MaterialCommunityIcons name="account-details" size={20} color={COLORS.primary} />
+                        <Text style={styles.menuItemText}>View player details</Text>
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity 
+                        style={styles.menuItem}
+                        onPress={() => handleDeletePlayer(player.id)}
+                      >
+                        <MaterialCommunityIcons name="delete" size={20} color={COLORS.error} />
+                        <Text style={[styles.menuItemText, { color: COLORS.error }]}>Delete player</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
                 </View>
-              </Card.Content>
-            </Card>
+              </View>
+            </View>
           ))
         )}
       </ScrollView>
@@ -353,31 +456,86 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
               </Pressable>
             </View>
             
-            <ScrollView style={{ maxHeight: '80%' }}>
-              <View style={{ padding: SPACING.lg }}>
-                {/* Parent Info */}
-                <View style={styles.detailSection}>
-                  <Text style={styles.detailSectionTitle}>Parent Information</Text>
-                  {parentDetails ? (
-                    <>
-                      <View style={styles.infoRow}>
-                        <MaterialCommunityIcons name="account" size={20} color={COLORS.primary} />
-                        <Text style={styles.infoText}>{parentDetails.name}</Text>
+            {selectedPlayer && (
+              <ScrollView style={{ maxHeight: '80%' }}>
+                <View style={styles.detailsContainer}>
+                  <View style={styles.avatarContainer}>
+                    <MaterialCommunityIcons name="account-circle" size={80} color={COLORS.primary} />
+                    <Text style={styles.playerDetailName}>{selectedPlayer.name}</Text>
+                    <Text style={styles.teamDetailName}>{selectedPlayer.team ? selectedPlayer.team.name : 'No team assigned'}</Text>
+                  </View>
+                  
+                  <View style={styles.detailsSection}>
+                    <Text style={styles.sectionTitle}>Player Information</Text>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Join Date:</Text>
+                      <Text style={styles.detailValue}>{selectedPlayer.created_at ? new Date(selectedPlayer.created_at).toLocaleDateString('en-GB') : 'Unknown'}</Text>
+                    </View>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Birthdate:</Text>
+                      <Text style={styles.detailValue}>{selectedPlayer.birth_date ? new Date(selectedPlayer.birth_date).toLocaleDateString('en-GB') : 'Unknown'}</Text>
+                    </View>
+                  </View>
+                  
+                  <View style={styles.detailsSection}>
+                    <Text style={styles.sectionTitle}>Payment Information</Text>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Status:</Text>
+                      <View style={[
+                        styles.statusBadge,
+                        { backgroundColor: getPaymentStatusColor(getPlayerPaymentStatus(selectedPlayer)) + '20' }
+                      ]}>
+                        <Text style={[
+                          styles.statusText,
+                          { color: getPaymentStatusColor(getPlayerPaymentStatus(selectedPlayer)) }
+                        ]}>
+                          {getPaymentStatusText(getPlayerPaymentStatus(selectedPlayer))}
+                        </Text>
                       </View>
-                      <View style={styles.infoRow}>
-                        <MaterialCommunityIcons name="phone" size={20} color={COLORS.primary} />
-                        <Text style={styles.infoText}>{parentDetails.phone_number}</Text>
+                    </View>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Last Payment:</Text>
+                      <Text style={styles.detailValue}>{selectedPlayer.last_payment_date || 'N/A'}</Text>
+                    </View>
+                  </View>
+                  
+                  {parentDetails && (
+                    <View style={styles.detailsSection}>
+                      <Text style={styles.sectionTitle}>Parent Information</Text>
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>Name:</Text>
+                        <Text style={styles.detailValue}>{parentDetails.name}</Text>
                       </View>
-                    </>
-                  ) : (
-                    <View style={styles.infoRow}>
-                      <MaterialCommunityIcons name="information-outline" size={20} color={COLORS.grey[600]} />
-                      <Text style={styles.infoText}>No parent information available</Text>
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>Phone:</Text>
+                        <Text style={styles.detailValue}>{parentDetails.phone_number}</Text>
+                      </View>
+                      {parentDetails.email && (
+                        <View style={styles.detailRow}>
+                          <Text style={styles.detailLabel}>Email:</Text>
+                          <Text style={styles.detailValue}>{parentDetails.email}</Text>
+                        </View>
+                      )}
                     </View>
                   )}
+                  
+                  <Pressable 
+                    onPress={() => handleDeletePlayer(selectedPlayer.id)}
+                    style={styles.deleteButton}
+                    disabled={isDeleting}
+                  >
+                    <MaterialCommunityIcons 
+                      name="delete" 
+                      size={20} 
+                      color={COLORS.white}
+                    />
+                    <Text style={styles.deleteButtonText}>
+                      {isDeleting ? "Deleting..." : "Delete Player"}
+                    </Text>
+                  </Pressable>
                 </View>
-              </View>
-            </ScrollView>
+              </ScrollView>
+            )}
           </View>
         </View>
       </Modal>
@@ -397,9 +555,10 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.lg,
   },
   sectionTitle: {
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: '600',
-    color: COLORS.text,
+    color: COLORS.primary,
+    marginBottom: SPACING.md,
   },
   totalCount: {
     fontSize: 14,
@@ -447,30 +606,27 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: SPACING.xl * 4,
   },
-  card: {
+  playerCard: {
     marginBottom: SPACING.md,
+    backgroundColor: '#EEFBFF',
+    borderRadius: 12,
+    overflow: 'hidden',
   },
-  cardHeader: {
+  cardPressable: {
+    padding: SPACING.md,
+  },
+  playerCardContent: {
+    gap: SPACING.sm,
+  },
+  nameRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  cardTitleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.sm,
-  },
-  cardTitle: {
+  playerName: {
     fontSize: 18,
     fontWeight: '600',
     color: COLORS.text,
-  },
-  actionButton: {
-    padding: SPACING.xs,
-  },
-  cardContent: {
-    marginTop: SPACING.md,
-    gap: SPACING.sm,
   },
   infoRow: {
     flexDirection: 'row',
@@ -542,69 +698,96 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: COLORS.text,
   },
-  detailSection: {
-    marginBottom: SPACING.lg,
-    backgroundColor: COLORS.white,
-    borderRadius: 16,
+  detailsContainer: {
     padding: SPACING.lg,
-    borderWidth: 1,
-    borderColor: COLORS.grey[200],
   },
-  detailSectionTitle: {
-    fontSize: 16,
+  avatarContainer: {
+    alignItems: 'center',
+    marginBottom: SPACING.lg,
+  },
+  playerDetailName: {
+    fontSize: 20,
     fontWeight: '600',
     color: COLORS.text,
-    marginBottom: SPACING.md,
+    marginTop: SPACING.sm,
+  },
+  teamDetailName: {
+    fontSize: 16,
+    color: COLORS.grey[600],
+    marginTop: SPACING.xs,
+  },
+  detailsSection: {
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    padding: SPACING.lg,
+    marginBottom: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.grey[200],
   },
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: SPACING.xs,
-    marginBottom: SPACING.xs,
+    alignItems: 'center',
+    marginBottom: SPACING.md,
   },
   detailLabel: {
-    fontSize: 14,
+    fontSize: 16,
     color: COLORS.grey[600],
-    flex: 1,
   },
   detailValue: {
-    fontSize: 14,
+    fontSize: 16,
     color: COLORS.text,
     fontWeight: '500',
-    flex: 2,
-    textAlign: 'right',
   },
-  paymentOptions: {
-    marginTop: SPACING.sm,
+  statusBadge: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 6,
+    borderRadius: 100,
+    alignSelf: 'flex-start',
   },
-  paymentOption: {
+  statusText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  actionButtons: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: SPACING.md,
-    marginBottom: SPACING.xs,
-    backgroundColor: COLORS.white,
-    borderRadius: 100,
-    borderWidth: 1,
-    borderColor: COLORS.grey[200],
   },
-  paymentOptionText: {
-    fontSize: 16,
-    marginLeft: SPACING.sm,
-    fontWeight: '500',
-  },
-  updateButton: {
-    backgroundColor: COLORS.primary,
-    padding: SPACING.md,
-    borderRadius: 100,
+  deleteButton: {
+    backgroundColor: COLORS.error,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    padding: SPACING.md,
+    borderRadius: 8,
     marginTop: SPACING.xl,
+    gap: SPACING.sm,
   },
-  updateButtonText: {
+  deleteButtonText: {
     color: COLORS.white,
     fontSize: 16,
     fontWeight: '600',
   },
-  disabledButton: {
-    opacity: 0.7,
+  menuButton: {
+    padding: SPACING.xs,
+  },
+  menuContainer: {
+    backgroundColor: COLORS.white,
+    borderRadius: 8,
+    marginTop: SPACING.sm,
+    marginBottom: SPACING.xs,
+    elevation: 2,
+    padding: SPACING.sm,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+  },
+  menuItemText: {
+    marginLeft: SPACING.sm,
+    fontSize: 14,
+    color: COLORS.text,
   },
 }); 

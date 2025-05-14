@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, TextInput, RefreshControl, Modal } from 'react-native';
-import { Text, Card, SegmentedButtons, Menu, Button } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, Pressable, TextInput, RefreshControl, Modal, TouchableOpacity, Alert } from 'react-native';
+import { Text, Card } from 'react-native-paper';
 import { COLORS, SPACING } from '../../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { supabase } from '../../lib/supabase';
 
 interface Team {
   id: string;
@@ -10,10 +11,18 @@ interface Team {
 }
 
 interface Player {
-  id: string;
-  name: string;
+  player_id: string;
+  player_name: string;
   team_id: string;
   team_name: string;
+  medical_visa_status: string;
+  payment_status: string;
+  parent_id: string | null;
+}
+
+interface ParentDetails {
+  name: string;
+  phone_number: string;
 }
 
 interface CoachManagePlayersScreenProps {
@@ -28,16 +37,75 @@ interface CoachManagePlayersScreenProps {
   onTeamSelect: (teamId: string | null) => void;
 }
 
-const PlayerCard = ({ player }: { player: Player }) => (
+const getMedicalVisaStatusColor = (status: string) => {
+  switch (status.toLowerCase()) {
+    case 'valid':
+      return COLORS.success;
+    case 'pending':
+      return COLORS.warning;
+    case 'expired':
+      return COLORS.error;
+    default:
+      return COLORS.grey[600];
+  }
+};
+
+const getPaymentStatusColor = (status: string) => {
+  switch (status.toLowerCase()) {
+    case 'paid':
+      return COLORS.success;
+    case 'pending':
+      return COLORS.warning;
+    case 'overdue':
+      return COLORS.error;
+    default:
+      return COLORS.grey[600];
+  }
+};
+
+const PlayerCard = ({ player, onDetailsPress }: { player: Player; onDetailsPress: () => void }) => (
   <Card style={styles.playerCard}>
     <Card.Content>
-      <View style={styles.playerCardContent}>
-        <View style={styles.playerInfo}>
-          <MaterialCommunityIcons name="run" size={24} color={COLORS.primary} />
-          <View>
-            <Text style={styles.playerName}>{player.name}</Text>
-            <Text style={styles.teamName}>{player.team_name}</Text>
-          </View>
+      <View style={styles.cardHeader}>
+        <View style={styles.cardTitleContainer}>
+          <MaterialCommunityIcons name="account" size={24} color={COLORS.primary} />
+          <Text style={styles.playerName}>{player.player_name}</Text>
+        </View>
+        <TouchableOpacity
+          onPress={onDetailsPress}
+          style={styles.actionButton}
+        >
+          <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.primary} />
+        </TouchableOpacity>
+      </View>
+      <View style={styles.cardContent}>
+        <View style={styles.infoRow}>
+          <MaterialCommunityIcons name="account-group" size={20} color={COLORS.primary} />
+          <Text style={styles.infoText}>
+            Team: {player.team_name || 'No team assigned'}
+          </Text>
+        </View>
+        
+        <View style={styles.infoRow}>
+          <MaterialCommunityIcons 
+            name="medical-bag" 
+            size={20} 
+            color={getMedicalVisaStatusColor(player.medical_visa_status)} 
+          />
+          <Text style={[styles.infoText, { color: getMedicalVisaStatusColor(player.medical_visa_status) }]}>
+            Visa Status: {player.medical_visa_status.charAt(0).toUpperCase() + player.medical_visa_status.slice(1)}
+          </Text>
+        </View>
+
+        <View style={styles.infoRow}>
+          <MaterialCommunityIcons 
+            name="cash" 
+            size={20} 
+            color={getPaymentStatusColor(player.payment_status)} 
+          />
+          <Text style={[styles.infoText, { color: getPaymentStatusColor(player.payment_status) }]}>
+            Payment Status: {player.payment_status.charAt(0).toUpperCase() + player.payment_status.slice(1)}
+          </Text>
         </View>
       </View>
     </Card.Content>
@@ -57,12 +125,40 @@ export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> =
 }) => {
   const [isTeamModalVisible, setIsTeamModalVisible] = useState(false);
   const selectedTeam = teams.find(team => team.id === selectedTeamId);
+  
+  const [isPlayerDetailsModalVisible, setIsPlayerDetailsModalVisible] = useState(false);
+  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  const [parentDetails, setParentDetails] = useState<ParentDetails | null>(null);
 
   const filteredPlayers = players.filter(player => {
-    const matchesSearch = player.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = player.player_name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesTeam = !selectedTeamId || player.team_id === selectedTeamId;
     return matchesSearch && matchesTeam;
   });
+
+  const handleOpenPlayerDetails = async (player: Player) => {
+    setSelectedPlayer(player);
+    
+    if (player.parent_id) {
+      try {
+        const { data, error } = await supabase
+          .from('parents')
+          .select('name, phone_number')
+          .eq('id', player.parent_id)
+          .single();
+          
+        if (error) throw error;
+        setParentDetails(data);
+      } catch (error) {
+        console.error('Error fetching parent details:', error);
+        setParentDetails(null);
+      }
+    } else {
+      setParentDetails(null);
+    }
+    
+    setIsPlayerDetailsModalVisible(true);
+  };
 
   return (
     <View style={styles.container}>
@@ -107,7 +203,11 @@ export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> =
           }
         >
           {filteredPlayers.map(player => (
-            <PlayerCard key={player.id} player={player} />
+            <PlayerCard 
+              key={player.player_id} 
+              player={player} 
+              onDetailsPress={() => handleOpenPlayerDetails(player)}
+            />
           ))}
           {filteredPlayers.length === 0 && !isLoading && (
             <Text style={styles.emptyText}>No players found</Text>
@@ -197,6 +297,51 @@ export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> =
             </View>
           </View>
         </Modal>
+
+        <Modal
+          visible={isPlayerDetailsModalVisible}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setIsPlayerDetailsModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Player Details</Text>
+                <Pressable 
+                  onPress={() => setIsPlayerDetailsModalVisible(false)}
+                  style={styles.closeButton}
+                >
+                  <MaterialCommunityIcons
+                    name="close"
+                    size={24}
+                    color={COLORS.text}
+                  />
+                </Pressable>
+              </View>
+
+              {selectedPlayer && (
+                <View style={styles.detailsContainer}>
+                  {parentDetails ? (
+                    <View style={styles.sectionContainer}>
+                      <Text style={styles.sectionTitle}>Parent Information</Text>
+                      <View style={styles.infoRow}>
+                        <MaterialCommunityIcons name="account" size={24} color={COLORS.primary} />
+                        <Text style={styles.detailText}>{parentDetails.name}</Text>
+                      </View>
+                      <View style={styles.infoRow}>
+                        <MaterialCommunityIcons name="phone" size={24} color={COLORS.primary} />
+                        <Text style={styles.detailText}>{parentDetails.phone_number}</Text>
+                      </View>
+                    </View>
+                  ) : (
+                    <Text style={styles.noParentText}>No parent information available</Text>
+                  )}
+                </View>
+              )}
+            </View>
+          </View>
+        </Modal>
       </View>
     </View>
   );
@@ -267,27 +412,36 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   playerCard: {
-    marginBottom: SPACING.sm,
-    backgroundColor: COLORS.white,
+    marginBottom: SPACING.md,
+    borderRadius: 10,
+    backgroundColor: '#EEFBFF',
   },
-  playerCardContent: {
+  cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: SPACING.sm,
   },
-  playerInfo: {
+  cardTitleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.md,
   },
   playerName: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: COLORS.text,
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginLeft: SPACING.sm,
   },
-  teamName: {
+  cardContent: {
+    marginTop: SPACING.sm,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: SPACING.xs,
+  },
+  infoText: {
     fontSize: 14,
-    color: COLORS.grey[600],
+    marginLeft: SPACING.sm,
   },
   emptyText: {
     textAlign: 'center',
@@ -344,5 +498,43 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.sm,
+  },
+  teamName: {
+    fontSize: 14,
+    color: COLORS.grey[600],
+  },
+  actionButton: {
+    padding: SPACING.xs,
+  },
+  detailsContainer: {
+    paddingVertical: SPACING.lg,
+  },
+  sectionContainer: {
+    marginBottom: SPACING.lg,
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    padding: SPACING.lg,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: SPACING.md,
+    color: COLORS.text,
+  },
+  detailText: {
+    fontSize: 16,
+    marginLeft: SPACING.sm,
+    color: COLORS.text,
+  },
+  noParentText: {
+    textAlign: 'center',
+    fontSize: 16,
+    color: COLORS.grey[500],
+    marginVertical: SPACING.xl,
   },
 }); 

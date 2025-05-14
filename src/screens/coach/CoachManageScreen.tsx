@@ -17,10 +17,13 @@ interface Team {
 }
 
 interface Player {
-  id: string;
-  name: string;
+  player_id: string;
+  player_name: string;
   team_id: string;
   team_name: string;
+  medical_visa_status: string;
+  payment_status: string;
+  parent_id: string | null;
 }
 
 export const CoachManageScreen = () => {
@@ -48,6 +51,7 @@ export const CoachManageScreen = () => {
       
       if (!storedCoachData) {
         console.log('No stored coach data found');
+        setIsLoading(false);
         return;
       }
 
@@ -61,12 +65,14 @@ export const CoachManageScreen = () => {
       if (verifyError) {
         console.error('Error verifying coach access:', verifyError);
         Alert.alert('Error', 'Failed to verify coach access. Please try logging in again.');
+        setIsLoading(false);
         return;
       }
 
       if (!verifyData?.is_valid) {
         console.error('Invalid coach access');
         Alert.alert('Error', 'Invalid coach access. Please try logging in again.');
+        setIsLoading(false);
         return;
       }
 
@@ -78,24 +84,36 @@ export const CoachManageScreen = () => {
       if (teamsError) {
         console.error('Error fetching teams:', teamsError);
         Alert.alert('Error', 'Failed to load teams. Please try again.');
-        return;
+      } else {
+        console.log('Teams fetched:', teamsData);
+        const transformedTeams = (teamsData || []).map((team: { team_id: string; team_name: string; player_count?: number }) => ({
+          id: team.team_id,
+          name: team.team_name,
+          players_count: team.player_count || 0
+        }));
+        console.log('Transformed teams:', transformedTeams);
+        setTeams(transformedTeams);
       }
 
-      console.log('Teams fetched:', teamsData);
+      // Load players using the new get_coach_players function
+      console.log('Fetching players for coach ID:', coachData.id);
+      const { data: playersData, error: playersError } = await supabase
+        .rpc('get_coach_players', { p_coach_id: coachData.id });
 
-      // Transform teams data
-      const transformedTeams = (teamsData || []).map((team: { team_id: string; team_name: string; player_count?: number }) => ({
-        id: team.team_id,
-        name: team.team_name,
-        players_count: team.player_count || 0
-      }));
-
-      console.log('Transformed teams:', transformedTeams);
-      setTeams(transformedTeams);
+      if (playersError) {
+        console.error('Error fetching players:', playersError);
+        Alert.alert('Error', 'Failed to load players. Please try again.');
+        setPlayers([]);
+      } else {
+        console.log('Players fetched:', playersData);
+        setPlayers(playersData || []);
+      }
 
     } catch (error) {
       console.error('Error loading data:', error);
       Alert.alert('Error', 'Failed to load data. Please try again.');
+      setTeams([]);
+      setPlayers([]);
     } finally {
       setIsLoading(false);
     }

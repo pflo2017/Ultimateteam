@@ -39,6 +39,9 @@ export const ParentManageScreen = () => {
   const loadChildren = async () => {
     try {
       setIsLoading(true);
+      // Clear children list first to avoid showing stale data
+      setChildren([]);
+      
       const parentData = await AsyncStorage.getItem('parent_data');
       if (!parentData) throw new Error('No parent data found');
 
@@ -127,19 +130,92 @@ export const ParentManageScreen = () => {
           onPress: async () => {
             try {
               setIsLoading(true);
-              const { error } = await supabase
+              console.log("Starting deletion process for child ID:", childId);
+              
+              // First, get the child data to get the team_id and other details
+              const { data: childData, error: childFetchError } = await supabase
+                .from('parent_children')
+                .select('*')
+                .eq('id', childId)
+                .single();
+                
+              if (childFetchError) {
+                console.error('Error fetching child data:', childFetchError);
+                throw new Error('Could not find child data');
+              }
+              
+              console.log("Child data found:", childData);
+              
+              // Get parent data from AsyncStorage
+              const parentData = await AsyncStorage.getItem('parent_data');
+              if (!parentData) {
+                throw new Error('Parent data not found');
+              }
+              const parent = JSON.parse(parentData);
+              
+              // Delete players linked to this child
+              console.log("Attempting to update player with name:", childData.full_name);
+              const { data: updatePlayerData, error: playerUpdateError } = await supabase
+                .from('players')
+                .update({ is_active: false })
+                .eq('name', childData.full_name)
+                .eq('parent_id', parent.id);
+                
+              if (playerUpdateError) {
+                console.error('Error updating player:', playerUpdateError);
+                // We'll continue with child deletion even if player update fails
+              } else {
+                console.log("Player update result:", updatePlayerData);
+              }
+              
+              // Now delete the child record
+              console.log("Attempting to delete child with ID:", childId);
+              const { data: updateChildData, error: childUpdateError } = await supabase
                 .from('parent_children')
                 .update({ is_active: false })
-                .eq('id', childId);
+                .eq('id', childId)
+                .select(); // Request the updated row to confirm update
                 
-              if (error) throw error;
+              if (childUpdateError) {
+                console.error('Error updating child:', childUpdateError);
+                throw new Error('Failed to delete child');
+              }
+              
+              console.log("Child update result:", updateChildData);
+              
+              if (!updateChildData || updateChildData.length === 0) {
+                console.error('Child not updated, no rows affected');
+                throw new Error('Failed to delete child - no rows affected');
+              }
+              
+              // Verify child is now inactive
+              console.log("Verifying child is now inactive...");
+              const { data: verifyData, error: verifyError } = await supabase
+                .from('parent_children')
+                .select('*')
+                .eq('id', childId)
+                .single();
+                
+              if (verifyError) {
+                console.error('Error verifying child update:', verifyError);
+              } else {
+                console.log("Child after update:", verifyData);
+                if (verifyData.is_active === true) {
+                  console.error('Child is still active after update!');
+                  throw new Error('Failed to delete child - it is still active');
+                }
+              }
               
               Alert.alert("Success", "Child deleted successfully");
-              loadChildren();
+              
+              // Force reload from database with a slight delay to ensure DB consistency
+              setTimeout(async () => {
+                await loadChildren();
+                setIsLoading(false);
+              }, 500);
             } catch (error) {
-              console.error('Error deleting child:', error);
-              Alert.alert("Error", "Failed to delete child");
-            } finally {
+              console.error('Error in delete process:', error);
+              Alert.alert("Error", error instanceof Error ? error.message : "Failed to delete child");
               setIsLoading(false);
             }
           }
@@ -166,16 +242,6 @@ export const ParentManageScreen = () => {
         contentContainerStyle={styles.scrollViewContent}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.header}>
-          <Text style={styles.title}>My Children</Text>
-          <Text style={styles.subtitle}>Manage your children's information</Text>
-          {__DEV__ && (
-            <Text style={styles.debugText}>
-              State: {isLoading ? 'Loading...' : `Loaded (${children.length} children)`}
-            </Text>
-          )}
-        </View>
-
         <Pressable 
           onPress={handleAddChild}
           style={styles.addButtonAdminConsistent}
@@ -293,23 +359,6 @@ const styles = StyleSheet.create({
   scrollViewContent: {
     padding: SPACING.xl,
   },
-  header: {
-    alignItems: 'center',
-    marginBottom: SPACING.xl,
-  },
-  title: {
-    fontSize: FONT_SIZES.xxl,
-    fontWeight: '700',
-    color: COLORS.text,
-    marginBottom: SPACING.xs,
-    fontFamily: 'Urbanist',
-  },
-  subtitle: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.grey[600],
-    fontFamily: 'Urbanist',
-    textAlign: 'center',
-  },
   addButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -404,29 +453,6 @@ const styles = StyleSheet.create({
   infoText: {
     fontSize: FONT_SIZES.md,
     color: COLORS.grey[600],
-    fontFamily: 'Urbanist',
-  },
-  debugText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.warning,
-    marginTop: 4,
-    fontFamily: 'Urbanist',
-  },
-  debugButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORS.grey[200],
-    borderRadius: 100,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    marginBottom: 12,
-    alignSelf: 'center',
-  },
-  debugButtonText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.grey[700],
-    marginLeft: 4,
     fontFamily: 'Urbanist',
   },
   actionButtons: {

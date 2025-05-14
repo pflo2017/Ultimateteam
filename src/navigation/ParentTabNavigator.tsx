@@ -45,7 +45,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     height: 44,
     backgroundColor: COLORS.white,
-    marginTop: Platform.OS === 'ios' ? 47 : 0,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.grey[200],
   },

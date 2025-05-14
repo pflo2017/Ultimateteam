@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, TextInput, RefreshControl, Alert } from 'react-native';
-import { Text, ActivityIndicator, Card, Snackbar } from 'react-native-paper';
+import { Text, ActivityIndicator, Card, Snackbar, IconButton } from 'react-native-paper';
 import { COLORS, SPACING } from '../../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -41,37 +41,35 @@ export const ManageCoachesScreen: React.FC<ManageCoachesScreenProps> = ({
   const [showSnackbar, setShowSnackbar] = useState(false);
 
   const renderCoachCard = (coach: Coach) => (
-    <Card key={coach.id} style={[styles.card, { backgroundColor: '#EEFBFF' }]}>
-      <Card.Content>
-        <View style={styles.cardHeader}>
-          <View style={styles.cardTitleContainer}>
-            <MaterialCommunityIcons name="account-tie" size={24} color={COLORS.primary} />
-            <Text style={styles.cardTitle}>{coach.name}</Text>
-          </View>
-          <View style={styles.cardActions}>
-            <TouchableOpacity
+    <View key={coach.id} style={styles.coachCard}>
+      <View style={styles.cardPressable}>
+        <View style={styles.coachCardContent}>
+          <View style={styles.nameRow}>
+            <Text style={styles.coachName}>{coach.name}</Text>
+            <IconButton
+              icon="pencil"
+              size={20}
+              iconColor="#0CC1EC"
               onPress={() => navigation.navigate('EditCoach', { coachId: coach.id })}
-              style={styles.actionButton}
-            >
-              <MaterialCommunityIcons name="pencil" size={20} color={COLORS.primary} />
-            </TouchableOpacity>
+            />
           </View>
-        </View>
-        <View style={styles.cardContent}>
+          
           <View style={styles.infoRow}>
-            <MaterialCommunityIcons name="phone" size={20} color={COLORS.primary} />
+            <MaterialCommunityIcons name="phone" size={20} color="#0CC1EC" />
             <Text style={styles.infoText}>{coach.phone_number}</Text>
           </View>
+          
           <View style={styles.infoRow}>
-            <MaterialCommunityIcons name="key" size={20} color={COLORS.primary} />
+            <MaterialCommunityIcons name="key" size={20} color="#0CC1EC" />
             <Text style={styles.infoText}>Access code: {coach.access_code}</Text>
             <TouchableOpacity
               onPress={() => onCopyAccessCode(coach.access_code)}
               style={styles.copyButton}
             >
-              <MaterialCommunityIcons name="content-copy" size={20} color={COLORS.primary} />
+              <MaterialCommunityIcons name="content-copy" size={20} color="#0CC1EC" />
             </TouchableOpacity>
           </View>
+          
           <View style={styles.teamsContainer}>
             <Text style={styles.teamsLabel}>Assigned Teams:</Text>
             <View style={styles.teamsList}>
@@ -87,8 +85,8 @@ export const ManageCoachesScreen: React.FC<ManageCoachesScreenProps> = ({
             </View>
           </View>
         </View>
-      </Card.Content>
-    </Card>
+      </View>
+    </View>
   );
 
   if (isLoading) {
@@ -203,34 +201,27 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: SPACING.xl * 4,
   },
-  card: {
+  coachCard: {
     marginBottom: SPACING.md,
+    backgroundColor: '#EEFBFF',
+    borderRadius: 12,
+    overflow: 'hidden',
   },
-  cardHeader: {
+  cardPressable: {
+    padding: SPACING.md,
+  },
+  coachCardContent: {
+    gap: SPACING.sm,
+  },
+  nameRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  cardTitleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.sm,
-  },
-  cardTitle: {
+  coachName: {
     fontSize: 18,
     fontWeight: '600',
     color: COLORS.text,
-  },
-  cardActions: {
-    flexDirection: 'row',
-    gap: SPACING.sm,
-  },
-  actionButton: {
-    padding: SPACING.xs,
-  },
-  cardContent: {
-    marginTop: SPACING.md,
-    gap: SPACING.sm,
   },
   infoRow: {
     flexDirection: 'row',

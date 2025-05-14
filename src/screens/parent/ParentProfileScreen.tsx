@@ -7,6 +7,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../types/navigation';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { supabase } from '../../lib/supabase';
 
 type ParentProfileScreenNavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -17,9 +18,35 @@ export const ParentProfileScreen = () => {
   useEffect(() => {
     const loadParentData = async () => {
       try {
+        // Get parent ID from AsyncStorage
         const data = await AsyncStorage.getItem('parent_data');
-        if (data) {
-          setParentData(JSON.parse(data));
+        if (!data) {
+          console.error('No parent data found');
+          return;
+        }
+        
+        const parentInfo = JSON.parse(data);
+        console.log('Loading parent profile data for:', parentInfo.id);
+        
+        // Get fresh data directly from the database
+        const { data: freshData, error } = await supabase
+          .from('parents')
+          .select('*')
+          .eq('id', parentInfo.id)
+          .single();
+          
+        if (error) {
+          console.error('Error fetching fresh data:', error);
+          // Fall back to stored data
+          setParentData(parentInfo);
+        } else if (freshData) {
+          console.log('Fresh data from database:', freshData);
+          
+          // Update AsyncStorage with fresh data
+          await AsyncStorage.setItem('parent_data', JSON.stringify(freshData));
+          
+          // Update UI
+          setParentData(freshData);
         }
       } catch (error) {
         console.error('Error loading parent data:', error);
@@ -27,7 +54,11 @@ export const ParentProfileScreen = () => {
     };
 
     loadParentData();
-  }, []);
+    
+    // Setup focus listener to reload data when screen comes into focus
+    const unsubscribe = navigation.addListener('focus', loadParentData);
+    return unsubscribe;
+  }, [navigation]);
 
   const handleLogout = async () => {
     try {

@@ -61,6 +61,7 @@ interface ParentChild {
   medical_visa_status: string;
   medical_visa_issue_date: string | null;
   team_id: string;
+  birth_date: string;
 }
 
 type ManageScreenParams = {
@@ -230,6 +231,7 @@ export const AdminManageScreen = () => {
           is_active,
           team_id,
           parent_id,
+          birth_date,
           teams:team_id(id, name)
         `)
         .eq('is_active', true)
@@ -253,6 +255,7 @@ export const AdminManageScreen = () => {
           full_name,
           medical_visa_status,
           medical_visa_issue_date,
+          birth_date,
           team_id
         `)
         .in('parent_id', parentIds)
@@ -293,6 +296,14 @@ export const AdminManageScreen = () => {
         let paymentStatus = 'pending'; // Default value until implemented
         let teamId = player.team_id;
         let teamName = null;
+        let birthDate = player.birth_date;
+        
+        // Check for recently joined players - set to on_trial
+        const createdAt = new Date(player.created_at);
+        const now = new Date();
+        const diff = now.getTime() - createdAt.getTime();
+        const isOnTrial = diff < 30 * 24 * 60 * 60 * 1000;
+        if (isOnTrial) paymentStatus = 'on_trial';
         
         // Always prefer team from parent_children if available
         if (player.parent_id && childrenMap.has(player.parent_id)) {
@@ -303,6 +314,10 @@ export const AdminManageScreen = () => {
           );
           if (matchingChild) {
             medicalVisaStatus = matchingChild.medical_visa_status;
+            // Update birth date from parent_children if available
+            if (matchingChild.birth_date) {
+              birthDate = matchingChild.birth_date;
+            }
             if (matchingChild.team_id && teamsMap.has(matchingChild.team_id)) {
               teamId = matchingChild.team_id;
               teamName = teamsMap.get(matchingChild.team_id).name;
@@ -322,7 +337,9 @@ export const AdminManageScreen = () => {
           team: teamName ? { name: teamName } : null,
           medicalVisaStatus,
           paymentStatus,
-          parent_id: player.parent_id
+          payment_status: paymentStatus, // For consistency with PaymentsScreen
+          parent_id: player.parent_id,
+          birth_date: birthDate
         };
       });
 

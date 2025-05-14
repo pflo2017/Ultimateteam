@@ -103,7 +103,7 @@ export const Navigation = () => {
         <Stack.Navigator screenOptions={{ headerShown: false }}>
           {session ? (
             <Stack.Screen 
-              name="AdminDashboard" 
+              name="AdminRoot" 
               component={AdminNavigator}
               options={{
                 headerShown: false,

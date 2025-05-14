@@ -32,12 +32,11 @@ export type ParentTabParamList = {
 
 export type RootStackParamList = {
   Home: undefined;
-  AdminDashboard: undefined;
   Coach: undefined;
   AdminLogin: undefined;
   AdminRegister: undefined;
   CoachLogin: undefined;
-  AdminTabs: undefined;
+  AdminRoot: { screen?: keyof AdminTabParamList } | undefined;
   ClubSettings: undefined;
   AddTeam: undefined;
   AddCoach: undefined;

@@ -5,7 +5,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../constants/theme';
 import { AdminHomeScreen } from '../screens/admin/HomeScreen';
 import { AdminManageScreen } from '../screens/admin/ManageScreen';
-import { AdminPaymentsScreen } from '../screens/admin/PaymentsScreen';
+import { PaymentsScreen } from '../screens/admin/PaymentsScreen';
 import { AdminChatScreen } from '../screens/admin/ChatScreen';
 import { AdminNewsScreen } from '../screens/admin/NewsScreen';
 import { ClubSettingsScreen } from '../screens/admin/ClubSettingsScreen';
@@ -282,7 +282,7 @@ const TabNavigator = () => {
       />
       <Tab.Screen
         name="Payments"
-        component={AdminPaymentsScreen}
+        component={PaymentsScreen}
         options={{
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="credit-card-outline" size={size} color={color} />
