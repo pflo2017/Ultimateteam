@@ -25,6 +25,7 @@ export type AdminTabParamList = {
 export type ParentTabParamList = {
   Dashboard: undefined;
   Manage: undefined;
+  Payments: undefined;
   Events: undefined;
   Chat: undefined;
   News: undefined;
