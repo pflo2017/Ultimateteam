@@ -95,7 +95,8 @@ export const CoachManageScreen = () => {
         setTeams(transformedTeams);
       }
 
-      // Load players using the new get_coach_players function
+      // SIMPLER APPROACH: Just use the RPC function to get players
+      // The players table might have security policies preventing direct access
       console.log('Fetching players for coach ID:', coachData.id);
       const { data: playersData, error: playersError } = await supabase
         .rpc('get_coach_players', { p_coach_id: coachData.id });
@@ -106,9 +107,71 @@ export const CoachManageScreen = () => {
         setPlayers([]);
       } else {
         console.log('Players fetched:', playersData);
-        setPlayers(playersData || []);
+        
+        // Fetch team data to get more information for these players
+        try {
+          // Get all teams this coach is assigned to
+          const { data: teamInfo, error: teamInfoError } = await supabase
+            .from('teams')
+            .select('id, created_at')
+            .eq('coach_id', coachData.id);
+            
+          if (teamInfoError) {
+            console.error('Error fetching team info:', teamInfoError);
+          } else {
+            console.log('Team info fetched:', teamInfo);
+            
+            // Get parent_children data to find birthdates
+            const { data: parentChildrenData, error: parentChildrenError } = await supabase
+              .from('parent_children')
+              .select('parent_id, full_name, birth_date')
+              .eq('is_active', true);
+              
+            if (parentChildrenError) {
+              console.error('Error fetching parent children data:', parentChildrenError);
+            }
+            
+            console.log('Parent children data:', parentChildrenData);
+            
+            // Use the team creation date as a fallback for player join date
+            const enhancedPlayers = (playersData || []).map((player: any) => {
+              // Find player's team in teamInfo
+              const team = teamInfo.find((t: any) => t.id === player.team_id);
+              
+              // Try to find matching child record for birth date
+              let birthDate = null;
+              if (player.parent_id && parentChildrenData) {
+                // Find child record with matching parent_id and name
+                const matchingChild = parentChildrenData.find(
+                  (child: any) => 
+                    child.parent_id === player.parent_id && 
+                    child.full_name.toLowerCase() === player.player_name.toLowerCase()
+                );
+                
+                if (matchingChild && matchingChild.birth_date) {
+                  console.log(`Found birth date for ${player.player_name}:`, matchingChild.birth_date);
+                  birthDate = matchingChild.birth_date;
+                }
+              }
+              
+              return {
+                ...player,
+                // Set created_at to the team's created_at as a fallback
+                created_at: team?.created_at || new Date().toISOString(),
+                // Use birth_date from parent_children if available
+                birth_date: birthDate
+              };
+            });
+            
+            console.log('Enhanced players with team dates and birth dates:', enhancedPlayers);
+            setPlayers(enhancedPlayers);
+          }
+        } catch (teamError) {
+          console.error('Error enhancing players with team data:', teamError);
+          // Still set the basic player data
+          setPlayers(playersData || []);
+        }
       }
-
     } catch (error) {
       console.error('Error loading data:', error);
       Alert.alert('Error', 'Failed to load data. Please try again.');

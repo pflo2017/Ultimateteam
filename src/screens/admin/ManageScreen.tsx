@@ -51,7 +51,10 @@ interface Player {
     name: string;
   } | null;
   medicalVisaStatus: string;
-  paymentStatus: string;
+  paymentStatus: 'select_status' | 'on_trial' | 'pending' | 'paid' | 'unpaid' | 'trial_ended';
+  payment_status: 'select_status' | 'on_trial' | 'pending' | 'paid' | 'unpaid' | 'trial_ended';
+  parent_id?: string | null;
+  birth_date?: string | null;
 }
 
 interface ParentChild {
@@ -232,6 +235,8 @@ export const AdminManageScreen = () => {
           team_id,
           parent_id,
           birth_date,
+          payment_status,
+          last_payment_date,
           teams:team_id(id, name)
         `)
         .eq('is_active', true)
@@ -293,17 +298,23 @@ export const AdminManageScreen = () => {
       const transformedPlayers = playersData.map(player => {
         // Find matching child record
         let medicalVisaStatus = 'unknown';
-        let paymentStatus = 'pending'; // Default value until implemented
+        // Default for new players is 'select_status' unless specifically set
+        let paymentStatus = player.payment_status || 'select_status';
         let teamId = player.team_id;
         let teamName = null;
         let birthDate = player.birth_date;
         
-        // Check for recently joined players - set to on_trial
+        // Calculate player age (time since created)
         const createdAt = new Date(player.created_at);
         const now = new Date();
         const diff = now.getTime() - createdAt.getTime();
-        const isOnTrial = diff < 30 * 24 * 60 * 60 * 1000;
-        if (isOnTrial) paymentStatus = 'on_trial';
+        const daysSinceCreated = diff / (24 * 60 * 60 * 1000);
+        
+        // Auto-status logic based on user requirements
+        // 1. If player is on trial and 30 days have passed, switch to 'trial_ended'
+        if (paymentStatus === 'on_trial' && daysSinceCreated >= 30) {
+          paymentStatus = 'trial_ended';
+        }
         
         // Always prefer team from parent_children if available
         if (player.parent_id && childrenMap.has(player.parent_id)) {

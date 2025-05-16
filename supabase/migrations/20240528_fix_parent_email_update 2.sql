@@ -1,4 +1,4 @@
-i-- Create a superuser-level function to update parent email
+-- Create a superuser-level function to update parent email
 -- This function will bypass RLS policies
 CREATE OR REPLACE FUNCTION update_parent_email_bypass(
   p_id uuid, 

@@ -27,7 +27,7 @@ interface Player {
   payment_status?: string;
   last_payment_date?: string;
   birth_date?: string | null;
-  parent_id?: string;
+  parent_id?: string | null;
 }
 
 interface ManagePlayersScreenProps {
@@ -70,7 +70,8 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
 
   const handleOpenPlayerDetails = async (player: Player) => {
     setSelectedPlayer(player);
-    setPaymentStatus(player.paymentStatus);
+    // Prioritize payment_status (database field) over paymentStatus (local field)
+    setPaymentStatus(player.payment_status || player.paymentStatus || 'pending');
     
     // Fetch parent details if player has parent_id
     if (player.parent_id) {
@@ -99,21 +100,41 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
     
     setIsUpdatingPayment(true);
     try {
-      // In a real implementation, you would update this in your database
-      // For now, we'll just simulate the update in the local state
+      // Get the current date for 'paid' status
+      const today = new Date().toISOString();
       
-      // TODO: Add actual API call to update payment status
-      // Example:
-      // const { error } = await supabase
-      //   .from('players')
-      //   .update({ payment_status: paymentStatus })
-      //   .eq('id', selectedPlayer.id);
+      // Create the update object with payment_status always included
+      const updateData: any = { 
+        payment_status: paymentStatus 
+      };
       
-      // if (error) throw error;
+      // Only include last_payment_date if status is 'paid'
+      // or if the current value is a valid date (not "No payment")
+      if (paymentStatus === 'paid') {
+        updateData.last_payment_date = today;
+      }
+      
+      // Update the payment status in the database
+      const { error } = await supabase
+        .from('players')
+        .update(updateData)
+        .eq('id', selectedPlayer.id);
+        
+      if (error) throw error;
       
       // Update the local state
       const updatedPlayers = players.map(p => 
-        p.id === selectedPlayer.id ? {...p, paymentStatus} : p
+        p.id === selectedPlayer.id 
+          ? {
+              ...p, 
+              paymentStatus: paymentStatus,
+              payment_status: paymentStatus, // Ensure both fields are updated
+              // Update last_payment_date if paid
+              last_payment_date: paymentStatus === 'paid' 
+                ? new Date().toLocaleDateString('en-GB') 
+                : p.last_payment_date
+            } 
+          : p
       );
       
       // Refresh the data (this would be handled by the parent component)
@@ -192,12 +213,15 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
       case 'paid':
         return COLORS.success;
       case 'pending':
-        return COLORS.warning;
-      case 'overdue':
-      case 'missed':
+        return '#FFA500'; // Orange
+      case 'unpaid':
         return COLORS.error;
       case 'on_trial':
         return COLORS.primary;
+      case 'trial_ended':
+        return COLORS.grey[800];
+      case 'select_status':
+        return COLORS.text; // Use black text color
       default:
         return COLORS.grey[600];
     }
@@ -209,18 +233,22 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
         return 'Paid';
       case 'pending':
         return 'Pending';
-      case 'overdue':
-      case 'missed':
-        return 'Overdue';
+      case 'unpaid':
+        return 'Unpaid';
       case 'on_trial':
         return 'On Trial';
+      case 'trial_ended':
+        return 'Trial Ended';
+      case 'select_status':
+        return 'Select Status';
       default:
         return status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Unknown';
     }
   };
 
   const getPlayerPaymentStatus = (player: Player): string => {
-    return player.paymentStatus || player.payment_status || 'pending';
+    // Prioritize payment_status (database field) over paymentStatus (local field)
+    return player.payment_status || player.paymentStatus || 'pending';
   };
 
   if (isLoading) {
@@ -318,7 +346,10 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
                       color={COLORS.primary} 
                     />
                     <Text style={styles.infoText}>
-                      Payment Status: <Text style={{ color: getPaymentStatusColor(getPlayerPaymentStatus(player)) }}>
+                      Payment Status: <Text style={{ 
+                        color: getPaymentStatusColor(getPlayerPaymentStatus(player)),
+                        fontWeight: getPlayerPaymentStatus(player) === 'select_status' ? 'bold' : 'normal'
+                      }}>
                         {getPaymentStatusText(getPlayerPaymentStatus(player))}
                       </Text>
                     </Text>
@@ -441,23 +472,19 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
         onRequestClose={() => setIsPlayerDetailsModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { padding: 0, borderRadius: 16 }]}>
+          <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Player Details</Text>
-              <Pressable 
+              <TouchableOpacity 
                 onPress={() => setIsPlayerDetailsModalVisible(false)}
                 style={styles.closeButton}
               >
-                <MaterialCommunityIcons
-                  name="close"
-                  size={24}
-                  color={COLORS.text}
-                />
-              </Pressable>
+                <MaterialCommunityIcons name="close" size={24} color={COLORS.text} />
+              </TouchableOpacity>
             </View>
             
             {selectedPlayer && (
-              <ScrollView style={{ maxHeight: '80%' }}>
+              <ScrollView>
                 <View style={styles.detailsContainer}>
                   <View style={styles.avatarContainer}>
                     <MaterialCommunityIcons name="account-circle" size={80} color={COLORS.primary} />
@@ -466,7 +493,7 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
                   </View>
                   
                   <View style={styles.detailsSection}>
-                    <Text style={styles.sectionTitle}>Player Information</Text>
+                    <Text style={styles.modalSectionTitle}>Player Information</Text>
                     <View style={styles.detailRow}>
                       <Text style={styles.detailLabel}>Join Date:</Text>
                       <Text style={styles.detailValue}>{selectedPlayer.created_at ? new Date(selectedPlayer.created_at).toLocaleDateString('en-GB') : 'Unknown'}</Text>
@@ -478,7 +505,7 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
                   </View>
                   
                   <View style={styles.detailsSection}>
-                    <Text style={styles.sectionTitle}>Payment Information</Text>
+                    <Text style={styles.modalSectionTitle}>Payment Information</Text>
                     <View style={styles.detailRow}>
                       <Text style={styles.detailLabel}>Status:</Text>
                       <View style={[
@@ -501,7 +528,7 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
                   
                   {parentDetails && (
                     <View style={styles.detailsSection}>
-                      <Text style={styles.sectionTitle}>Parent Information</Text>
+                      <Text style={styles.modalSectionTitle}>Parent Information</Text>
                       <View style={styles.detailRow}>
                         <Text style={styles.detailLabel}>Name:</Text>
                         <Text style={styles.detailValue}>{parentDetails.name}</Text>
@@ -519,7 +546,7 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
                     </View>
                   )}
                   
-                  <Pressable 
+                  <TouchableOpacity 
                     onPress={() => handleDeletePlayer(selectedPlayer.id)}
                     style={styles.deleteButton}
                     disabled={isDeleting}
@@ -532,7 +559,7 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
                     <Text style={styles.deleteButtonText}>
                       {isDeleting ? "Deleting..." : "Delete Player"}
                     </Text>
-                  </Pressable>
+                  </TouchableOpacity>
                 </View>
               </ScrollView>
             )}
@@ -555,10 +582,10 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.lg,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 24,
     fontWeight: '600',
-    color: COLORS.primary,
-    marginBottom: SPACING.md,
+    color: COLORS.text,
+    marginBottom: 0,
   },
   totalCount: {
     fontSize: 14,
@@ -707,35 +734,38 @@ const styles = StyleSheet.create({
   },
   playerDetailName: {
     fontSize: 20,
-    fontWeight: '600',
-    color: COLORS.text,
+    fontWeight: 'bold',
     marginTop: SPACING.sm,
   },
   teamDetailName: {
     fontSize: 16,
     color: COLORS.grey[600],
-    marginTop: SPACING.xs,
   },
   detailsSection: {
     backgroundColor: COLORS.white,
-    borderRadius: 12,
+    borderRadius: 8,
     padding: SPACING.lg,
     marginBottom: SPACING.lg,
-    borderWidth: 1,
-    borderColor: COLORS.grey[200],
+    elevation: 2,
+  },
+  modalSectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: SPACING.md,
+    color: '#00BDF2', // Turquoise color
   },
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: SPACING.md,
+    marginBottom: SPACING.sm,
   },
   detailLabel: {
-    fontSize: 16,
+    fontSize: 14,
     color: COLORS.grey[600],
   },
   detailValue: {
-    fontSize: 16,
+    fontSize: 14, 
     color: COLORS.text,
     fontWeight: '500',
   },

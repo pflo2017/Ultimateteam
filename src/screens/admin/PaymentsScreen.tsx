@@ -308,7 +308,7 @@ const PaymentsScreenComponent = () => {
       // Only use valid statuses for player_payments table (based on constraint)
       const currentDate = new Date();
       const currentMonth = currentDate.getMonth() + 1; // 1-12
-      const currentYear = 2025; // Hardcoded to 2025 as requested
+      const currentYear = currentDate.getFullYear(); // Use actual current year instead of hardcoding
       
       // Use our helper function to map to a valid value
       const paymentRecordStatus = getValidPaymentHistoryStatus(status);
@@ -405,30 +405,32 @@ const PaymentsScreenComponent = () => {
     
     // Get current date info
     const currentDate = new Date();
-    const currentYear = 2025; // Hardcode to 2025 as requested
+    const currentYear = currentDate.getFullYear();
     const currentMonth = currentDate.getMonth(); // 0-11
     
-    // Create months only for past and current months in 2025
+    // Create array of months for the current year only (January to current month)
     const months = [];
-    // Start from current month and go backwards (most recent first)
-    for (let i = currentMonth; i >= 0; i--) {
+    // Start from January (month 0) and go up to the current month
+    for (let i = 0; i <= currentMonth; i++) {
       months.push({
-        year: 2025,
-        month: i + 1,
-        date: new Date(2025, i, 1)
+        year: currentYear,
+        month: i + 1, // Convert to 1-12 format
+        date: new Date(currentYear, i, 1)
       });
     }
     
-    setHistoryMonths(months);
-    setAvailableYears([2025]); // Just 2025 for now
+    // Reverse the order to show most recent month first
+    months.reverse();
     
-    // Fetch payment history data
+    setHistoryMonths(months);
+    
+    // Fetch payment history data for the current year only
     try {
       const { data } = await supabase
         .from('player_payments')
         .select('year, month, status')
         .eq('player_id', player.id)
-        .eq('year', 2025);
+        .eq('year', currentYear); // Only get current year
       
       setPaymentHistory(data || []);
     } catch (error) {
@@ -572,7 +574,7 @@ const PaymentsScreenComponent = () => {
             <View style={styles.statsCard}>
               <Text style={styles.statsLabel}>Total Players</Text>
               <Text style={styles.statsValue}>{stats.totalPlayers}</Text>
-            </View>
+    </View>
             
             <View style={styles.statsCard}>
               <Text style={styles.statsLabel}>Paid</Text>

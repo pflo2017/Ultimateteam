@@ -7,6 +7,7 @@ import { ParentEventsScreen } from '../screens/parent/ParentEventsScreen';
 import { ParentChatScreen } from '../screens/parent/ParentChatScreen';
 import { ParentNewsScreen } from '../screens/parent/ParentNewsScreen';
 import { ParentSettingsScreen } from '../screens/parent/ParentSettingsScreen';
+import { ParentPaymentsScreen } from '../screens/parent/ParentPaymentsScreen';
 import { EditChildScreen } from '../screens/parent/EditChildScreen';
 import { AddChildScreen } from '../screens/parent/AddChildScreen';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -195,12 +196,22 @@ const TabNavigator = () => {
         }}
       />
       <Tab.Screen
+        name="Payments"
+        component={ParentPaymentsScreen}
+        options={{
+          tabBarLabel: 'Payments',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="credit-card-outline" size={24} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
         name="Events"
         component={ParentEventsScreen}
         options={{
           tabBarLabel: 'Events',
           tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="calendar-outline" size={24} color={color} />
+            <MaterialCommunityIcons name="calendar-month-outline" size={24} color={color} />
           ),
         }}
       />
