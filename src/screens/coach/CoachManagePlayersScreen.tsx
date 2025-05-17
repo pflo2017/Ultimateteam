@@ -88,6 +88,59 @@ const getPaymentStatusText = (status: string) => {
   }
 };
 
+const PlayerCard = ({ player, onDetailsPress }: { player: Player; onDetailsPress: () => void }) => (
+  <Card style={styles.playerCard}>
+    <Card.Content>
+      <View style={styles.cardHeader}>
+        <View style={styles.cardTitleContainer}>
+          <MaterialCommunityIcons name="account" size={24} color={COLORS.primary} />
+          <Text style={styles.playerName}>{player.player_name}</Text>
+        </View>
+        <TouchableOpacity
+          onPress={onDetailsPress}
+          style={styles.actionButton}
+        >
+          <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.primary} />
+        </TouchableOpacity>
+      </View>
+      <View style={styles.cardContent}>
+        <View style={styles.infoRow}>
+          <MaterialCommunityIcons name="account-group" size={20} color={COLORS.primary} />
+          <Text style={styles.infoLabel}>
+            Team: <Text style={styles.infoValue}>{player.team_name || 'No team assigned'}</Text>
+          </Text>
+        </View>
+        
+        <View style={styles.infoRow}>
+          <MaterialCommunityIcons 
+            name="medical-bag" 
+            size={20} 
+            color={getMedicalVisaStatusColor(player.medical_visa_status)} 
+          />
+          <Text style={styles.infoLabel}>
+            Visa Status: <Text style={[styles.infoValue, { color: getMedicalVisaStatusColor(player.medical_visa_status) }]}>
+              {player.medical_visa_status.charAt(0).toUpperCase() + player.medical_visa_status.slice(1)}
+            </Text>
+          </Text>
+        </View>
+
+        <View style={styles.infoRow}>
+          <MaterialCommunityIcons 
+            name="cash" 
+            size={20} 
+            color={getPaymentStatusColor(player.payment_status)} 
+          />
+          <Text style={styles.infoLabel}>
+            Payment Status: <Text style={[styles.infoValue, { color: getPaymentStatusColor(player.payment_status) }]}>
+              {getPaymentStatusText(player.payment_status)}
+            </Text>
+          </Text>
+        </View>
+      </View>
+    </Card.Content>
+  </Card>
+);
+
 export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> = ({
   players,
   teams,
@@ -220,68 +273,11 @@ export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> =
           }
         >
           {filteredPlayers.map(player => (
-            <View key={player.player_id} style={styles.playerCard}>
-              <View style={styles.cardPressable}>
-                <View style={styles.playerCardContent}>
-                  <View style={styles.nameRow}>
-                    <Text style={styles.playerName}>{player.player_name}</Text>
-                    <TouchableOpacity 
-                      onPress={() => handlePlayerMenuPress(player.player_id)}
-                      style={styles.menuButton}
-                    >
-                      <MaterialCommunityIcons name="dots-vertical" size={20} color={COLORS.grey[600]} />
-                    </TouchableOpacity>
-                  </View>
-                  
-                  <View style={styles.infoRow}>
-                    <MaterialCommunityIcons name="account-group" size={20} color={COLORS.primary} />
-                    <Text style={styles.infoText}>
-                      Team: {player.team_name || 'No team assigned'}
-                    </Text>
-                  </View>
-                  
-                  <View style={styles.infoRow}>
-                    <MaterialCommunityIcons 
-                      name="medical-bag" 
-                      size={20} 
-                      color={COLORS.primary} 
-                    />
-                    <Text style={styles.infoText}>
-                      Medical Visa Status: <Text style={{ color: getMedicalVisaStatusColor(player.medical_visa_status) }}>
-                        {player.medical_visa_status.charAt(0).toUpperCase() + player.medical_visa_status.slice(1)}
-                      </Text>
-                    </Text>
-                  </View>
-
-                  <View style={styles.infoRow}>
-                    <MaterialCommunityIcons 
-                      name="credit-card-outline" 
-                      size={20} 
-                      color={COLORS.primary} 
-                    />
-                    <Text style={styles.infoText}>
-                      Payment Status: <Text style={{ 
-                        color: getPaymentStatusColor(player.payment_status)
-                      }}>
-                        {getPaymentStatusText(player.payment_status)}
-                      </Text>
-                    </Text>
-                  </View>
-                  
-                  {playerMenuVisible === player.player_id && (
-                    <View style={styles.menuContainer}>
-                      <TouchableOpacity 
-                        style={styles.menuItem}
-                        onPress={() => handleOpenPlayerDetails(player)}
-                      >
-                        <MaterialCommunityIcons name="account-details" size={20} color="#00BDF2" />
-                        <Text style={styles.menuItemText}>View player details</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                </View>
-              </View>
-            </View>
+            <PlayerCard 
+              key={player.player_id} 
+              player={player} 
+              onDetailsPress={() => handleOpenPlayerDetails(player)}
+            />
           ))}
           {filteredPlayers.length === 0 && !isLoading && (
             <Text style={styles.emptyText}>No players found</Text>
@@ -434,24 +430,6 @@ export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> =
                       </View>
                     </View>
                     
-                    <View style={styles.detailsSection}>
-                      <Text style={styles.modalSectionTitle}>Medical Visa Information</Text>
-                      <View style={styles.detailRow}>
-                        <Text style={styles.detailLabel}>Status:</Text>
-                        <View style={[
-                          styles.statusBadge,
-                          { backgroundColor: getMedicalVisaStatusColor(selectedPlayer.medical_visa_status) + '20' }
-                        ]}>
-                          <Text style={[
-                            styles.statusText,
-                            { color: getMedicalVisaStatusColor(selectedPlayer.medical_visa_status) }
-                          ]}>
-                            {selectedPlayer.medical_visa_status}
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-                    
                     {parentDetails && (
                       <View style={styles.detailsSection}>
                         <Text style={styles.modalSectionTitle}>Parent Information</Text>
@@ -485,19 +463,23 @@ export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> =
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.white,
   },
   playersContainer: {
     flex: 1,
+  },
+  content: {
+    padding: SPACING.lg,
+    paddingBottom: SPACING.xl * 4,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.grey[100],
+    marginHorizontal: SPACING.lg,
+    marginBottom: SPACING.lg,
     borderRadius: 8,
     paddingHorizontal: SPACING.md,
-    marginBottom: SPACING.md,
-    marginHorizontal: SPACING.lg,
   },
   searchIcon: {
     marginRight: SPACING.sm,
@@ -508,40 +490,58 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontSize: 16,
   },
+  filterContainer: {
+    paddingHorizontal: SPACING.lg,
+    marginBottom: SPACING.lg,
+    gap: SPACING.md,
+  },
+  segmentedButtons: {
+    backgroundColor: COLORS.white,
+    elevation: 0,
+    shadowColor: 'transparent',
+  },
   filtersRow: {
     flexDirection: 'row',
-    marginBottom: SPACING.md,
+    alignItems: 'center',
+    marginHorizontal: SPACING.lg,
+    marginBottom: SPACING.lg,
+    gap: SPACING.md,
   },
   teamSelector: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.white,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     borderRadius: 8,
-    padding: SPACING.sm,
-    marginRight: SPACING.md,
-    maxWidth: 200,
-    minWidth: 180,
-    marginLeft: SPACING.lg,
     borderWidth: 1,
-    borderColor: COLORS.grey[300],
+    borderColor: COLORS.grey[200],
+    gap: SPACING.xs,
+    flex: 1,
   },
   teamSelectorText: {
-    marginHorizontal: 8,
-    flex: 1,
+    fontSize: 14,
     color: COLORS.text,
+    flex: 1,
   },
-  content: {
-    paddingHorizontal: SPACING.lg,
-    paddingBottom: 20,
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  cardTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  cardContent: {
+    marginTop: SPACING.md,
   },
   playerCard: {
+    marginBottom: SPACING.md,
     backgroundColor: '#EEFBFF',
     borderRadius: 12,
-    marginBottom: SPACING.md,
     overflow: 'hidden',
-    marginHorizontal: 0,
-    shadowOpacity: 0,
-    elevation: 0,
     width: '100%',
   },
   cardPressable: {
@@ -569,9 +569,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: SPACING.sm,
   },
-  infoText: {
+  infoLabel: {
     fontSize: 14,
     color: COLORS.grey[600],
+  },
+  infoValue: {
+    fontSize: 14,
+    color: COLORS.text,
+    fontWeight: '500',
   },
   menuContainer: {
     marginTop: SPACING.sm,
@@ -700,5 +705,8 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 14,
     fontWeight: '500',
+  },
+  actionButton: {
+    padding: SPACING.xs,
   },
 }); 
