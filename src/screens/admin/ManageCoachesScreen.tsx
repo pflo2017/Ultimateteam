@@ -56,12 +56,12 @@ export const ManageCoachesScreen: React.FC<ManageCoachesScreenProps> = ({
           
           <View style={styles.infoRow}>
             <MaterialCommunityIcons name="phone" size={20} color="#0CC1EC" />
-            <Text style={styles.infoText}>{coach.phone_number}</Text>
+            <Text style={styles.infoLabel}>Phone number: <Text style={styles.infoValue}>{coach.phone_number}</Text></Text>
           </View>
           
           <View style={styles.infoRow}>
             <MaterialCommunityIcons name="key" size={20} color="#0CC1EC" />
-            <Text style={styles.infoText}>Access code: {coach.access_code}</Text>
+            <Text style={styles.infoLabel}>Access code: <Text style={styles.infoValue}>{coach.access_code}</Text></Text>
             <TouchableOpacity
               onPress={() => onCopyAccessCode(coach.access_code)}
               style={styles.copyButton}
@@ -231,6 +231,15 @@ const styles = StyleSheet.create({
   infoText: {
     fontSize: 14,
     color: COLORS.grey[600],
+  },
+  infoLabel: {
+    fontSize: 14,
+    color: COLORS.grey[600],
+  },
+  infoValue: {
+    fontSize: 14,
+    color: COLORS.text,
+    fontWeight: '500',
   },
   copyButton: {
     marginLeft: 'auto',

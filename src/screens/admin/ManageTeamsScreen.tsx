@@ -75,23 +75,23 @@ const TeamCard: React.FC<TeamCardProps> = ({ team, onPress, onCopyAccessCode, na
           <View style={styles.infoRow}>
             {team.coach ? (
               <View style={styles.coachContainer}>
-                <MaterialCommunityIcons name="account-group" size={20} color={COLORS.primary} />
-                <Text style={styles.infoText}>Coach: {team.coach.name}</Text>
+                <MaterialCommunityIcons name="account-tie" size={20} color={COLORS.primary} />
+                <Text style={styles.infoLabel}>Coach: <Text style={styles.infoValue}>{team.coach.name}</Text></Text>
               </View>
             ) : (
               <View style={styles.coachContainer}>
                 <MaterialCommunityIcons name="account-off" size={20} color="#0CC1EC" />
-                <Text style={styles.infoText}>No coach assigned</Text>
+                <Text style={styles.infoLabel}>No coach assigned</Text>
               </View>
             )}
           </View>
           <View style={styles.infoRow}>
             <MaterialCommunityIcons name="run" size={20} color="#0CC1EC" />
-            <Text style={styles.infoText}>{team.players_count || '0'} players</Text>
+            <Text style={styles.infoLabel}>Players: <Text style={styles.infoValue}>{team.players_count || '0'}</Text></Text>
           </View>
           <View style={styles.infoRow}>
             <MaterialCommunityIcons name="key" size={20} color="#0CC1EC" />
-            <Text style={styles.infoText}>Access code: {team.access_code}</Text>
+            <Text style={styles.infoLabel}>Access code: <Text style={styles.infoValue}>{team.access_code}</Text></Text>
             <TouchableOpacity
               onPress={() => onCopyAccessCode(team.access_code)}
               style={styles.copyButton}
@@ -266,9 +266,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: SPACING.sm,
   },
-  infoText: {
+  infoLabel: {
     fontSize: 14,
     color: COLORS.grey[600],
+  },
+  infoValue: {
+    fontSize: 14,
+    color: COLORS.text,
+    fontWeight: '500',
   },
   copyButton: {
     marginLeft: 'auto',

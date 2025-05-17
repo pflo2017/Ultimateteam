@@ -32,7 +32,7 @@ export const CoachManageScreen = () => {
   const [teams, setTeams] = useState<Team[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(route.params?.teamId || null);
   const [isLoading, setIsLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -40,8 +40,11 @@ export const CoachManageScreen = () => {
     if (route.params?.activeTab) {
       setActiveTab(route.params.activeTab);
     }
+    if (route.params?.teamId) {
+      setSelectedTeamId(route.params.teamId);
+    }
     loadData();
-  }, [route.params?.activeTab]);
+  }, [route.params?.activeTab, route.params?.teamId]);
 
   const loadData = async () => {
     try {

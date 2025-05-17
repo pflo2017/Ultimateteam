@@ -293,8 +293,8 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
                   
                   <View style={styles.infoRow}>
                     <MaterialCommunityIcons name="account-group" size={20} color="#0CC1EC" />
-                    <Text style={styles.infoText}>
-                      Team: {player.team ? player.team.name : 'No team assigned'}
+                    <Text style={styles.infoLabel}>
+                      Team: <Text style={styles.infoValue}>{player.team ? player.team.name : 'No team assigned'}</Text>
                     </Text>
                   </View>
                   
@@ -304,8 +304,8 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
                       size={20} 
                       color={COLORS.primary} 
                     />
-                    <Text style={styles.infoText}>
-                      Medical Visa Status: <Text style={{ color: getMedicalVisaStatusColor(player.medicalVisaStatus) }}>
+                    <Text style={styles.infoLabel}>
+                      Medical Visa Status: <Text style={[styles.infoValue, { color: getMedicalVisaStatusColor(player.medicalVisaStatus) }]}>
                         {player.medicalVisaStatus.charAt(0).toUpperCase() + player.medicalVisaStatus.slice(1)}
                       </Text>
                     </Text>
@@ -317,8 +317,8 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
                       size={20} 
                       color={COLORS.primary} 
                     />
-                    <Text style={styles.infoText}>
-                      Payment Status: <Text style={{ color: getPaymentStatusColor(getPlayerPaymentStatus(player)) }}>
+                    <Text style={styles.infoLabel}>
+                      Payment Status: <Text style={[styles.infoValue, { color: getPaymentStatusColor(getPlayerPaymentStatus(player)) }]}>
                         {getPaymentStatusText(getPlayerPaymentStatus(player))}
                       </Text>
                     </Text>
@@ -633,9 +633,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: SPACING.sm,
   },
-  infoText: {
+  infoLabel: {
     fontSize: 14,
     color: COLORS.grey[600],
+  },
+  infoValue: {
+    fontSize: 14,
+    color: COLORS.text,
+    fontWeight: '500',
   },
   emptyText: {
     textAlign: 'center',

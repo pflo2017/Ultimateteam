@@ -157,9 +157,7 @@ export const AdminHomeScreen = () => {
     if (screen === 'Manage') {
       navigation.navigate('Manage', { activeTab: type });
     } else if (screen === 'Payments') {
-      navigation.navigate('AdminTabs', {
-        screen: 'Payments'
-      });
+      navigation.navigate('Payments');
     }
   };
 
@@ -233,46 +231,58 @@ export const AdminHomeScreen = () => {
 
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.container}>
-        <View style={styles.content}>
-          <View style={styles.cardsContainer}>
-            {renderCard(
-              'Total Players',
-              stats.players,
-              'Registered in your academy',
-              'run',
-              'Manage',
-              'players',
-              200
-            )}
-            {renderCard(
-              'Total Teams',
-              stats.teams,
-              'Active in your academy',
-              'account-group',
-              'Manage',
-              'teams',
-              400
-            )}
-            {renderCard(
-              'Total Coaches',
-              stats.coaches,
-              'Active in your academy',
-              'account-tie',
-              'Manage',
-              'coaches',
-              600
-            )}
-            {renderCard(
-              'Payment status',
-              stats.pendingPayments,
-              'Pending payments',
-              'credit-card-outline',
-              'Payments',
-              'payments',
-              800
-            )}
-          </View>
+      <View style={styles.header}>
+        <Text variant="headlineMedium" style={styles.title}>Welcome, {adminName}</Text>
+        <Text variant="bodyLarge" style={styles.subtitle}>
+          Manage and stay connected with your club
+        </Text>
+      </View>
+      
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.statsContainer}>
+          {renderCard(
+            'Teams',
+            stats.teams,
+            'View and manage teams',
+            'shield-account',
+            'Manage',
+            'teams',
+            100
+          )}
+          
+          {renderCard(
+            'Coaches',
+            stats.coaches,
+            'Manage coach accounts',
+            'account-tie',
+            'Manage',
+            'coaches',
+            200
+          )}
+          
+          {renderCard(
+            'Players',
+            stats.players,
+            'View player details',
+            'account-group',
+            'Manage',
+            'players',
+            300
+          )}
+          
+          {renderCard(
+            'Payments',
+            stats.pendingPayments,
+            'Track payment status',
+            'credit-card-outline',
+            'Payments',
+            'payments',
+            400
+          )}
         </View>
       </ScrollView>
     </View>
@@ -282,13 +292,28 @@ export const AdminHomeScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.background,
   },
-  content: {
+  header: {
+    padding: SPACING.xl,
+    backgroundColor: COLORS.primary,
+  },
+  title: {
+    color: COLORS.white,
+    fontWeight: 'bold',
+  },
+  subtitle: {
+    color: COLORS.white,
+    opacity: 0.9,
+    marginTop: SPACING.xs,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
     padding: SPACING.lg,
-    paddingTop: Platform.OS === 'ios' ? 120 : 100, // Account for header + status bar
   },
-  cardsContainer: {
+  statsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
