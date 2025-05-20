@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Platform, Alert } from 'react-native';
-import { Text, SegmentedButtons } from 'react-native-paper';
+import { Text, SegmentedButtons, ActivityIndicator } from 'react-native-paper';
 import { COLORS, SPACING } from '../../constants/theme';
 import { supabase } from '../../lib/supabase';
 import { useNavigation, useRoute, useIsFocused } from '@react-navigation/native';
@@ -11,6 +11,7 @@ import * as Clipboard from 'expo-clipboard';
 import { ManageTeamsScreen } from './ManageTeamsScreen';
 import { ManageCoachesScreen } from './ManageCoachesScreen';
 import { ManagePlayersScreen } from './ManagePlayersScreen';
+import { addListener, removeListener } from '../../utils/events';
 
 type CardType = 'teams' | 'coaches' | 'players' | 'payments';
 
@@ -99,6 +100,29 @@ export const AdminManageScreen = () => {
       setActiveTab(route.params.activeTab);
     }
   }, [route.params?.activeTab]);
+
+  useEffect(() => {
+    if (isFocused) {
+      loadData();
+    }
+  }, [isFocused]);
+
+  // Add event listener for payment status changes
+  useEffect(() => {
+    // Listen for payment status changes from PaymentsScreen
+    const handlePaymentStatusChange = () => {
+      console.log('Payment status changed, refreshing players data');
+      fetchPlayers();
+    };
+
+    // Add event listener
+    addListener('payment_status_changed', handlePaymentStatusChange);
+
+    // Clean up the listener when component unmounts
+    return () => {
+      removeListener('payment_status_changed', handlePaymentStatusChange);
+    };
+  }, []);
 
   const fetchTeams = async () => {
     try {
@@ -232,6 +256,8 @@ export const AdminManageScreen = () => {
           team_id,
           parent_id,
           birth_date,
+          payment_status,
+          last_payment_date,
           teams:team_id(id, name)
         `)
         .eq('is_active', true)
@@ -293,17 +319,20 @@ export const AdminManageScreen = () => {
       const transformedPlayers = playersData.map(player => {
         // Find matching child record
         let medicalVisaStatus = 'unknown';
-        let paymentStatus = 'pending'; // Default value until implemented
+        // Use payment_status from database or default to 'pending' if not set
+        let paymentStatus = player.payment_status || 'pending';
         let teamId = player.team_id;
         let teamName = null;
         let birthDate = player.birth_date;
         
-        // Check for recently joined players - set to on_trial
-        const createdAt = new Date(player.created_at);
-        const now = new Date();
-        const diff = now.getTime() - createdAt.getTime();
-        const isOnTrial = diff < 30 * 24 * 60 * 60 * 1000;
-        if (isOnTrial) paymentStatus = 'on_trial';
+        // Check for recently joined players - set to on_trial ONLY if no status is set
+        if (!player.payment_status) {
+          const createdAt = new Date(player.created_at);
+          const now = new Date();
+          const diff = now.getTime() - createdAt.getTime();
+          const isOnTrial = diff < 30 * 24 * 60 * 60 * 1000;
+          if (isOnTrial) paymentStatus = 'on_trial';
+        }
         
         // Always prefer team from parent_children if available
         if (player.parent_id && childrenMap.has(player.parent_id)) {
@@ -336,10 +365,11 @@ export const AdminManageScreen = () => {
           team_id: teamId,
           team: teamName ? { name: teamName } : null,
           medicalVisaStatus,
-          paymentStatus,
+          paymentStatus, // Now using the database value
           payment_status: paymentStatus, // For consistency with PaymentsScreen
           parent_id: player.parent_id,
-          birth_date: birthDate
+          birth_date: birthDate,
+          last_payment_date: player.last_payment_date
         };
       });
 
@@ -348,12 +378,6 @@ export const AdminManageScreen = () => {
       console.error('Error fetching players:', error);
     }
   };
-
-  useEffect(() => {
-    if (isFocused) {
-      loadData();
-    }
-  }, [isFocused]);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -396,7 +420,7 @@ export const AdminManageScreen = () => {
           theme={{
             colors: {
               primary: '#212121',
-              secondaryContainer: '#F5F5F5',
+              secondaryContainer: '#EEFBFF',
               onSecondaryContainer: '#212121',
               outline: '#E0E0E0',
             }

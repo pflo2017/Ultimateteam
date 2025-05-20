@@ -5,10 +5,14 @@ import { COLORS, SPACING } from '../../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { triggerEvent, forceRefresh } from '../../utils/events';
+import { useDataRefresh } from '../../utils/useDataRefresh';
 
 interface Player {
+  id: string;
   player_id: string;
   player_name: string;
+  name?: string;
   team_id: string;
   team_name: string;
   medical_visa_status: string;
@@ -73,10 +77,10 @@ export const CoachPaymentsScreen = () => {
   const [statusOptions, setStatusOptions] = useState<{ value: string; label: string }[]>([
     { value: 'select_status', label: 'Select Status' },
     { value: 'on_trial', label: 'On Trial' },
-    { value: 'pending', label: 'Pending' },
-    { value: 'paid', label: 'Paid' },
-    { value: 'unpaid', label: 'Unpaid' },
     { value: 'trial_ended', label: 'Trial Ended' },
+    { value: 'pending', label: 'Pending' },
+    { value: 'unpaid', label: 'Unpaid' },
+    { value: 'paid', label: 'Paid' },
   ]);
   const selectedStatusOption = statusOptions.find(option => option.value === selectedStatus);
   const [isStatusChangeModalVisible, setIsStatusChangeModalVisible] = useState(false);
@@ -85,6 +89,12 @@ export const CoachPaymentsScreen = () => {
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Use data refresh hook to refresh when payment status changes
+  useDataRefresh('payments', () => {
+    console.log("Payment status change detected in coach screen - refreshing payment data");
+    fetchData();
+  });
 
   const fetchData = async () => {
     try {
@@ -119,6 +129,22 @@ export const CoachPaymentsScreen = () => {
       
       if (playersError) throw playersError;
       
+      // Also fetch player_status ENUM values directly from the database
+      const { data: playerStatusData, error: playerStatusError } = await supabase
+        .from('players')
+        .select('id, player_status')
+        .in('id', (playersData || []).map((p: any) => p.player_id));
+        
+      if (playerStatusError) {
+        console.error('Error fetching player_status values:', playerStatusError);
+      }
+      
+      // Create a map for quick lookup of player_status values
+      const playerStatusMap = new Map();
+      (playerStatusData || []).forEach((item: any) => {
+        playerStatusMap.set(item.id, item.player_status);
+      });
+      
       // Fetch player birthdates from parent_children table
       const { data: parentChildrenData, error: parentChildrenError } = await supabase
         .from('parent_children')
@@ -139,7 +165,7 @@ export const CoachPaymentsScreen = () => {
       }
       
       // Enhance player data with team creation dates and birthdates
-      const enhancedPlayersData = (playersData || []).map((player: Player) => {
+      const enhancedPlayersData = await Promise.all((playersData || []).map(async (player: any) => {
         // Find team creation date as fallback for player join date
         const teamCreationDate = teamsCreateDates?.find(t => t.id === player.team_id)?.created_at;
         
@@ -149,14 +175,66 @@ export const CoachPaymentsScreen = () => {
                   child.full_name.toLowerCase() === player.player_name.toLowerCase()
         );
         
+        // Try to get the stored UI payment status (for UI display)
+        const playerStatusKey = `player_status_${player.player_id}`;
+        
+        // Use player_status ENUM from database as primary source if available
+        const dbPlayerStatus = playerStatusMap.get(player.player_id);
+        let uiPaymentStatus = dbPlayerStatus || player.payment_status;
+        
+        // If AsyncStorage has a value, it overrides other sources (for this particular session)
+        try {
+          const storedStatus = await AsyncStorage.getItem(playerStatusKey);
+          if (storedStatus) {
+            console.log(`Found stored UI status for player ${player.player_id}:`, storedStatus);
+            uiPaymentStatus = storedStatus;
+          }
+        } catch (e) {
+          console.error("Error reading stored payment status:", e);
+        }
+        
+        console.log("Final payment status for player", player.player_name, ":", {
+          raw_payment_status: player.payment_status,
+          db_player_status: dbPlayerStatus,
+          ui_payment_status: uiPaymentStatus
+        });
+        
+        // Fetch and format the last payment date
+        console.log("Processing player for last payment date:", player.player_id);
+        console.log("Raw last_payment_date value:", player.last_payment_date);
+        
+        // Format the last payment date properly
+        let formattedLastPaymentDate = player.last_payment_date;
+        if (player.last_payment_date) {
+          try {
+            // If it looks like a date string, format it
+            if (player.last_payment_date.includes('T') || player.last_payment_date.includes('-')) {
+              formattedLastPaymentDate = new Date(player.last_payment_date).toLocaleDateString('en-GB');
+              console.log("Formatted last_payment_date:", formattedLastPaymentDate);
+            } else {
+              // Already formatted or not a valid date string
+              console.log("Using existing last_payment_date format");
+            }
+          } catch (e) {
+            console.error("Error formatting last_payment_date:", e);
+          }
+        }
+        
         return {
           ...player,
+          id: player.player_id, // Add id field for compatibility
           // Use team creation date as fallback if player has no creation date
           created_at: player.created_at || teamCreationDate,
           // Use birthdate from parent_children if available
-          birth_date: childRecord?.birth_date || player.birth_date
+          birth_date: childRecord?.birth_date || player.birth_date,
+          // Use our properly formatted last_payment_date
+          last_payment_date: formattedLastPaymentDate || null,
+          // Use the UI payment status for display
+          payment_status: uiPaymentStatus,
+          // Also include the raw player_status from database for reference
+          player_status: dbPlayerStatus,
         };
-      });
+      }));
       
       setPlayers(enhancedPlayersData || []);
       
@@ -194,6 +272,50 @@ export const CoachPaymentsScreen = () => {
 
   const handleOpenPlayerDetails = async (player: Player) => {
     setSelectedPlayer(player);
+    
+    // First get the latest player status directly from the database
+    try {
+      const { data, error } = await supabase
+        .from('players')
+        .select('payment_status, player_status, last_payment_date')
+        .eq('id', player.id)
+        .single();
+        
+      if (error) throw error;
+      
+      // Get the most appropriate status to display
+      let displayStatus = player.payment_status; // Default to current status
+      
+      if (data.player_status) {
+        // If player_status ENUM exists, prefer it
+        displayStatus = data.player_status;
+      } else if (data.payment_status) {
+        // Otherwise fall back to payment_status
+        displayStatus = getDisplayPaymentStatus(data.payment_status);
+      }
+      
+      console.log("Most recent status for player details:", {
+        id: player.id,
+        original_status: player.payment_status,
+        db_payment_status: data.payment_status,
+        db_player_status: data.player_status,
+        final_display_status: displayStatus,
+        last_payment_date: data.last_payment_date
+      });
+      
+      // Create updated player with the latest status
+      const updatedPlayer = {
+        ...player,
+        payment_status: displayStatus,
+        last_payment_date: data.last_payment_date ? new Date(data.last_payment_date).toLocaleDateString('en-GB') : player.last_payment_date
+      };
+      
+      // Update the selected player with latest data
+      setSelectedPlayer(updatedPlayer);
+    } catch (error) {
+      console.error("Error fetching latest player status:", error);
+      // Continue with existing player data if fetch fails
+    }
     
     // Fetch parent details if player has parent_id
     if (player.parent_id) {
@@ -242,14 +364,23 @@ export const CoachPaymentsScreen = () => {
     
     setHistoryMonths(months);
     
+    // Make sure we're using the correct player ID field
+    const playerId = player.id;
+    console.log("Fetching payment history for player:", { 
+      id: player.id, 
+      player_id: player.player_id,
+      using_id: playerId
+    });
+    
     // Fetch payment history data for the current year only
     try {
       const { data } = await supabase
         .from('player_payments')
         .select('year, month, status')
-        .eq('player_id', player.player_id)
+        .eq('player_id', playerId)
         .eq('year', currentYear); // Only get current year
       
+      console.log("Fetched payment history:", data);
       setPaymentHistory(data || []);
     } catch (error) {
       console.error('Error fetching payment history:', error);
@@ -269,7 +400,7 @@ export const CoachPaymentsScreen = () => {
   const getPaymentStatusColor = (status: string) => {
     switch (status) {
       case 'paid': return COLORS.success;
-      case 'pending': return '#FFA500';
+      case 'pending': return '#FFA500'; // Orange
       case 'unpaid': return COLORS.error;
       case 'on_trial': return COLORS.primary;
       case 'trial_ended': return COLORS.grey[800];
@@ -291,17 +422,31 @@ export const CoachPaymentsScreen = () => {
   };
 
   // First, add a helper function to map database status values back to display values
-  const getDisplayPaymentStatus = (dbStatus: string): string => {
-    // Map database status values back to display values
+  const getDisplayPaymentStatus = (dbStatus: string, uiStatus?: string): string => {
+    console.log("Converting database status to UI status:", { dbStatus, uiStatus });
+    
+    // If we have the original UI status, prefer it
+    if (uiStatus && uiStatus !== 'select_status') {
+      return uiStatus;
+    }
+    
+    // Map database status to UI status
     switch(dbStatus) {
+      // Payment status values
       case 'paid':
         return 'paid';
       case 'pending':
-        return 'unpaid'; // Display 'pending' database values as 'unpaid' in the UI
+        return 'pending';
+      case 'unpaid':
+        return 'unpaid';
       case 'on_trial':
         return 'on_trial';
       case 'trial_ended':
         return 'trial_ended';
+      case 'active':
+        return 'paid'; // Map 'active' database status to 'paid' for UI
+      case 'archived':
+        return 'unpaid'; // Map 'archived' database status to 'unpaid' for UI
       default:
         return dbStatus;
     }
@@ -309,26 +454,35 @@ export const CoachPaymentsScreen = () => {
 
   // Add this helper function near the getDisplayPaymentStatus function
   const getValidDatabaseStatus = (status: string): string => {
-    // Map UI status values to valid database values
+    console.log("Converting UI status to database status for legacy column:", status);
+    
+    // This function now only used for backward compatibility with the old TEXT payment_status column
+    // The player_status ENUM column will get the exact status value directly
+    
+    // Map UI status values to valid database values for the old column
+    // Legacy column accepts: 'paid', 'pending', 'on_trial', 'trial_ended' but NOT 'unpaid'
     switch(status) {
       case 'paid':
         return 'paid';
       case 'unpaid': 
-        // The database uses 'pending' instead of 'unpaid'
-        return 'pending'; 
-      case 'on_trial':
-        return 'on_trial';
+        return 'pending'; // Map 'unpaid' to 'pending' for database compatibility
       case 'pending':
         return 'pending';
+      case 'on_trial':
+        return 'on_trial';
       case 'trial_ended':
         return 'trial_ended';
+      case 'select_status':
+        return 'pending'; 
       default:
-        return 'on_trial'; // Default to a safe value
+        console.log("Using default status 'pending' for unknown status:", status);
+        return 'pending';
     }
   };
 
   // Handle player menu visibility
   const handlePlayerMenuPress = (playerId: string) => {
+    console.log("Player menu press:", playerId, "current:", playerMenuVisible);
     setPlayerMenuVisible(playerId === playerMenuVisible ? null : playerId);
   };
 
@@ -336,7 +490,8 @@ export const CoachPaymentsScreen = () => {
   const filteredPlayers = players.filter(player => {
     const matchesSearch = player.player_name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesTeam = !selectedTeamId || player.team_id === selectedTeamId;
-    return matchesSearch && matchesTeam;
+    const matchesStatus = !selectedStatus || player.payment_status === selectedStatus;
+    return matchesSearch && matchesTeam && matchesStatus;
   });
 
   const selectedTeam = teams.find(team => team.id === selectedTeamId);
@@ -389,71 +544,123 @@ export const CoachPaymentsScreen = () => {
     }
   };
 
+  // Add this function near the handleChangePaymentStatus function
+  const triggerPaymentStatusChange = (playerId: string, status: string, paymentDate: string | null) => {
+    console.log("[CoachPaymentsScreen] Broadcasting payment status change", {
+      playerId,
+      status,
+      paymentDate
+    });
+    
+    // Trigger the event to notify other screens
+    triggerEvent('payment_status_changed', playerId, status, paymentDate);
+  };
+
   const handleChangePaymentStatus = async (newStatus: string) => {
     if (selectedPlayer) {
       try {
         // First update the player record (direct status)
-        const { error: playerError } = await supabase
+        console.log("Updating payment status for player:", {
+          id: selectedPlayer.id,
+          player_id: selectedPlayer.player_id,
+          current_status: selectedPlayer.payment_status,
+          new_status: newStatus,
+          is_same: selectedPlayer.id === selectedPlayer.player_id
+        });
+        
+        const updateData: any = { 
+          payment_status: getValidDatabaseStatus(newStatus), // Update the legacy TEXT field
+          player_status: newStatus // Update the ENUM field directly with the UI value
+        };
+        
+        // If status is paid, update the last_payment_date
+        if (newStatus === 'paid') {
+          const today = new Date().toISOString();
+          updateData.last_payment_date = today;
+          console.log("Setting last_payment_date to:", today);
+        }
+        
+        // Log the update details
+        console.log("Updating player with ID:", selectedPlayer.id);
+        console.log("Update data:", updateData);
+        
+        // Update in database
+        const { data: resultData, error: playerError } = await supabase
           .from('players')
-          .update({ payment_status: newStatus })
-          .eq('id', selectedPlayer.player_id);
+          .update(updateData)
+          .eq('id', selectedPlayer.id)
+          .select();
         
+        console.log("Update result:", { resultData, playerError });
+
         if (playerError) throw playerError;
-        
+
+        // Store the original UI status in local storage for this player
+        // This helps us remember what the UI should show even if the database uses simplified statuses
+        try {
+          const playerStatusKey = `player_status_${selectedPlayer.id}`;
+          await AsyncStorage.setItem(playerStatusKey, newStatus);
+          console.log("Saved UI status to AsyncStorage:", { id: selectedPlayer.id, status: newStatus });
+        } catch (e) {
+          console.error("Failed to save UI status to AsyncStorage:", e);
+        }
+
         // Then insert/update the payment history for current month if needed
         const currentYear = 2025;
         const currentMonth = new Date().getMonth() + 1;
-        
-        // Map UI status to database-compatible status
         const dbStatus = getValidDatabaseStatus(newStatus);
+        
+        console.log("Upserting payment history with player_id:", selectedPlayer.id);
+        console.log("Payment history data:", { 
+          player_id: selectedPlayer.id, 
+          year: currentYear,
+          month: currentMonth,
+          status: dbStatus 
+        });
         
         const { error: historyError } = await supabase
           .from('player_payments')
           .upsert({
-            player_id: selectedPlayer.player_id,
+            player_id: selectedPlayer.id,
             year: currentYear,
             month: currentMonth,
-            status: dbStatus // Use the mapped status value
+            status: dbStatus
           }, {
             onConflict: 'player_id,year,month'
           });
-        
+          
         if (historyError) {
           console.error('Error updating payment history:', historyError);
-          // Continue even if history update fails - we still updated the player
         }
-        
-        // Update UI
-        const updatedPlayer = { ...selectedPlayer, payment_status: newStatus };
+
+        // Also update the UI immediately
         const updatedPlayers = players.map(p => 
-          p.player_id === selectedPlayer.player_id ? updatedPlayer : p
+          p.id === selectedPlayer.id 
+            ? {
+                ...p, 
+                payment_status: newStatus, // Keep the UI status
+                last_payment_date: newStatus === 'paid' ? new Date().toLocaleDateString('en-GB') : p.last_payment_date
+              } 
+            : p
         );
         setPlayers(updatedPlayers);
         
-        // Update stats
-        const updatedStats = { ...stats };
-        if (selectedPlayer.payment_status !== newStatus) {
-          // Decrement the old status count
-          if (selectedPlayer.payment_status === 'paid') updatedStats.paidPlayers--;
-          else if (selectedPlayer.payment_status === 'unpaid') updatedStats.unpaidPlayers--;
-          else if (selectedPlayer.payment_status === 'on_trial') updatedStats.onTrialPlayers--;
-          else if (selectedPlayer.payment_status === 'pending') updatedStats.pendingPlayers--;
-          
-          // Increment the new status count
-          if (newStatus === 'paid') updatedStats.paidPlayers++;
-          else if (newStatus === 'unpaid') updatedStats.unpaidPlayers++;
-          else if (newStatus === 'on_trial') updatedStats.onTrialPlayers++;
-          else if (newStatus === 'pending') updatedStats.pendingPlayers++;
-        }
-        setStats(updatedStats);
-        
-        // Update selected player
-        setSelectedPlayer(updatedPlayer);
-        
-        // Close modal and show success message
+        // Update the selectedPlayer state too
+        setSelectedPlayer({
+          ...selectedPlayer,
+          payment_status: newStatus, // Keep the UI status
+          last_payment_date: newStatus === 'paid' ? new Date().toLocaleDateString('en-GB') : selectedPlayer.last_payment_date
+        });
+
+        // Trigger event to notify other screens of the status change
+        const paymentDate = newStatus === 'paid' ? new Date().toISOString() : null;
+        triggerPaymentStatusChange(selectedPlayer.id, newStatus, paymentDate);
+
+        // Always reload data from the database after update
+        await fetchData();
+
         setIsStatusChangeModalVisible(false);
         Alert.alert('Success', `Payment status updated to ${getPaymentStatusText(newStatus).toLowerCase()}.`);
-        
       } catch (error) {
         console.error('Error changing payment status:', error);
         Alert.alert('Error', 'Failed to change payment status. Please try again.');
@@ -657,6 +864,69 @@ export const CoachPaymentsScreen = () => {
           </View>
         </Modal>
         
+        {/* Status Filter Modal */}
+        <Modal
+          visible={isStatusModalVisible}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setIsStatusModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Select Status</Text>
+                <TouchableOpacity 
+                  onPress={() => setIsStatusModalVisible(false)}
+                >
+                  <MaterialCommunityIcons name="close" size={24} color={COLORS.text} />
+                </TouchableOpacity>
+              </View>
+              
+              <TouchableOpacity
+                style={[styles.teamOption, !selectedStatus && styles.teamOptionSelected]}
+                onPress={() => handleStatusSelect(null)}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <MaterialCommunityIcons name="cash-multiple" size={20} color={COLORS.primary} style={{ marginRight: 8 }} />
+                  <Text style={[styles.teamOptionText, !selectedStatus && styles.teamOptionTextSelected]}>All Status</Text>
+                </View>
+                {!selectedStatus && (
+                  <MaterialCommunityIcons name="check" size={20} color={COLORS.primary} />
+                )}
+              </TouchableOpacity>
+              
+              {statusOptions.filter(option => option.value !== 'select_status').map(option => (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[styles.teamOption, selectedStatus === option.value && styles.teamOptionSelected]}
+                  onPress={() => handleStatusSelect(option.value)}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <MaterialCommunityIcons 
+                      name={
+                        option.value === 'paid' ? 'check-circle' :
+                        option.value === 'pending' ? 'clock' :
+                        option.value === 'unpaid' ? 'alert-circle' :
+                        option.value === 'on_trial' ? 'ticket-percent' :
+                        option.value === 'trial_ended' ? 'ticket-confirmation' : 'cash'
+                      } 
+                      size={20} 
+                      color={getPaymentStatusColor(option.value)} 
+                      style={{ marginRight: 8 }} 
+                    />
+                    <Text style={[styles.teamOptionText, selectedStatus === option.value && styles.teamOptionTextSelected]}>
+                      {option.label}
+                    </Text>
+                  </View>
+                  {selectedStatus === option.value && (
+                    <MaterialCommunityIcons name="check" size={20} color={COLORS.primary} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </Modal>
+        
         {/* Status Change Modal */}
         <Modal
           visible={isStatusChangeModalVisible}
@@ -720,13 +990,13 @@ export const CoachPaymentsScreen = () => {
                     )}
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.statusButton, { backgroundColor: COLORS.grey[800] + '20' }]}
+                    style={[styles.statusButton, { backgroundColor: '#9C27B0' + '20' }]}
                     onPress={() => handleChangePaymentStatus('trial_ended')}
                   >
-                    <MaterialCommunityIcons name="ticket-confirmation" size={24} color={COLORS.grey[800]} />
-                    <Text style={[styles.statusButtonText, { color: COLORS.grey[800] }]}>Trial Ended</Text>
+                    <MaterialCommunityIcons name="timer-sand-complete" size={24} color={'#9C27B0'} />
+                    <Text style={[styles.statusButtonText, { color: '#9C27B0' }]}>Trial Ended</Text>
                     {selectedPlayer.payment_status === 'trial_ended' && (
-                      <MaterialCommunityIcons name="check" size={20} color={COLORS.grey[800]} style={{ marginLeft: 'auto' }} />
+                      <MaterialCommunityIcons name="check" size={20} color={'#9C27B0'} style={{ marginLeft: 'auto' }} />
                     )}
                   </TouchableOpacity>
                 </View>
@@ -785,7 +1055,7 @@ export const CoachPaymentsScreen = () => {
                         
                         if (payment) {
                           // We have a specific record - map it to display value
-                          displayStatus = getDisplayPaymentStatus(payment.status);
+                          displayStatus = getDisplayPaymentStatus(payment.status, selectedPlayer.payment_status);
                         } else if (month === currentMonth) {
                           // Current month - use player's current status
                           displayStatus = selectedPlayer.payment_status;
@@ -875,7 +1145,7 @@ export const CoachPaymentsScreen = () => {
                                       await supabase
                                         .from('player_payments')
                                         .upsert([{
-                                          player_id: selectedPlayer.player_id,
+                                          player_id: selectedPlayer.id,
                                           year,
                                           month,
                                           status: dbStatus, // Use mapped status
@@ -884,12 +1154,16 @@ export const CoachPaymentsScreen = () => {
                                       // Update current player status if this is current month
                                       if (month === currentMonth) {
                                         const updatedPlayers = players.map(p => 
-                                          p.player_id === selectedPlayer.player_id 
+                                          p.id === selectedPlayer.id 
                                             ? {...p, payment_status: 'paid'} 
                                             : p
                                         );
                                         setPlayers(updatedPlayers);
                                         setSelectedPlayer({...selectedPlayer, payment_status: 'paid'});
+                                        
+                                        // Trigger event to notify other screens
+                                        const paymentDate = new Date().toISOString();
+                                        triggerPaymentStatusChange(selectedPlayer.id, 'paid', paymentDate);
                                       }
                                     }}
                                   >
@@ -933,10 +1207,10 @@ export const CoachPaymentsScreen = () => {
                                       );
                                       
                                       if (existingIndex >= 0) {
-                                        updatedHistory[existingIndex].status = 'pending'; // Use 'pending' for database storage
+                                        updatedHistory[existingIndex].status = 'unpaid'; // For UI display
                                       } else {
                                         updatedHistory.push({
-                                          year, month, status: 'pending' // Use 'pending' for database storage
+                                          year, month, status: 'unpaid' // For UI display
                                         });
                                       }
                                       setPaymentHistory(updatedHistory);
@@ -945,7 +1219,7 @@ export const CoachPaymentsScreen = () => {
                                       await supabase
                                         .from('player_payments')
                                         .upsert([{
-                                          player_id: selectedPlayer.player_id,
+                                          player_id: selectedPlayer.id,
                                           year,
                                           month,
                                           status: dbStatus, // Use mapped status
@@ -954,12 +1228,16 @@ export const CoachPaymentsScreen = () => {
                                       // Update current player status if this is current month
                                       if (month === currentMonth) {
                                         const updatedPlayers = players.map(p => 
-                                          p.player_id === selectedPlayer.player_id 
+                                          p.id === selectedPlayer.id 
                                             ? {...p, payment_status: 'unpaid'} 
                                             : p
                                         );
                                         setPlayers(updatedPlayers);
                                         setSelectedPlayer({...selectedPlayer, payment_status: 'unpaid'});
+                                        
+                                        // Trigger event to notify other screens
+                                        const paymentDate = null;
+                                        triggerPaymentStatusChange(selectedPlayer.id, 'unpaid', paymentDate);
                                       }
                                     }}
                                   >
@@ -1065,7 +1343,9 @@ export const CoachPaymentsScreen = () => {
                       </View>
                       <View style={styles.detailRow}>
                         <Text style={styles.detailLabel}>Last Payment:</Text>
-                        <Text style={styles.detailValue}>{selectedPlayer.last_payment_date || 'N/A'}</Text>
+                        <Text style={styles.detailValue}>
+                          {selectedPlayer.last_payment_date || 'N/A'}
+                        </Text>
                       </View>
                     </View>
                     
@@ -1082,9 +1362,9 @@ export const CoachPaymentsScreen = () => {
                             { color: getMedicalVisaStatusColor(selectedPlayer.medical_visa_status) }
                           ]}>
                             {selectedPlayer.medical_visa_status}
-        </Text>
-      </View>
-    </View>
+                          </Text>
+                        </View>
+                      </View>
                     </View>
                     
                     {parentDetails && (

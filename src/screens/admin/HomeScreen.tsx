@@ -248,7 +248,7 @@ export const AdminHomeScreen = () => {
             'Teams',
             stats.teams,
             'View and manage teams',
-            'shield-account',
+            'account-group-outline',
             'Manage',
             'teams',
             100
@@ -268,7 +268,7 @@ export const AdminHomeScreen = () => {
             'Players',
             stats.players,
             'View player details',
-            'account-group',
+            'run',
             'Manage',
             'players',
             300

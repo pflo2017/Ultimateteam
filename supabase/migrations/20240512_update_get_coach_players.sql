@@ -1,9 +1,7 @@
--- Add payment status and last payment date to players table
-ALTER TABLE public.players
-ADD COLUMN IF NOT EXISTS payment_status TEXT CHECK (payment_status IN ('paid', 'pending', 'missed')) DEFAULT 'pending',
-ADD COLUMN IF NOT EXISTS last_payment_date TIMESTAMP WITH TIME ZONE;
+-- Drop existing function first
+DROP FUNCTION IF EXISTS get_coach_players(UUID);
 
--- Update get_coach_players function to include actual payment fields
+-- Recreate function with last_payment_date field
 CREATE OR REPLACE FUNCTION get_coach_players(p_coach_id UUID)
 RETURNS TABLE (
     player_id UUID,
@@ -44,4 +42,7 @@ BEGIN
     AND p.is_active = true
     AND t.id IN (SELECT id FROM coach_team_ids);
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER; 
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Grant execute permission on the function
+GRANT EXECUTE ON FUNCTION get_coach_players TO anon; 

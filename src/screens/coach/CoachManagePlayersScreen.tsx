@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, TextInput, RefreshControl, Modal, TouchableOpacity, Alert } from 'react-native';
 import { Text, Card } from 'react-native-paper';
 import { COLORS, SPACING } from '../../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
+import { useDataRefresh } from '../../utils/useDataRefresh';
 
 interface Team {
   id: string;
@@ -11,8 +12,10 @@ interface Team {
 }
 
 interface Player {
+  id: string;
   player_id: string;
   player_name: string;
+  name?: string;
   team_id: string;
   team_name: string;
   medical_visa_status: string;
@@ -88,58 +91,152 @@ const getPaymentStatusText = (status: string) => {
   }
 };
 
-const PlayerCard = ({ player, onDetailsPress }: { player: Player; onDetailsPress: () => void }) => (
-  <Card style={styles.playerCard}>
-    <Card.Content>
-      <View style={styles.cardHeader}>
-        <View style={styles.cardTitleContainer}>
-          <MaterialCommunityIcons name="account" size={24} color={COLORS.primary} />
-          <Text style={styles.playerName}>{player.player_name}</Text>
+const PlayerCard = ({ player, onDetailsPress, onDelete }: { 
+  player: Player; 
+  onDetailsPress: () => void;
+  onDelete: (playerId: string) => Promise<void>;
+}) => {
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [refreshedStatus, setRefreshedStatus] = useState<string | null>(null);
+  
+  // Fetch fresh payment status when card renders
+  useEffect(() => {
+    const getLatestStatus = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('players')
+          .select('payment_status, player_status')
+          .eq('id', player.id)
+          .single();
+          
+        if (!error && data) {
+          console.log(`[PlayerCard] Got fresh status for ${player.player_name}:`, {
+            old: player.payment_status,
+            new: data.player_status || data.payment_status
+          });
+          // Prefer player_status ENUM over payment_status
+          setRefreshedStatus(data.player_status || data.payment_status);
+        }
+      } catch (err) {
+        console.error("Error fetching fresh status:", err);
+      }
+    };
+    
+    getLatestStatus();
+  }, [player.id]);
+  
+  const toggleMenu = () => {
+    setMenuVisible(!menuVisible);
+  };
+  
+  // Use refreshed status if available, otherwise fall back to passed-in status
+  const displayStatus = refreshedStatus || player.payment_status;
+  
+  return (
+    <Card style={styles.playerCard}>
+      <Card.Content style={styles.playerCardContent}>
+        <View style={styles.cardHeader}>
+          <View style={styles.cardTitleContainer}>
+            <MaterialCommunityIcons name="account" size={24} color={COLORS.primary} />
+            <Text style={styles.playerName}>{player.player_name || player.name}</Text>
+          </View>
+          <TouchableOpacity 
+            onPress={toggleMenu}
+            style={styles.actionButton}
+          >
+            <MaterialCommunityIcons name="dots-vertical" size={20} color={COLORS.grey[700]} />
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity
-          onPress={onDetailsPress}
-          style={styles.actionButton}
-        >
-          <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.primary} />
-        </TouchableOpacity>
-      </View>
-      <View style={styles.cardContent}>
-        <View style={styles.infoRow}>
-          <MaterialCommunityIcons name="account-group" size={20} color={COLORS.primary} />
-          <Text style={styles.infoLabel}>
-            Team: <Text style={styles.infoValue}>{player.team_name || 'No team assigned'}</Text>
-          </Text>
-        </View>
-        
-        <View style={styles.infoRow}>
-          <MaterialCommunityIcons 
-            name="medical-bag" 
-            size={20} 
-            color={getMedicalVisaStatusColor(player.medical_visa_status)} 
-          />
-          <Text style={styles.infoLabel}>
-            Visa Status: <Text style={[styles.infoValue, { color: getMedicalVisaStatusColor(player.medical_visa_status) }]}>
-              {player.medical_visa_status.charAt(0).toUpperCase() + player.medical_visa_status.slice(1)}
+        <View style={styles.cardContent}>
+          <View style={styles.infoRow}>
+            <MaterialCommunityIcons name="account-group" size={20} color={COLORS.primary} />
+            <Text style={styles.infoLabel}>
+              Team: <Text style={styles.infoValue}>{player.team_name || 'No team assigned'}</Text>
             </Text>
-          </Text>
-        </View>
+          </View>
+          
+          <View style={styles.infoRow}>
+            <MaterialCommunityIcons 
+              name="medical-bag" 
+              size={20} 
+              color={COLORS.primary} 
+            />
+            <Text style={styles.infoLabel}>
+              Medical Visa Status: <Text style={[styles.infoValue, { color: getMedicalVisaStatusColor(player.medical_visa_status) }]}>
+                {player.medical_visa_status.charAt(0).toUpperCase() + player.medical_visa_status.slice(1)}
+              </Text>
+            </Text>
+          </View>
 
-        <View style={styles.infoRow}>
-          <MaterialCommunityIcons 
-            name="cash" 
-            size={20} 
-            color={getPaymentStatusColor(player.payment_status)} 
-          />
-          <Text style={styles.infoLabel}>
-            Payment Status: <Text style={[styles.infoValue, { color: getPaymentStatusColor(player.payment_status) }]}>
-              {getPaymentStatusText(player.payment_status)}
+          <View style={styles.infoRow}>
+            <MaterialCommunityIcons 
+              name="credit-card-outline" 
+              size={20} 
+              color={COLORS.primary} 
+            />
+            <Text style={styles.infoLabel}>
+              Payment Status: <Text style={[styles.infoValue, { color: getPaymentStatusColor(displayStatus) }]}>
+                {getPaymentStatusText(displayStatus)}
+              </Text>
             </Text>
-          </Text>
+          </View>
+          
+          {menuVisible && (
+            <View style={styles.menuContainer}>
+              <TouchableOpacity 
+                style={styles.menuItem}
+                onPress={onDetailsPress}
+              >
+                <MaterialCommunityIcons name="account-details" size={20} color={COLORS.primary} />
+                <Text style={styles.menuItemText}>View player details</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.menuItem}
+                onPress={() => {
+                  Alert.alert(
+                    "Delete Player",
+                    "Are you sure you want to delete this player? This action cannot be undone.",
+                    [
+                      {
+                        text: "Cancel",
+                        style: "cancel"
+                      },
+                      {
+                        text: "Delete",
+                        style: "destructive",
+                        onPress: async () => {
+                          try {
+                            setIsDeleting(true);
+                            await onDelete(player.id);
+                            // Close the menu
+                            setMenuVisible(false);
+                          } catch (error) {
+                            console.error('Error deleting player:', error);
+                            Alert.alert("Error", "Failed to delete player");
+                          } finally {
+                            setIsDeleting(false);
+                          }
+                        }
+                      }
+                    ]
+                  );
+                }}
+                disabled={isDeleting}
+              >
+                <MaterialCommunityIcons name="delete" size={20} color={COLORS.error} />
+                <Text style={[styles.menuItemText, { color: COLORS.error }]}>
+                  {isDeleting ? "Deleting..." : "Delete player"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
-      </View>
-    </Card.Content>
-  </Card>
-);
+      </Card.Content>
+    </Card>
+  );
+};
 
 export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> = ({
   players,
@@ -161,74 +258,98 @@ export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> =
   const [playerMenuVisible, setPlayerMenuVisible] = useState<string | null>(null);
 
   const filteredPlayers = players.filter(player => {
-    const matchesSearch = player.player_name.toLowerCase().includes(searchQuery.toLowerCase());
+    const playerName = player.player_name || player.name || '';
+    const matchesSearch = playerName.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesTeam = !selectedTeamId || player.team_id === selectedTeamId;
     return matchesSearch && matchesTeam;
   });
 
   const handleOpenPlayerDetails = async (player: Player) => {
-    console.log('Opening player details for:', JSON.stringify(player, null, 2));
-    
-    // Log each field individually to see what we have
-    console.log('Player ID:', player.player_id);
-    console.log('Player Name:', player.player_name);
-    console.log('Created At:', player.created_at);
-    console.log('Birth Date:', player.birth_date);
-    console.log('Last Payment Date:', player.last_payment_date);
-    
-    setSelectedPlayer(player);
-    
-    // Direct verification query - fetch directly from the database
     try {
-      console.log('Verifying player data directly from database for ID:', player.player_id);
+      console.log("Opening player details for:", {
+        id: player.id, 
+        player_id: player.player_id,
+        last_payment_date: player.last_payment_date
+      });
       
-      // Don't use single() as it's causing the error when no rows are found
-      const { data: directPlayerData, error: directPlayerError } = await supabase
+      // Fetch fresh player data to ensure we have the latest information
+      const { data: freshPlayerData, error: freshPlayerError } = await supabase
         .from('players')
-        .select('id, name, created_at, birth_date, last_payment_date')
-        .eq('id', player.player_id);
+        .select('last_payment_date')
+        .eq('id', player.id)
+        .single();
         
-      if (directPlayerError) {
-        console.error('Error in direct verification query:', directPlayerError);
+      if (!freshPlayerError && freshPlayerData?.last_payment_date) {
+        console.log("Retrieved fresh last_payment_date:", freshPlayerData.last_payment_date);
+        const formattedDate = typeof freshPlayerData.last_payment_date === 'string'
+          ? new Date(freshPlayerData.last_payment_date).toLocaleDateString('en-GB')
+          : freshPlayerData.last_payment_date || null;
+          
+        // Create a new player object with updated information
+        const updatedPlayer = {
+          ...player,
+          last_payment_date: formattedDate
+        };
+        
+        console.log("Using formatted date:", formattedDate);
+        setSelectedPlayer(updatedPlayer);
       } else {
-        console.log('DIRECT DATA FROM DATABASE:', directPlayerData);
-        if (directPlayerData && directPlayerData.length > 0) {
-          console.log('Found player data:', directPlayerData[0]);
-        } else {
-          console.log('No player found with ID:', player.player_id);
-        }
+        // Use existing player data if fetch fails
+        console.log("Using existing player data with last_payment_date:", player.last_payment_date);
+        setSelectedPlayer(player);
       }
-    } catch (directError) {
-      console.error('Exception in direct verification:', directError);
-    }
-    
-    // Fetch parent details if player has parent_id
-    if (player.parent_id) {
-      try {
-        console.log('Fetching parent details for parent_id:', player.parent_id);
+      
+      // Fetch parent details if player has parent_id
+      if (player.parent_id) {
         const { data, error } = await supabase
           .from('parents')
           .select('name, phone_number, email')
           .eq('id', player.parent_id)
           .single();
-          
         if (error) throw error;
-        console.log('Parent details fetched:', data);
         setParentDetails(data);
-      } catch (error) {
-        console.error('Error fetching parent details:', error);
+      } else {
         setParentDetails(null);
       }
-    } else {
-      setParentDetails(null);
+      
+      // Now show the modal
+      setIsPlayerDetailsModalVisible(true);
+    } catch (error) {
+      console.error('Error fetching player details:', error);
+      Alert.alert('Error', 'Could not fetch player details.');
     }
-    
-    setIsPlayerDetailsModalVisible(true);
+  };
+
+  const handleDeletePlayer = async (playerId: string) => {
+    try {
+      const { error } = await supabase
+        .from('players')
+        .delete()
+        .eq('id', playerId);
+        
+      if (error) throw error;
+      
+      Alert.alert("Success", "Player deleted successfully");
+      onRefresh();
+    } catch (error) {
+      console.error('Error deleting player:', error);
+      Alert.alert("Error", "Failed to delete player");
+    }
   };
 
   const handlePlayerMenuPress = (playerId: string) => {
     setPlayerMenuVisible(playerId === playerMenuVisible ? null : playerId);
   };
+
+  useEffect(() => {
+    onRefresh();
+  }, []);
+  
+  // Use data refresh hook to refresh player data when payment status changes
+  useDataRefresh('players', () => {
+    console.log("[CoachManagePlayersScreen] Payment status change detected - refreshing player data");
+    onRefresh();
+  });
 
   return (
     <View style={styles.container}>
@@ -274,9 +395,10 @@ export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> =
         >
           {filteredPlayers.map(player => (
             <PlayerCard 
-              key={player.player_id} 
+              key={player.id} 
               player={player} 
               onDetailsPress={() => handleOpenPlayerDetails(player)}
+              onDelete={handleDeletePlayer}
             />
           ))}
           {filteredPlayers.length === 0 && !isLoading && (
@@ -380,12 +502,12 @@ export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> =
               </View>
               
               {selectedPlayer && (
-                <ScrollView style={{ maxHeight: '80%' }}>
+                <ScrollView>
                   <View style={styles.detailsContainer}>
                     <View style={styles.avatarContainer}>
                       <MaterialCommunityIcons name="account-circle" size={80} color={COLORS.primary} />
-                      <Text style={styles.playerDetailName}>{selectedPlayer.player_name}</Text>
-                      <Text style={styles.teamDetailName}>{selectedPlayer.team_name || 'No team assigned'}</Text>
+                      <Text style={styles.playerDetailName}>{selectedPlayer.player_name || selectedPlayer.name}</Text>
+                      <Text style={styles.teamDetailName}>{selectedPlayer.team_name}</Text>
                     </View>
                     
                     <View style={styles.detailsSection}>
@@ -393,16 +515,16 @@ export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> =
                       <View style={styles.detailRow}>
                         <Text style={styles.detailLabel}>Join Date:</Text>
                         <Text style={styles.detailValue}>
-                          {selectedPlayer.created_at && selectedPlayer.created_at !== 'null' 
-                            ? new Date(selectedPlayer.created_at).toLocaleDateString('en-GB') 
+                          {selectedPlayer.created_at 
+                            ? new Date(selectedPlayer.created_at).toLocaleDateString('en-GB')
                             : 'Unknown'}
                         </Text>
                       </View>
                       <View style={styles.detailRow}>
                         <Text style={styles.detailLabel}>Birthdate:</Text>
                         <Text style={styles.detailValue}>
-                          {selectedPlayer.birth_date && selectedPlayer.birth_date !== 'null' 
-                            ? new Date(selectedPlayer.birth_date).toLocaleDateString('en-GB') 
+                          {selectedPlayer.birth_date 
+                            ? new Date(selectedPlayer.birth_date).toLocaleDateString('en-GB')
                             : 'Unknown'}
                         </Text>
                       </View>
@@ -426,7 +548,27 @@ export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> =
                       </View>
                       <View style={styles.detailRow}>
                         <Text style={styles.detailLabel}>Last Payment:</Text>
-                        <Text style={styles.detailValue}>{selectedPlayer.last_payment_date || 'N/A'}</Text>
+                        <Text style={styles.detailValue}>
+                          {selectedPlayer?.last_payment_date || 'N/A'}
+                        </Text>
+                      </View>
+                    </View>
+                    
+                    <View style={styles.detailsSection}>
+                      <Text style={styles.modalSectionTitle}>Medical Visa Information</Text>
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>Status:</Text>
+                        <View style={[
+                          styles.statusBadge,
+                          { backgroundColor: getMedicalVisaStatusColor(selectedPlayer.medical_visa_status) + '20' }
+                        ]}>
+                          <Text style={[
+                            styles.statusText,
+                            { color: getMedicalVisaStatusColor(selectedPlayer.medical_visa_status) }
+                          ]}>
+                            {selectedPlayer.medical_visa_status.charAt(0).toUpperCase() + selectedPlayer.medical_visa_status.slice(1)}
+                          </Text>
+                        </View>
                       </View>
                     </View>
                     
@@ -449,6 +591,28 @@ export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> =
                         )}
                       </View>
                     )}
+                    
+                    <TouchableOpacity 
+                      onPress={() => {
+                        setIsPlayerDetailsModalVisible(false);
+                        setTimeout(() => {
+                          if (selectedPlayer) {
+                            handleDeletePlayer(selectedPlayer.id);
+                          }
+                        }, 300);
+                      }}
+                      style={styles.deleteButton}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <MaterialCommunityIcons 
+                          name="delete" 
+                          size={20} 
+                          color={COLORS.white}
+                          style={{ marginRight: 8 }}
+                        />
+                        <Text style={styles.deleteButtonText}>Delete Player</Text>
+                      </View>
+                    </TouchableOpacity>
                   </View>
                 </ScrollView>
               )}
@@ -708,5 +872,18 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     padding: SPACING.xs,
+  },
+  deleteButton: {
+    backgroundColor: COLORS.error,
+    padding: SPACING.md,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: SPACING.md,
+  },
+  deleteButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: COLORS.white,
   },
 }); 

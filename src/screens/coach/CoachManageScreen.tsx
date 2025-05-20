@@ -9,6 +9,7 @@ import { CoachManagePlayersScreen } from './CoachManagePlayersScreen';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRoute, RouteProp } from '@react-navigation/native';
 import type { CoachTabParamList } from '../../navigation/CoachNavigator';
+import { useDataRefresh } from '../../utils/useDataRefresh';
 
 interface Team {
   id: string;
@@ -17,6 +18,7 @@ interface Team {
 }
 
 interface Player {
+  id: string;
   player_id: string;
   player_name: string;
   team_id: string;
@@ -24,6 +26,9 @@ interface Player {
   medical_visa_status: string;
   payment_status: string;
   parent_id: string | null;
+  created_at?: string;
+  birth_date?: string;
+  last_payment_date?: string;
 }
 
 export const CoachManageScreen = () => {
@@ -45,6 +50,12 @@ export const CoachManageScreen = () => {
     }
     loadData();
   }, [route.params?.activeTab, route.params?.teamId]);
+
+  // Use the data refresh hook to listen for payment status changes
+  useDataRefresh('players', () => {
+    console.log("Payment status change detected - refreshing players data");
+    loadData();
+  });
 
   const loadData = async () => {
     try {
@@ -108,8 +119,184 @@ export const CoachManageScreen = () => {
         Alert.alert('Error', 'Failed to load players. Please try again.');
         setPlayers([]);
       } else {
-        console.log('Players fetched:', playersData);
-        setPlayers(playersData || []);
+        console.log('Players fetched from RPC:', playersData);
+        
+        // If no players data, set empty array and continue
+        if (!playersData || playersData.length === 0) {
+          setPlayers([]);
+          return;
+        }
+        
+        // COMPLETE FIX: Forget about enhancing the RPC data, just fetch the complete player data directly
+        if (playersData && playersData.length > 0) {
+          const playerIds = playersData.map((player: any) => player.player_id);
+          
+          // Get complete player data directly from the players table 
+          console.log("QUERY - Fetching player data for IDs:", playerIds);
+          const { data: completePlayerData, error: completePlayerError } = await supabase
+            .from('players')
+            .select(`
+              id,
+              name,
+              created_at,
+              birth_date,
+              payment_status,
+              last_payment_date,
+              team_id,
+              parent_id
+            `)
+            .in('id', playerIds);
+            
+          if (completePlayerError) {
+            console.error("Error fetching complete player data:", completePlayerError);
+          } else if (completePlayerData && completePlayerData.length > 0) {
+            console.log("QUERY - Raw results example:", {
+              id: completePlayerData[0].id,
+              name: completePlayerData[0].name,
+              payment_status: completePlayerData[0].payment_status,
+              last_payment_date: completePlayerData[0].last_payment_date
+            });
+            
+            // Map the complete data to the RPC data format
+            const enhancedPlayers = playersData.map((rpcPlayer: any) => {
+              console.log("STEP 2 - Processing player:", rpcPlayer.player_id);
+              const completePlayer = completePlayerData.find(p => p.id === rpcPlayer.player_id);
+              if (completePlayer) {
+                console.log("STEP 3 - Found matching complete player data:", {
+                  id: completePlayer.id,
+                  raw_last_payment_date: completePlayer.last_payment_date
+                });
+                
+                // Format last_payment_date to match admin screen format
+                const lastPaymentDate = completePlayer.last_payment_date
+                  ? new Date(completePlayer.last_payment_date).toLocaleDateString('en-GB')
+                  : null;
+                  
+                console.log("STEP 4 - Formatted last payment date:", lastPaymentDate);
+                
+                return {
+                  ...rpcPlayer,
+                  id: rpcPlayer.player_id,
+                  created_at: completePlayer.created_at,
+                  birth_date: completePlayer.birth_date,
+                  last_payment_date: lastPaymentDate
+                };
+              }
+              console.log("STEP 5 - No matching complete player data found");
+              // If no complete player data found, try to fetch last_payment_date separately
+              return {
+                ...rpcPlayer,
+                id: rpcPlayer.player_id
+              };
+            });
+            
+            console.log("STEP 6 - Final enhanced players:", enhancedPlayers.map((p: any) => ({
+              player_id: p.player_id,
+              last_payment_date: p.last_payment_date
+            })));
+            
+            setPlayers(enhancedPlayers);
+            return;
+          }
+        }
+        
+        // If we reach here, the direct approach failed, fallback to the previous method
+        // We need to fetch the missing last_payment_date field separately
+        let playersWithPaymentDates = [...playersData];
+        
+        if (playersData && playersData.length > 0) {
+          // Get all player IDs
+          const playerIds = playersData.map((player: any) => player.player_id);
+          
+          // Fetch last payment dates directly
+          const { data: paymentData, error: paymentError } = await supabase
+            .from('players')
+            .select('id, last_payment_date')
+            .in('id', playerIds);
+            
+          if (!paymentError && paymentData) {
+            console.log("Payment dates fetched:", paymentData);
+            
+            // Log a specific example
+            if (paymentData.length > 0) {
+              console.log("Example player payment date:", paymentData[0]);
+              console.log("Payment date type:", typeof paymentData[0].last_payment_date);
+              if (paymentData[0].last_payment_date) {
+                try {
+                  console.log("Formatted date:", new Date(paymentData[0].last_payment_date).toLocaleDateString('en-GB'));
+                } catch (e) {
+                  console.error("Error formatting date:", e);
+                }
+              }
+            }
+            
+            // Create a map for quick lookup
+            const paymentDateMap = new Map();
+            paymentData.forEach(item => {
+              paymentDateMap.set(item.id, item.last_payment_date);
+            });
+            
+            // Add last_payment_date to each player
+            playersWithPaymentDates = playersData.map((player: any) => {
+              const rawLastPaymentDate = paymentDateMap.get(player.player_id);
+              const formattedLastPaymentDate = rawLastPaymentDate
+                ? new Date(rawLastPaymentDate).toLocaleDateString('en-GB')
+                : null;
+                
+              return {
+                ...player,
+                id: player.player_id,
+                last_payment_date: formattedLastPaymentDate
+              };
+            });
+          } else {
+            console.error("Error fetching payment dates:", paymentError);
+          }
+        }
+        
+        // Fetch player birthdates from parent_children table
+        const { data: parentChildrenData, error: parentChildrenError } = await supabase
+          .from('parent_children')
+          .select('parent_id, full_name, birth_date')
+          .eq('is_active', true);
+          
+        if (parentChildrenError) {
+          console.error('Error fetching parent children data:', parentChildrenError);
+        }
+        
+        // Fetch team creation dates for join date fallback
+        const { data: teamsCreateDates, error: teamsCreateDatesError } = await supabase
+          .from('teams')
+          .select('id, created_at');
+          
+        if (teamsCreateDatesError) {
+          console.error('Error fetching teams creation dates:', teamsCreateDatesError);
+        }
+        
+        // Enhance player data with team creation dates and birthdates
+        const enhancedPlayersData = (playersWithPaymentDates || []).map((player: any) => {
+          // Find team creation date as fallback for player join date
+          const teamCreationDate = teamsCreateDates?.find(t => t.id === player.team_id)?.created_at;
+          
+          // Find matching child record for birthdate
+          const childRecord = parentChildrenData?.find(
+            child => child.parent_id === player.parent_id && 
+                    child.full_name.toLowerCase() === player.player_name.toLowerCase()
+          );
+          
+          return {
+            ...player,
+            id: player.player_id,
+            // Use team creation date as fallback if player has no creation date
+            created_at: player.created_at || teamCreationDate,
+            // Use birthdate from parent_children if available
+            birth_date: childRecord?.birth_date || player.birth_date,
+            // Always include last_payment_date if present
+            last_payment_date: player.last_payment_date || undefined
+          };
+        });
+        
+        setPlayers(enhancedPlayersData || []);
       }
 
     } catch (error) {
@@ -142,7 +329,7 @@ export const CoachManageScreen = () => {
           theme={{
             colors: {
               primary: '#212121',
-              secondaryContainer: '#F5F5F5',
+              secondaryContainer: '#EEFBFF',
               onSecondaryContainer: '#212121',
               outline: '#E0E0E0',
             }
