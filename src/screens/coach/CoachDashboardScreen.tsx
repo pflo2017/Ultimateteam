@@ -29,13 +29,14 @@ interface RawTeam {
   player_count: number;
 }
 
-type CardType = 'teams' | 'players' | 'payments';
+type CardType = 'teams' | 'players' | 'payments' | 'collections';
 
 export const CoachDashboardScreen = () => {
   const [stats, setStats] = useState({
     teams: [] as Team[],
     totalPlayers: 0,
-    pendingPayments: 0
+    pendingPayments: 0,
+    collectionsCount: 0
   });
   const navigation = useNavigation<NativeStackNavigationProp<CoachTabParamList>>();
 
@@ -76,12 +77,27 @@ export const CoachDashboardScreen = () => {
         return;
       }
 
+      // Fetch collections count
+      const { data: collectionsData, error: collectionsError } = await supabase
+        .from('payment_collections')
+        .select('id')
+        .eq('coach_id', coachData.id)
+        .eq('is_processed', false);
+
+      if (collectionsError) {
+        console.error('Error fetching collections:', collectionsError);
+      }
+
+      const collectionsCount = collectionsData?.length || 0;
+      console.log('Collections count:', collectionsCount);
+
       if (!teamsData || teamsData.length === 0) {
         console.log('No teams returned from query');
         setStats({
           teams: [],
           totalPlayers: 0,
-          pendingPayments: 0
+          pendingPayments: 0,
+          collectionsCount
         });
         return;
       }
@@ -103,13 +119,15 @@ export const CoachDashboardScreen = () => {
       console.log('Setting stats:', {
         teams: transformedTeams,
         totalPlayers,
-        pendingPayments: 0
+        pendingPayments: 0,
+        collectionsCount
       });
 
       setStats({
         teams: transformedTeams,
         totalPlayers,
-        pendingPayments: 0
+        pendingPayments: 0,
+        collectionsCount
       });
     } catch (error) {
       console.error('Error in loadStats:', error);
@@ -127,19 +145,42 @@ export const CoachDashboardScreen = () => {
         }
         break;
       case 'Payments':
-        navigation.navigate('Payments');
+        if (type === 'collections') {
+          // Navigate to payments screen with collections flag
+          navigation.navigate({
+            name: 'Payments',
+            params: { showCollections: true }
+          });
+        } else {
+          navigation.navigate({
+            name: 'Payments',
+            params: {}
+          });
+        }
         break;
       case 'CoachDashboard':
-        navigation.navigate('CoachDashboard');
+        navigation.navigate({
+          name: 'CoachDashboard',
+          params: undefined
+        });
         break;
       case 'Schedule':
-        navigation.navigate('Schedule');
+        navigation.navigate({
+          name: 'Schedule',
+          params: undefined
+        });
         break;
       case 'Chat':
-        navigation.navigate('Chat');
+        navigation.navigate({
+          name: 'Chat',
+          params: undefined
+        });
         break;
       case 'News':
-        navigation.navigate('News');
+        navigation.navigate({
+          name: 'News',
+          params: undefined
+        });
         break;
     }
   };
@@ -243,6 +284,15 @@ export const CoachDashboardScreen = () => {
               'Payments',
               'payments',
               600
+            )}
+            {renderCard(
+              'Collections',
+              stats.collectionsCount,
+              'Cash collected',
+              'cash-register',
+              'Payments',
+              'collections',
+              800
             )}
           </View>
         </View>

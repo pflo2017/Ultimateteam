@@ -3,6 +3,8 @@
  * Used for notifying components about data changes like payment status updates
  */
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 type EventCallback = (...args: any[]) => void;
 
 // Store for event listeners
@@ -15,35 +17,50 @@ export const refreshTimestamps: Record<string, number> = {
   teams: Date.now(),
 };
 
+const EVENT_STORE_KEY = '@event_listeners';
+
+// List of available events - must add here to be valid
+export type EventType = 
+  | 'payments' 
+  | 'players' 
+  | 'teams' 
+  | 'sessions' 
+  | 'user_profile' 
+  | 'chat_messages'
+  | 'payment_status_changed'
+  | 'payment_collection_added'
+  | 'payment_collection_processed';
+
+interface EventListener {
+  id: string;
+  eventType: EventType;
+  lastTriggered: number;
+}
+
 /**
- * Add an event listener
+ * Register an event listener
  * @param event The event name to listen for
- * @param callback Function to call when the event is triggered
+ * @param callback The callback to execute when the event is triggered
+ * @returns A function to unregister the listener
  */
-export const addListener = (event: string, callback: EventCallback): void => {
+export const registerEventListener = (event: string, callback: EventCallback): () => void => {
+  console.log(`[Events] Registering listener for event: ${event}`);
+  
   if (!listeners[event]) {
     listeners[event] = [];
   }
+  
   listeners[event].push(callback);
-};
-
-/**
- * Remove an event listener
- * @param event The event name
- * @param callback The callback function to remove
- */
-export const removeListener = (event: string, callback: EventCallback): void => {
-  if (!listeners[event]) return;
   
-  const index = listeners[event].indexOf(callback);
-  if (index !== -1) {
-    listeners[event].splice(index, 1);
-  }
-  
-  // Clean up empty event arrays
-  if (listeners[event].length === 0) {
-    delete listeners[event];
-  }
+  return () => {
+    console.log(`[Events] Unregistering listener for event: ${event}`);
+    if (listeners[event]) {
+      const index = listeners[event].indexOf(callback);
+      if (index !== -1) {
+        listeners[event].splice(index, 1);
+      }
+    }
+  };
 };
 
 /**
@@ -75,24 +92,33 @@ export const triggerEvent = (event: string, ...args: any[]): void => {
     forceRefresh('players');
     forceRefresh('payments');
   }
+
+  // Handle payment collection events
+  if (event === 'payment_collection_added') {
+    console.log('[Events] Payment collection added - forcing refresh for payments');
+    forceRefresh('payments');
+  }
+
+  if (event === 'payment_collection_processed') {
+    console.log('[Events] Payment collection processed - forcing refresh for players and payments');
+    forceRefresh('players');
+    forceRefresh('payments');
+  }
 };
 
 /**
- * Force data refresh by updating the refresh timestamp
- * Components should check this timestamp to know when to refresh their data
- * @param dataType The type of data to refresh ('players', 'payments', etc.)
+ * Force a refresh for specific data type by updating its timestamp
+ * @param dataType The type of data to refresh
  */
 export const forceRefresh = (dataType: string): void => {
-  // Use Date.now() + a small random number to ensure it's always different
-  // This helps prevent issues where multiple calls in the same millisecond might not trigger an update
-  const timestamp = Date.now() + Math.floor(Math.random() * 1000);
+  if (refreshTimestamps[dataType] !== undefined) {
+    const oldTimestamp = refreshTimestamps[dataType];
+    const newTimestamp = Date.now() + Math.random(); // Add random to prevent collisions
+    refreshTimestamps[dataType] = newTimestamp;
+    console.log(`[Events] Forcing refresh for ${dataType} - old timestamp: ${oldTimestamp}, new: ${newTimestamp}`);
+  } else {
+    console.warn(`[Events] Cannot force refresh for unknown data type: ${dataType}`);
+  }
   
-  // Log before setting the timestamp
-  console.log(`[Events] Force refresh for ${dataType}: Old:${refreshTimestamps[dataType]}, New:${timestamp}`);
-  
-  // Set the timestamp
-  refreshTimestamps[dataType] = timestamp;
-  
-  // Log all timestamps for debugging
   console.log(`[Events] Current timestamps: players=${refreshTimestamps.players}, payments=${refreshTimestamps.payments}`);
 }; 

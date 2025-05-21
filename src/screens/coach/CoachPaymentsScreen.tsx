@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, TextInput, ScrollView, TouchableOpacity, Modal, Alert, Platform, SafeAreaView } from 'react-native';
-import { Text, Card, ActivityIndicator } from 'react-native-paper';
+import { View, StyleSheet, TextInput, ScrollView, TouchableOpacity, Modal, Alert, Platform, SafeAreaView, KeyboardAvoidingView } from 'react-native';
+import { Text, Card, ActivityIndicator, Button } from 'react-native-paper';
 import { COLORS, SPACING } from '../../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { triggerEvent, forceRefresh } from '../../utils/events';
 import { useDataRefresh } from '../../utils/useDataRefresh';
+import { RouteProp, useRoute } from '@react-navigation/native';
+import { CoachTabParamList } from '../../navigation/CoachNavigator';
+import { CoachCollectionsScreen } from './CoachCollectionsScreen';
 
 interface Player {
   id: string;
@@ -48,7 +51,22 @@ interface HistoryMonth {
   date: Date; 
 }
 
+interface PaymentCollection {
+  id: string;
+  player_id: string;
+  coach_id: string;
+  collected_date: string;
+  is_processed: boolean;
+  processed_date: string | null;
+  notes: string | null;
+  player_name?: string;
+  team_name?: string;
+}
+
 export const CoachPaymentsScreen = () => {
+  const route = useRoute<RouteProp<CoachTabParamList, 'Payments'>>();
+  const [showCollections, setShowCollections] = useState(route.params?.showCollections === true);
+  
   const [players, setPlayers] = useState<Player[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [stats, setStats] = useState<PaymentStats>({
@@ -85,10 +103,17 @@ export const CoachPaymentsScreen = () => {
   const selectedStatusOption = statusOptions.find(option => option.value === selectedStatus);
   const [isStatusChangeModalVisible, setIsStatusChangeModalVisible] = useState(false);
   const [openDropdownMonth, setOpenDropdownMonth] = useState<string | null>(null);
+  const [isMarkAsCollectedModalVisible, setIsMarkAsCollectedModalVisible] = useState(false);
+  const [collectionNote, setCollectionNote] = useState('');
+  const [collections, setCollections] = useState<PaymentCollection[]>([]);
+  const [collectionsLoading, setCollectionsLoading] = useState(false);
 
   useEffect(() => {
     fetchData();
-  }, []);
+    if (showCollections) {
+      fetchCollections();
+    }
+  }, [showCollections]);
 
   // Use data refresh hook to refresh when payment status changes
   useDataRefresh('payments', () => {
@@ -139,10 +164,13 @@ export const CoachPaymentsScreen = () => {
         console.error('Error fetching player_status values:', playerStatusError);
       }
       
+      console.log('Player status data from database:', playerStatusData);
+      
       // Create a map for quick lookup of player_status values
       const playerStatusMap = new Map();
       (playerStatusData || []).forEach((item: any) => {
         playerStatusMap.set(item.id, item.player_status);
+        console.log(`Setting player_status for ${item.id}: ${item.player_status}`);
       });
       
       // Fetch player birthdates from parent_children table
@@ -258,6 +286,104 @@ export const CoachPaymentsScreen = () => {
       Alert.alert('Error', 'Failed to load data. Please try again.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchCollections = async () => {
+    try {
+      setCollectionsLoading(true);
+      
+      const storedCoachData = await AsyncStorage.getItem('coach_data');
+      if (!storedCoachData) {
+        Alert.alert('Error', 'Coach data not found. Please log in again.');
+        return;
+      }
+      
+      const coachData = JSON.parse(storedCoachData);
+      console.log('Fetching collections for coach ID:', coachData.id);
+      
+      // Fetch collections for this coach, with the correct field name structure
+      const { data, error } = await supabase
+        .from('payment_collections')
+        .select(`
+          id,
+          player_id,
+          coach_id,
+          collected_date,
+          is_processed,
+          processed_date,
+          notes
+        `)
+        .eq('coach_id', coachData.id)
+        .order('collected_date', { ascending: false });
+      
+      if (error) {
+        console.error('Error in initial collections fetch:', error);
+        throw error;
+      }
+      
+      console.log('Collections data fetched:', data?.length, 'records');
+      
+      if (!data || data.length === 0) {
+        setCollections([]);
+        setCollectionsLoading(false);
+        return;
+      }
+      
+      // Get player and team names
+      const playerIds = data.map(collection => collection.player_id);
+      
+      const { data: playersData, error: playersError } = await supabase
+        .from('players')
+        .select(`id, name, team_id, teams:team_id(id, name)`)
+        .in('id', playerIds);
+        
+      if (playersError) {
+        console.error('Error fetching players for collections:', playersError);
+        throw playersError;
+      }
+      
+      console.log('Players data fetched for collections:', playersData?.length, 'players');
+      
+      // Create a map for quick lookup
+      const playerMap = new Map();
+      playersData?.forEach(player => {
+        // Safely extract team name
+        let teamName = 'No Team';
+        if (player.teams) {
+          // Handle the case where teams could be an object or potentially an array
+          const teamsObj = player.teams as any;
+          if (teamsObj.name) { // Direct property
+            teamName = teamsObj.name;
+          } else if (Array.isArray(teamsObj) && teamsObj.length > 0 && teamsObj[0].name) {
+            // If it's an array, take the first item's name
+            teamName = teamsObj[0].name;
+          }
+        }
+        
+        playerMap.set(player.id, {
+          name: player.name || 'Unknown Player',
+          team_name: teamName
+        });
+      });
+      
+      // Combine data
+      const enhancedCollections = data.map(collection => {
+        const playerInfo = playerMap.get(collection.player_id);
+        return {
+          ...collection,
+          player_name: playerInfo?.name || 'Unknown Player',
+          team_name: playerInfo?.team_name || 'Unknown Team'
+        };
+      });
+      
+      console.log('Enhanced collections prepared:', enhancedCollections.length, 'collections');
+      setCollections(enhancedCollections);
+    } catch (error) {
+      console.error('Error fetching collections:', error);
+      Alert.alert('Error', 'Failed to load collections data');
+    } finally {
+      setCollectionsLoading(false);
     }
   };
 
@@ -514,8 +640,19 @@ export const CoachPaymentsScreen = () => {
     setPlayerMenuVisible(null);
     setSelectedPlayer(player);
     switch (action) {
-      case 'status':
-        setIsStatusChangeModalVisible(true);
+      // TEMPORARILY DISABLED: Coach payment status direct change 
+      // Commented out for cash collection workflow implementation
+      // case 'status':
+      //   setIsStatusChangeModalVisible(true);
+      //   break;
+      case 'collected':
+        // Only allow marking as collected for unpaid or pending players
+        if (player.payment_status === 'unpaid' || player.payment_status === 'pending') {
+          setCollectionNote('');
+          setIsMarkAsCollectedModalVisible(true);
+        } else {
+          Alert.alert('Cannot Collect', 'Only unpaid or pending payments can be marked as collected.');
+        }
         break;
       case 'reminder':
         Alert.alert('Payment Reminder', `Payment reminder sent to ${player.player_name}'s parent.`);
@@ -673,13 +810,84 @@ export const CoachPaymentsScreen = () => {
     setIsStatusModalVisible(false);
   };
 
-  if (isLoading) {
+  const handleMarkAsCollected = async () => {
+    if (!selectedPlayer) return;
+
+    try {
+      // First get the coach's ID
+      const storedCoachData = await AsyncStorage.getItem('coach_data');
+      if (!storedCoachData) {
+        Alert.alert('Error', 'Could not determine coach information. Please log in again.');
+        return;
+      }
+      
+      const coachData = JSON.parse(storedCoachData);
+      console.log('Using coach ID:', coachData.id);
+      
+      // Add debug logging
+      console.log('Attempting to mark payment as collected:', {
+        player_id: selectedPlayer.id,
+        coach_id: coachData.id,
+        notes: collectionNote || null
+      });
+      
+      // Call the function to mark payment as collected
+      const { data, error } = await supabase
+        .rpc('mark_payment_as_collected', {
+          p_player_id: selectedPlayer.id,
+          p_coach_id: coachData.id,
+          p_notes: collectionNote || null
+        });
+        
+      // Add debug logging for the response
+      console.log('Payment collection creation result:', { data, error });
+      
+      if (error) {
+        console.error('Error marking payment as collected:', error);
+        Alert.alert('Error', 'Failed to mark payment as collected. Please try again.');
+        return;
+      }
+      
+      console.log('Payment marked as collected, collection ID:', data);
+      
+      // Update the UI
+      const updatedPlayers = players.map(p => 
+        p.id === selectedPlayer.id 
+          ? { ...p, cash_collected: true }
+          : p
+      );
+      setPlayers(updatedPlayers);
+      
+      // Trigger event to notify other screens
+      triggerEvent('payment_collection_added', selectedPlayer.id);
+      
+      // Refresh data
+      await fetchData();
+      
+      setIsMarkAsCollectedModalVisible(false);
+      Alert.alert('Success', `Payment for ${selectedPlayer.player_name} marked as collected.`);
+    } catch (error) {
+      console.error('Error in handleMarkAsCollected:', error);
+      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric'
+    });
+  };
+
+  if (isLoading || collectionsLoading) {
     return <ActivityIndicator style={styles.loader} color={COLORS.primary} />;
   }
 
   return (
     <SafeAreaView style={styles.safeArea}>
-    <View style={styles.container}>
+      <View style={styles.container}>
         {/* Stats Cards - fixed position at top */}
         <View style={styles.statsContainer}>
           <View style={styles.statsCard}>
@@ -698,119 +906,166 @@ export const CoachPaymentsScreen = () => {
           </View>
         </View>
         
-        {/* Filter Section */}
-        <View style={styles.filtersContainer}>
-          <View style={styles.searchContainer}>
-            <MaterialCommunityIcons name="magnify" size={20} color={COLORS.grey[400]} style={styles.searchIcon} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search player"
-              placeholderTextColor={COLORS.grey[400]}
-              value={searchQuery}
-              onChangeText={handleSearchChange}
-            />
-          </View>
-          
-          <View style={styles.filtersRow}>
-            <TouchableOpacity
-              style={styles.filterButton}
-              onPress={() => setIsTeamModalVisible(true)}
-            >
-              <MaterialCommunityIcons name="account-group" size={20} color={COLORS.primary} style={styles.filterIcon} />
-              <Text style={styles.filterButtonText} numberOfLines={1}>
-                {selectedTeam ? selectedTeam.name : 'All Teams'}
-              </Text>
-              <MaterialCommunityIcons name="chevron-down" size={20} color={COLORS.grey[400]} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.filterButton}
-              onPress={() => setIsStatusModalVisible(true)}
-            >
-              <MaterialCommunityIcons name="cash-multiple" size={20} color={COLORS.primary} style={styles.filterIcon} />
-              <Text style={styles.filterButtonText} numberOfLines={1}>
-                {selectedStatusOption?.label || 'All Status'}
-              </Text>
-              <MaterialCommunityIcons name="chevron-down" size={20} color={COLORS.grey[400]} />
-            </TouchableOpacity>
-          </View>
+        {/* Toggle between Payments and Collections */}
+        <View style={styles.toggleContainer}>
+          <Button 
+            mode="text"
+            onPress={() => setShowCollections(false)}
+            style={[
+              styles.toggleButton,
+              !showCollections && styles.activeSegmentButton,
+              showCollections && styles.inactiveSegmentButton,
+              styles.leftSegmentButton,
+            ]}
+            contentStyle={styles.toggleButtonContent}
+            labelStyle={!showCollections ? styles.activeSegmentText : styles.inactiveSegmentText}
+          >
+            Payments
+          </Button>
+          <Button
+            mode="text"
+            onPress={() => setShowCollections(true)}
+            style={[
+              styles.toggleButton,
+              showCollections ? styles.activeSegmentButton : styles.inactiveSegmentButton,
+              styles.rightSegmentButton,
+            ]}
+            contentStyle={styles.toggleButtonContent}
+            labelStyle={showCollections ? styles.activeSegmentText : styles.inactiveSegmentText}
+          >
+            Collections
+          </Button>
         </View>
         
-        {/* Player List */}
-        <ScrollView style={styles.playersContainer} contentContainerStyle={styles.playersList}>
-          {filteredPlayers.length === 0 ? (
-            <View style={styles.emptyState}>
-              <MaterialCommunityIcons name="account-off" size={48} color={COLORS.grey[400]} />
-              <Text style={styles.emptyStateText}>No players found</Text>
-            </View>
-          ) : (
-            filteredPlayers.map(player => (
-              <View key={player.player_id} style={styles.playerCard}>
-                <View style={styles.cardPressable}>
-                  <View style={styles.playerCardContent}>
-                    <View style={styles.nameRow}>
-                      <Text style={styles.playerName}>{player.player_name}</Text>
-                      <Text style={styles.teamName}>{player.team_name}</Text>
-                      <TouchableOpacity 
-                        onPress={() => handlePlayerMenuPress(player.player_id)}
-                      >
-                        <MaterialCommunityIcons name="dots-vertical" size={20} color={COLORS.grey[600]} />
-                      </TouchableOpacity>
-                    </View>
-                    <View style={styles.paymentInfo}>
-                      <View>
-                        <Text style={styles.paymentLabel}>Last Payment</Text>
-                        <Text style={styles.paymentDate}>{player.last_payment_date || 'No payment'}</Text>
-                      </View>
-                      <View style={[
-                        styles.statusBadge,
-                        { backgroundColor: getPaymentStatusColor(player.payment_status) + '20' }
-                      ]}>
-                        <Text style={[
-                          styles.statusText,
-                          { color: getPaymentStatusColor(player.payment_status), fontWeight: player.payment_status === 'select_status' ? 'bold' : '500' }
-                        ]}>
-                          {getPaymentStatusText(player.payment_status)}
-                        </Text>
-                      </View>
-                    </View>
-                    {playerMenuVisible === player.player_id && (
-                      <View style={styles.menuContainer}>
-                        <TouchableOpacity 
-                          style={styles.menuItem}
-                          onPress={() => handlePlayerAction('status', player)}
-                        >
-                          <MaterialCommunityIcons name="pencil" size={20} color={COLORS.primary} />
-                          <Text style={styles.menuItemText}>Change Payment Status</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity 
-                          style={styles.menuItem}
-                          onPress={() => handlePlayerAction('reminder', player)}
-                        >
-                          <MaterialCommunityIcons name="bell" size={20} color={COLORS.primary} />
-                          <Text style={styles.menuItemText}>Send Reminder</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity 
-                          style={styles.menuItem}
-                          onPress={() => handlePlayerAction('history', player)}
-                        >
-                          <MaterialCommunityIcons name="history" size={20} color={COLORS.primary} />
-                          <Text style={styles.menuItemText}>View Payment History</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity 
-                          style={styles.menuItem}
-                          onPress={() => handlePlayerAction('details', player)}
-                        >
-                          <MaterialCommunityIcons name="account" size={20} color={COLORS.primary} />
-                          <Text style={styles.menuItemText}>View Player Details</Text>
-                        </TouchableOpacity>
-                      </View>
-                    )}
-                  </View>
-                </View>
+        {/* Conditionally render collections or payments content */}
+        {showCollections ? (
+          /* Collections View - Use the new component */
+          <CoachCollectionsScreen 
+            refreshing={false}
+            onRefresh={async () => {
+              setCollectionsLoading(true);
+              await fetchCollections();
+              setCollectionsLoading(false);
+            }}
+          />
+        ) : (
+          /* Payments View */
+          <>
+            {/* Filter Section */}
+            <View style={styles.filtersContainer}>
+              <View style={styles.searchContainer}>
+                <MaterialCommunityIcons name="magnify" size={20} color={COLORS.grey[400]} style={styles.searchIcon} />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search player"
+                  placeholderTextColor={COLORS.grey[400]}
+                  value={searchQuery}
+                  onChangeText={handleSearchChange}
+                />
               </View>
-            ))
-          )}
-        </ScrollView>
+              
+              <View style={styles.filtersRow}>
+                <TouchableOpacity
+                  style={styles.filterButton}
+                  onPress={() => setIsTeamModalVisible(true)}
+                >
+                  <MaterialCommunityIcons name="account-group" size={20} color={COLORS.primary} style={styles.filterIcon} />
+                  <Text style={styles.filterButtonText} numberOfLines={1}>
+                    {selectedTeam ? selectedTeam.name : 'All Teams'}
+                  </Text>
+                  <MaterialCommunityIcons name="chevron-down" size={20} color={COLORS.grey[400]} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.filterButton}
+                  onPress={() => setIsStatusModalVisible(true)}
+                >
+                  <MaterialCommunityIcons name="cash-multiple" size={20} color={COLORS.primary} style={styles.filterIcon} />
+                  <Text style={styles.filterButtonText} numberOfLines={1}>
+                    {selectedStatusOption?.label || 'All Status'}
+                  </Text>
+                  <MaterialCommunityIcons name="chevron-down" size={20} color={COLORS.grey[400]} />
+                </TouchableOpacity>
+              </View>
+            </View>
+            
+            {/* Player List */}
+            <ScrollView style={styles.playersContainer} contentContainerStyle={styles.playersList}>
+              {filteredPlayers.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <MaterialCommunityIcons name="account-off" size={48} color={COLORS.grey[400]} />
+                  <Text style={styles.emptyStateText}>No players found</Text>
+                </View>
+              ) : (
+                filteredPlayers.map(player => (
+                  <View key={player.player_id} style={styles.playerCard}>
+                    <View style={styles.cardPressable}>
+                      <View style={styles.playerCardContent}>
+                        <View style={styles.nameRow}>
+                          <Text style={styles.playerName}>{player.player_name}</Text>
+                          <Text style={styles.teamName}>{player.team_name}</Text>
+                          <TouchableOpacity 
+                            onPress={() => handlePlayerMenuPress(player.player_id)}
+                          >
+                            <MaterialCommunityIcons name="dots-vertical" size={20} color={COLORS.grey[600]} />
+                          </TouchableOpacity>
+                        </View>
+                        <View style={styles.paymentInfo}>
+                          <View>
+                            <Text style={styles.paymentLabel}>Last Payment</Text>
+                            <Text style={styles.paymentDate}>{player.last_payment_date || 'No payment'}</Text>
+                          </View>
+                          <View style={[
+                            styles.statusBadge,
+                            { backgroundColor: getPaymentStatusColor(player.payment_status) + '20' }
+                          ]}>
+                            <Text style={[
+                              styles.statusText,
+                              { color: getPaymentStatusColor(player.payment_status), fontWeight: player.payment_status === 'select_status' ? 'bold' : '500' }
+                            ]}>
+                              {getPaymentStatusText(player.payment_status)}
+                            </Text>
+                          </View>
+                        </View>
+                        {playerMenuVisible === player.player_id && (
+                          <View style={styles.menuContainer}>
+                            <TouchableOpacity 
+                              style={styles.menuItem}
+                              onPress={() => handlePlayerAction('collected', player)}
+                            >
+                              <MaterialCommunityIcons name="cash-register" size={20} color={COLORS.success} />
+                              <Text style={styles.menuItemText}>Mark as Collected</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity 
+                              style={styles.menuItem}
+                              onPress={() => handlePlayerAction('reminder', player)}
+                            >
+                              <MaterialCommunityIcons name="bell" size={20} color={COLORS.primary} />
+                              <Text style={styles.menuItemText}>Send Reminder</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity 
+                              style={styles.menuItem}
+                              onPress={() => handlePlayerAction('history', player)}
+                            >
+                              <MaterialCommunityIcons name="history" size={20} color={COLORS.primary} />
+                              <Text style={styles.menuItemText}>View Payment History</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity 
+                              style={styles.menuItem}
+                              onPress={() => handlePlayerAction('details', player)}
+                            >
+                              <MaterialCommunityIcons name="account" size={20} color={COLORS.primary} />
+                              <Text style={styles.menuItemText}>View Player Details</Text>
+                            </TouchableOpacity>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+          </>
+        )}
         
         {/* Team Filter Modal */}
         <Modal
@@ -1076,19 +1331,10 @@ export const CoachPaymentsScreen = () => {
                               <Text style={styles.yearText}>{year}</Text>
                             </View>
                             
-                            {/* Status dropdown */}
+                            {/* Status display (read-only) */}
                             <View style={styles.dropdownContainer}>
                               {displayStatus ? (
-                                <TouchableOpacity 
-                                  style={styles.statusContainer}
-                                  onPress={() => {
-                                    if (openDropdownMonth === monthKey) {
-                                      setOpenDropdownMonth(null);
-                                    } else {
-                                      setOpenDropdownMonth(monthKey);
-                                    }
-                                  }}
-                                >
+                                <View style={styles.statusContainer}>
                                   <View style={[
                                     styles.statusPill, 
                                     { backgroundColor: getPaymentStatusColor(displayStatus) + '20' }
@@ -1100,169 +1346,10 @@ export const CoachPaymentsScreen = () => {
                                       {getPaymentStatusText(displayStatus)}
                                     </Text>
                                   </View>
-                                  <MaterialCommunityIcons 
-                                    name="chevron-down" 
-                                    size={20} 
-                                    color={COLORS.grey[600]}
-                                    style={styles.dropdownIcon}
-                                  />
-                                </TouchableOpacity>
+                                </View>
                               ) : (
                                 <View style={[styles.statusPill, { backgroundColor: COLORS.grey[200] }]}> 
                                   <Text style={[styles.statusText, { color: COLORS.grey[600] }]}>No data</Text>
-                                </View>
-                              )}
-                              
-                              {/* Dropdown menu */}
-                              {openDropdownMonth === monthKey && displayStatus && (
-                                <View style={styles.dropdownMenu}>
-                                  {/* Paid option */}
-                                  <TouchableOpacity 
-                                    style={styles.dropdownItem}
-                                    onPress={async () => {
-                                      // Close dropdown
-                                      setOpenDropdownMonth(null);
-                                      
-                                      // Map UI status to database-compatible status
-                                      const dbStatus = getValidDatabaseStatus('paid');
-                                      
-                                      // Update UI first
-                                      const updatedHistory = [...paymentHistory];
-                                      const existingIndex = updatedHistory.findIndex(p => 
-                                        p.year === year && p.month === month
-                                      );
-                                      
-                                      if (existingIndex >= 0) {
-                                        updatedHistory[existingIndex].status = 'paid';
-                                      } else {
-                                        updatedHistory.push({
-                                          year, month, status: 'paid'
-                                        });
-                                      }
-                                      setPaymentHistory(updatedHistory);
-                                      
-                                      // Then update DB with mapped status
-                                      await supabase
-                                        .from('player_payments')
-                                        .upsert([{
-                                          player_id: selectedPlayer.id,
-                                          year,
-                                          month,
-                                          status: dbStatus, // Use mapped status
-                                        }], { onConflict: 'player_id,year,month' });
-                                          
-                                      // Update current player status if this is current month
-                                      if (month === currentMonth) {
-                                        const updatedPlayers = players.map(p => 
-                                          p.id === selectedPlayer.id 
-                                            ? {...p, payment_status: 'paid'} 
-                                            : p
-                                        );
-                                        setPlayers(updatedPlayers);
-                                        setSelectedPlayer({...selectedPlayer, payment_status: 'paid'});
-                                        
-                                        // Trigger event to notify other screens
-                                        const paymentDate = new Date().toISOString();
-                                        triggerPaymentStatusChange(selectedPlayer.id, 'paid', paymentDate);
-                                      }
-                                    }}
-                                  >
-                                    <View style={[
-                                      styles.statusPill, 
-                                      { 
-                                        backgroundColor: getPaymentStatusColor('paid') + '20',
-                                        marginRight: 10
-                                      }
-                                    ]}>
-                                      <Text style={[
-                                        styles.statusText, 
-                                        { color: getPaymentStatusColor('paid') }
-                                      ]}>
-                                        Paid
-                                      </Text>
-                                    </View>
-                                    {displayStatus === 'paid' && (
-                                      <MaterialCommunityIcons 
-                                        name="check" 
-                                        size={20} 
-                                        color={getPaymentStatusColor('paid')} 
-                                      />
-                                    )}
-                                  </TouchableOpacity>
-                                  
-                                  {/* Unpaid option */}
-                                  <TouchableOpacity 
-                                    style={styles.dropdownItem}
-                                    onPress={async () => {
-                                      // Close dropdown
-                                      setOpenDropdownMonth(null);
-                                      
-                                      // Map UI status to database-compatible status
-                                      const dbStatus = getValidDatabaseStatus('unpaid');
-                                      
-                                      // Update UI first
-                                      const updatedHistory = [...paymentHistory];
-                                      const existingIndex = updatedHistory.findIndex(p => 
-                                        p.year === year && p.month === month
-                                      );
-                                      
-                                      if (existingIndex >= 0) {
-                                        updatedHistory[existingIndex].status = 'unpaid'; // For UI display
-                                      } else {
-                                        updatedHistory.push({
-                                          year, month, status: 'unpaid' // For UI display
-                                        });
-                                      }
-                                      setPaymentHistory(updatedHistory);
-                                      
-                                      // Then update DB with mapped status
-                                      await supabase
-                                        .from('player_payments')
-                                        .upsert([{
-                                          player_id: selectedPlayer.id,
-                                          year,
-                                          month,
-                                          status: dbStatus, // Use mapped status
-                                        }], { onConflict: 'player_id,year,month' });
-                                        
-                                      // Update current player status if this is current month
-                                      if (month === currentMonth) {
-                                        const updatedPlayers = players.map(p => 
-                                          p.id === selectedPlayer.id 
-                                            ? {...p, payment_status: 'unpaid'} 
-                                            : p
-                                        );
-                                        setPlayers(updatedPlayers);
-                                        setSelectedPlayer({...selectedPlayer, payment_status: 'unpaid'});
-                                        
-                                        // Trigger event to notify other screens
-                                        const paymentDate = null;
-                                        triggerPaymentStatusChange(selectedPlayer.id, 'unpaid', paymentDate);
-                                      }
-                                    }}
-                                  >
-                                    <View style={[
-                                      styles.statusPill, 
-                                      { 
-                                        backgroundColor: getPaymentStatusColor('unpaid') + '20',
-                                        marginRight: 10
-                                      }
-                                    ]}>
-                                      <Text style={[
-                                        styles.statusText, 
-                                        { color: getPaymentStatusColor('unpaid') }
-                                      ]}>
-                                        Unpaid
-                                      </Text>
-                                    </View>
-                                    {displayStatus === 'unpaid' && (
-                                      <MaterialCommunityIcons 
-                                        name="check" 
-                                        size={20} 
-                                        color={getPaymentStatusColor('unpaid')} 
-                                      />
-                                    )}
-                                  </TouchableOpacity>
                                 </View>
                               )}
                             </View>
@@ -1388,6 +1475,54 @@ export const CoachPaymentsScreen = () => {
                     )}
                   </View>
                 </ScrollView>
+              )}
+            </View>
+          </View>
+        </Modal>
+
+        {/* Mark As Collected Modal */}
+        <Modal
+          visible={isMarkAsCollectedModalVisible}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setIsMarkAsCollectedModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Mark Payment as Collected</Text>
+                <TouchableOpacity 
+                  onPress={() => setIsMarkAsCollectedModalVisible(false)}
+                >
+                  <MaterialCommunityIcons name="close" size={24} color={COLORS.text} />
+                </TouchableOpacity>
+              </View>
+              {selectedPlayer && (
+                <View>
+                  <Text style={styles.statusChangeText}>
+                    Record cash payment collected from {selectedPlayer.player_name}
+                  </Text>
+                  <View style={styles.inputContainer}>
+                    <Text style={styles.inputLabel}>Notes (optional):</Text>
+                    <TextInput
+                      style={styles.textInput}
+                      value={collectionNote}
+                      onChangeText={setCollectionNote}
+                      placeholder="Enter any notes about this collection"
+                      multiline
+                    />
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.statusButton, { backgroundColor: COLORS.success + '20' }]}
+                    onPress={handleMarkAsCollected}
+                  >
+                    <MaterialCommunityIcons name="cash-register" size={24} color={COLORS.success} />
+                    <Text style={[styles.statusButtonText, { color: COLORS.success }]}>Confirm Collection</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.helpText}>
+                    Note: This records that you collected the payment and will notify the admin. The payment status will be updated by admin after they receive the funds.
+                  </Text>
+                </View>
               )}
             </View>
           </View>
@@ -1747,5 +1882,87 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.text,
     fontWeight: '500',
+  },
+  inputContainer: {
+    marginBottom: SPACING.md,
+  },
+  inputLabel: {
+    fontSize: 14,
+    color: COLORS.grey[600],
+    marginBottom: SPACING.sm,
+  },
+  textInput: {
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.grey[200],
+    borderRadius: 8,
+  },
+  helpText: {
+    fontSize: 12,
+    color: COLORS.grey[600],
+    marginTop: SPACING.sm,
+  },
+  header: {
+    padding: SPACING.lg,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.white,
+  },
+  headerSubtitle: {
+    fontSize: 16,
+    color: COLORS.white,
+    marginTop: SPACING.sm,
+  },
+  toggleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    padding: 0,
+    backgroundColor: COLORS.white,
+    borderRadius: 100,
+    margin: SPACING.lg,
+    elevation: 2,
+    shadowColor: '#000000', 
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: COLORS.grey[300],
+  },
+  toggleButton: {
+    flex: 1,
+    marginHorizontal: 0,
+    marginVertical: 0,
+    borderWidth: 0,
+    borderRadius: 0,
+  },
+  leftSegmentButton: {
+    borderTopLeftRadius: 100,
+    borderBottomLeftRadius: 100,
+  },
+  rightSegmentButton: {
+    borderTopRightRadius: 100,
+    borderBottomRightRadius: 100,
+  },
+  activeSegmentButton: {
+    backgroundColor: '#EEFBFF',
+  },
+  inactiveSegmentButton: {
+    backgroundColor: COLORS.white,
+  },
+  activeSegmentText: {
+    color: COLORS.text,
+    fontWeight: 'bold',
+  },
+  inactiveSegmentText: {
+    color: COLORS.text,
+    fontWeight: 'normal',
+  },
+  toggleButtonContent: {
+    height: 40,
   },
 }); 

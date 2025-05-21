@@ -11,7 +11,7 @@ import * as Clipboard from 'expo-clipboard';
 import { ManageTeamsScreen } from './ManageTeamsScreen';
 import { ManageCoachesScreen } from './ManageCoachesScreen';
 import { ManagePlayersScreen } from './ManagePlayersScreen';
-import { addListener, removeListener } from '../../utils/events';
+import { registerEventListener } from '../../utils/events';
 
 type CardType = 'teams' | 'coaches' | 'players' | 'payments';
 
@@ -115,12 +115,12 @@ export const AdminManageScreen = () => {
       fetchPlayers();
     };
 
-    // Add event listener
-    addListener('payment_status_changed', handlePaymentStatusChange);
+    // Add event listener and get the unregister function
+    const unregister = registerEventListener('payment_status_changed', handlePaymentStatusChange);
 
     // Clean up the listener when component unmounts
     return () => {
-      removeListener('payment_status_changed', handlePaymentStatusChange);
+      unregister();
     };
   }, []);
 

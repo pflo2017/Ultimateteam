@@ -27,7 +27,7 @@ export type CoachTabParamList = {
   CoachDashboard: undefined;
   Manage: { activeTab?: 'teams' | 'players'; teamId?: string };
   Schedule: undefined;
-  Payments: undefined;
+  Payments: { showCollections?: boolean };
   Chat: undefined;
   News: undefined;
 };

@@ -7,7 +7,7 @@ import { supabase } from '../../lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { addListener, removeListener } from '../../utils/events';
+import { registerEventListener } from '../../utils/events';
 
 interface Child {
   id: string;
@@ -80,12 +80,12 @@ export const ParentPaymentsScreen = () => {
       );
     };
 
-    // Add event listener
-    addListener('payment_status_changed', handlePaymentStatusChange);
+    // Add event listener and get the unregister function
+    const unregister = registerEventListener('payment_status_changed', handlePaymentStatusChange);
 
     // Clean up the listener when component unmounts
     return () => {
-      removeListener('payment_status_changed', handlePaymentStatusChange);
+      unregister();
     };
   }, []);
   

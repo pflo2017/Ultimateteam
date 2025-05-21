@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, TextInput, ScrollView, TouchableOpacity, Modal, Alert, Platform, SafeAreaView, KeyboardAvoidingView } from 'react-native';
-import { Text, Card, ActivityIndicator } from 'react-native-paper';
+import { Text, Card, ActivityIndicator, SegmentedButtons, Button } from 'react-native-paper';
 import { COLORS, SPACING } from '../../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { triggerEvent } from '../../utils/events';
 import { useDataRefresh } from '../../utils/useDataRefresh';
+import { PaymentCollectionsScreen } from './PaymentCollectionsScreen';
 
 interface Player {
   id: string;
@@ -78,6 +79,8 @@ const PaymentsScreenComponent = () => {
   const [isUpdateMonthModalVisible, setIsUpdateMonthModalVisible] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState<{year: number, month: number, date: Date} | null>(null);
   const [openDropdownMonth, setOpenDropdownMonth] = useState<string | null>(null);
+  const [showCollections, setShowCollections] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -93,6 +96,12 @@ const PaymentsScreenComponent = () => {
   // Also listen for player refresh events
   useDataRefresh('players', () => {
     console.log("[AdminPaymentsScreen] Player data change detected - refreshing payment data");
+    fetchData();
+  });
+
+  // Listen for collection events
+  useDataRefresh('payment_collection_added', () => {
+    console.log("[AdminPaymentsScreen] Payment collection detected - refreshing data");
     fetchData();
   });
 
@@ -468,13 +477,30 @@ const PaymentsScreenComponent = () => {
     setPaymentHistory(data || []);
   };
 
-  // Filter players based on search, team, and status
-  const filteredPlayers = players.filter(player => {
-    const matchesSearch = player.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesTeam = !selectedTeamId || player.team_id === selectedTeamId;
-    const matchesStatus = !selectedStatus || player.payment_status === selectedStatus;
-    return matchesSearch && matchesTeam && matchesStatus;
-  });
+  // Replace the activeTab-based filtering with selectedStatus-based filtering
+  const getFilteredPlayers = () => {
+    let filtered = [...players];
+    
+    // First apply search filter
+    if (searchQuery.trim()) {
+      filtered = filtered.filter(player => 
+        player.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (player.team && player.team.name && player.team.name.toLowerCase().includes(searchQuery.toLowerCase()))
+      );
+    }
+    
+    // Then apply team filter
+    if (selectedTeamId) {
+      filtered = filtered.filter(player => player.team_id === selectedTeamId);
+    }
+    
+    // Then apply status filter
+    if (selectedStatus) {
+      filtered = filtered.filter(player => player.payment_status === selectedStatus);
+    }
+    
+    return filtered;
+  };
 
   // Helpers for UI
   const getPaymentStatusColor = (status: string) => {
@@ -558,6 +584,13 @@ const PaymentsScreenComponent = () => {
     }
   };
 
+  // Add handleRefresh function for the collections screen
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchData();
+    setRefreshing(false);
+  };
+
   if (isLoading) {
     return <ActivityIndicator style={styles.loader} color={COLORS.primary} />;
   }
@@ -570,7 +603,7 @@ const PaymentsScreenComponent = () => {
     >
       <SafeAreaView style={styles.safeArea}>
     <View style={styles.container}>
-          {/* Stats Cards - fixed position at top */}
+          {/* Stats Cards */}
           <View style={styles.statsContainer}>
             <View style={styles.statsCard}>
               <Text style={styles.statsLabel}>Total Players</Text>
@@ -588,127 +621,170 @@ const PaymentsScreenComponent = () => {
             </View>
           </View>
           
-          {/* Filter Section */}
-          <View style={styles.filtersContainer}>
-            <View style={styles.searchContainer}>
-              <MaterialCommunityIcons name="magnify" size={20} color={COLORS.grey[400]} style={styles.searchIcon} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search player"
-                placeholderTextColor={COLORS.grey[400]}
-                value={searchQuery}
-                onChangeText={handleSearchChange}
-              />
-            </View>
-
-            <View style={styles.filtersRow}>
-              <TouchableOpacity
-                style={styles.filterButton}
-                onPress={() => setIsTeamModalVisible(true)}
-              >
-                <MaterialCommunityIcons name="account-group" size={20} color={COLORS.primary} style={styles.filterIcon} />
-                <Text style={styles.filterButtonText} numberOfLines={1}>
-                  {selectedTeam ? selectedTeam.name : 'All Teams'}
-                </Text>
-                <MaterialCommunityIcons name="chevron-down" size={20} color={COLORS.grey[400]} />
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={styles.filterButton}
-                onPress={() => setIsStatusModalVisible(true)}
-              >
-                <MaterialCommunityIcons name="cash-multiple" size={20} color={COLORS.primary} style={styles.filterIcon} />
-                <Text style={styles.filterButtonText} numberOfLines={1}>
-                  {selectedStatusOption?.label || 'All Status'}
-                </Text>
-                <MaterialCommunityIcons name="chevron-down" size={20} color={COLORS.grey[400]} />
-              </TouchableOpacity>
-            </View>
+          {/* Toggle between Payments and Collections */}
+          <View style={styles.toggleContainer}>
+            <Button 
+              mode="text"
+              onPress={() => setShowCollections(false)}
+              style={[
+                styles.toggleButton,
+                !showCollections && styles.activeSegmentButton,
+                showCollections && styles.inactiveSegmentButton,
+                styles.leftSegmentButton,
+              ]}
+              contentStyle={styles.toggleButtonContent}
+              labelStyle={!showCollections ? styles.activeSegmentText : styles.inactiveSegmentText}
+            >
+              Payments
+            </Button>
+            <Button
+              mode="text"
+              onPress={() => setShowCollections(true)}
+              style={[
+                styles.toggleButton,
+                showCollections ? styles.activeSegmentButton : styles.inactiveSegmentButton,
+                styles.rightSegmentButton,
+              ]}
+              contentStyle={styles.toggleButtonContent}
+              labelStyle={showCollections ? styles.activeSegmentText : styles.inactiveSegmentText}
+            >
+              Collections
+            </Button>
           </View>
 
-          {/* Players List */}
-          <ScrollView style={styles.playersContainer}>
-            {filteredPlayers.length === 0 ? (
-              <Text style={styles.emptyText}>No players found</Text>
-            ) : (
-              filteredPlayers.map(player => (
-                <View key={player.id} style={styles.playerCard}>
-                  <View style={styles.cardPressable}>
-                    <View style={styles.playerCardContent}>
-                      <View style={styles.nameRow}>
-                        <Text style={styles.playerName}>{player.name}</Text>
-                        <Text style={styles.teamName}>{player.team.name}</Text>
-                        <TouchableOpacity 
-                          onPress={() => handlePlayerMenuPress(player.id)}
-                          style={styles.menuButton}
-                        >
-                          <MaterialCommunityIcons name="dots-vertical" size={20} color={COLORS.grey[600]} />
-                        </TouchableOpacity>
-                      </View>
-                      
-                      <View style={styles.paymentInfo}>
-                        <View>
-                          <Text style={styles.paymentLabel}>Last Payment</Text>
-                          <Text style={styles.paymentDate}>{player.last_payment_date}</Text>
-                        </View>
-                        
-                        <View style={[
-                          styles.statusBadge,
-                          { backgroundColor: getPaymentStatusColor(player.payment_status) + '20' }
-                        ]}>
-                          <Text style={[
-                            styles.statusText,
-                            { 
-                              color: getPaymentStatusColor(player.payment_status),
-                              fontWeight: player.payment_status === 'select_status' ? 'bold' : '500' 
-                            }
-                          ]}>
-                            {getPaymentStatusText(player.payment_status)}
-                          </Text>
-                        </View>
-                      </View>
-
-                      {playerMenuVisible === player.id && (
-                        <View style={styles.menuContainer}>
-                          <TouchableOpacity 
-                            style={styles.menuItem}
-                            onPress={() => handlePlayerAction('status', player)}
-                          >
-                            <MaterialCommunityIcons name="cash" size={20} color={COLORS.primary} />
-                            <Text style={styles.menuItemText}>Change payment status</Text>
-                          </TouchableOpacity>
-                          
-                          <TouchableOpacity 
-                            style={styles.menuItem}
-                            onPress={() => handlePlayerAction('reminder', player)}
-                          >
-                            <MaterialCommunityIcons name="bell" size={20} color={COLORS.primary} />
-                            <Text style={styles.menuItemText}>Send payment reminder</Text>
-                          </TouchableOpacity>
-                          
-                          <TouchableOpacity 
-                            style={styles.menuItem}
-                            onPress={() => handlePlayerAction('history', player)}
-                          >
-                            <MaterialCommunityIcons name="history" size={20} color={COLORS.primary} />
-                            <Text style={styles.menuItemText}>View payment history</Text>
-                          </TouchableOpacity>
-                          
-                          <TouchableOpacity 
-                            style={styles.menuItem}
-                            onPress={() => handlePlayerAction('details', player)}
-                          >
-                            <MaterialCommunityIcons name="account-details" size={20} color={COLORS.primary} />
-                            <Text style={styles.menuItemText}>View player details</Text>
-                          </TouchableOpacity>
-                        </View>
-                      )}
-                    </View>
-                  </View>
+          {/* Conditionally render collections or payments */}
+          {showCollections ? (
+            <PaymentCollectionsScreen 
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+            />
+          ) : (
+            <View style={styles.contentContainer}>
+              {/* Filter Section */}
+              <View style={styles.filtersContainer}>
+                <View style={styles.searchContainer}>
+                  <MaterialCommunityIcons name="magnify" size={20} color={COLORS.grey[400]} style={styles.searchIcon} />
+                  <TextInput
+                    style={styles.searchInput}
+                    placeholder="Search player"
+                    placeholderTextColor={COLORS.grey[400]}
+                    value={searchQuery}
+                    onChangeText={handleSearchChange}
+                  />
                 </View>
-              ))
-            )}
-          </ScrollView>
+
+                <View style={styles.filtersRow}>
+                  <TouchableOpacity
+                    style={styles.filterButton}
+                    onPress={() => setIsTeamModalVisible(true)}
+                  >
+                    <MaterialCommunityIcons name="account-group" size={20} color={COLORS.primary} style={styles.filterIcon} />
+                    <Text style={styles.filterButtonText} numberOfLines={1}>
+                      {selectedTeam ? selectedTeam.name : 'All Teams'}
+                    </Text>
+                    <MaterialCommunityIcons name="chevron-down" size={20} color={COLORS.grey[400]} />
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    style={styles.filterButton}
+                    onPress={() => setIsStatusModalVisible(true)}
+                  >
+                    <MaterialCommunityIcons name="cash-multiple" size={20} color={COLORS.primary} style={styles.filterIcon} />
+                    <Text style={styles.filterButtonText} numberOfLines={1}>
+                      {selectedStatusOption?.label || 'All Status'}
+                    </Text>
+                    <MaterialCommunityIcons name="chevron-down" size={20} color={COLORS.grey[400]} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Players List */}
+              <ScrollView style={styles.playersContainer}>
+                {getFilteredPlayers().length === 0 ? (
+                  <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyText}>No players match your filters</Text>
+                  </View>
+                ) : (
+                  getFilteredPlayers().map(player => (
+                    <View key={player.id} style={styles.playerCard}>
+                      <View style={styles.cardPressable}>
+                        <View style={styles.playerCardContent}>
+                          <View style={styles.nameRow}>
+                            <Text style={styles.playerName}>{player.name}</Text>
+                            <Text style={styles.teamName}>{player.team.name}</Text>
+                            <TouchableOpacity 
+                              onPress={() => handlePlayerMenuPress(player.id)}
+                              style={styles.menuButton}
+                            >
+                              <MaterialCommunityIcons name="dots-vertical" size={20} color={COLORS.grey[600]} />
+                            </TouchableOpacity>
+                          </View>
+                          
+                          <View style={styles.paymentInfo}>
+                            <View>
+                              <Text style={styles.paymentLabel}>Last Payment</Text>
+                              <Text style={styles.paymentDate}>{player.last_payment_date}</Text>
+                            </View>
+                            
+                            <View style={[
+                              styles.statusBadge,
+                              { backgroundColor: getPaymentStatusColor(player.payment_status) + '20' }
+                            ]}>
+                              <Text style={[
+                                styles.statusText,
+                                { 
+                                  color: getPaymentStatusColor(player.payment_status),
+                                  fontWeight: player.payment_status === 'select_status' ? 'bold' : '500' 
+                                }
+                              ]}>
+                                {getPaymentStatusText(player.payment_status)}
+                              </Text>
+                            </View>
+                          </View>
+
+                          {playerMenuVisible === player.id && (
+                            <View style={styles.menuContainer}>
+                              <TouchableOpacity 
+                                style={styles.menuItem}
+                                onPress={() => handlePlayerAction('status', player)}
+                              >
+                                <MaterialCommunityIcons name="cash" size={20} color={COLORS.primary} />
+                                <Text style={styles.menuItemText}>Change payment status</Text>
+                              </TouchableOpacity>
+                              
+                              <TouchableOpacity 
+                                style={styles.menuItem}
+                                onPress={() => handlePlayerAction('reminder', player)}
+                              >
+                                <MaterialCommunityIcons name="bell" size={20} color={COLORS.primary} />
+                                <Text style={styles.menuItemText}>Send payment reminder</Text>
+                              </TouchableOpacity>
+                              
+                              <TouchableOpacity 
+                                style={styles.menuItem}
+                                onPress={() => handlePlayerAction('history', player)}
+                              >
+                                <MaterialCommunityIcons name="history" size={20} color={COLORS.primary} />
+                                <Text style={styles.menuItemText}>View payment history</Text>
+                              </TouchableOpacity>
+                              
+                              <TouchableOpacity 
+                                style={styles.menuItem}
+                                onPress={() => handlePlayerAction('details', player)}
+                              >
+                                <MaterialCommunityIcons name="account-details" size={20} color={COLORS.primary} />
+                                <Text style={styles.menuItemText}>View player details</Text>
+                              </TouchableOpacity>
+                            </View>
+                          )}
+                        </View>
+                      </View>
+                    </View>
+                  ))
+                )}
+              </ScrollView>
+            </View>
+          )}
         </View>
         
         {/* Team Selection Modal */}
@@ -1396,7 +1472,7 @@ const PaymentsScreenComponent = () => {
                 </View>
               )}
             </View>
-    </View>
+          </View>
         </Modal>
       </SafeAreaView>
     </KeyboardAvoidingView>
@@ -1830,5 +1906,61 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: SPACING.xs,
+  },
+  toggleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    padding: 0,
+    backgroundColor: COLORS.white,
+    borderRadius: 100,
+    margin: SPACING.lg,
+    elevation: 2,
+    shadowColor: '#000000', 
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: COLORS.grey[300],
+  },
+  toggleButton: {
+    flex: 1,
+    marginHorizontal: 0,
+    marginVertical: 0,
+    borderWidth: 0,
+    borderRadius: 0,
+  },
+  leftSegmentButton: {
+    borderTopLeftRadius: 100,
+    borderBottomLeftRadius: 100,
+  },
+  rightSegmentButton: {
+    borderTopRightRadius: 100,
+    borderBottomRightRadius: 100,
+  },
+  activeSegmentButton: {
+    backgroundColor: '#EEFBFF',
+  },
+  inactiveSegmentButton: {
+    backgroundColor: COLORS.white,
+  },
+  activeSegmentText: {
+    color: COLORS.text,
+    fontWeight: 'bold',
+  },
+  inactiveSegmentText: {
+    color: COLORS.text,
+    fontWeight: 'normal',
+  },
+  toggleButtonContent: {
+    height: 40,
+  },
+  contentContainer: {
+    flex: 1,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 }); 
