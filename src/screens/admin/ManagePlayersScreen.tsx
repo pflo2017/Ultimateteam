@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, TextInput, RefreshControl, Modal, Pressable, Alert } from 'react-native';
 import { Text, ActivityIndicator, Card, IconButton, Divider } from 'react-native-paper';
-import { COLORS, SPACING } from '../../constants/theme';
+import { COLORS, SPACING, FONT_SIZES } from '../../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -353,15 +353,24 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
         style={styles.playerCard}
         mode="outlined"
       >
-        <Card.Content>
+        <Card.Content style={{ padding: SPACING.md }}>
           <View style={styles.playerHeader}>
             <View style={styles.nameContainer}>
-              <MaterialCommunityIcons 
-                name="account" 
-                size={28} 
-                color={COLORS.primary} 
-                style={styles.icon}
-              />
+              <View style={{
+                width: 48,
+                height: 48,
+                borderRadius: 24,
+                backgroundColor: COLORS.primary + '15',
+                justifyContent: 'center',
+                alignItems: 'center',
+                marginRight: SPACING.md
+              }}>
+                <MaterialCommunityIcons 
+                  name="account" 
+                  size={28} 
+                  color={COLORS.primary} 
+                />
+              </View>
               <View>
                 <Text style={styles.playerName}>{player.name}</Text>
                 <Text style={styles.teamName}>{player.team ? player.team.name : 'No team assigned'}</Text>
@@ -411,7 +420,7 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
           </View>
           
           <View style={styles.actionButtons}>
-            <Pressable 
+            <TouchableOpacity 
               style={styles.viewButton}
               onPress={() => handleOpenPlayerDetails(player)}
             >
@@ -421,7 +430,7 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
                 color={COLORS.white} 
               />
               <Text style={styles.buttonText}>Details</Text>
-            </Pressable>
+            </TouchableOpacity>
           </View>
         </Card.Content>
       </Card>
@@ -756,9 +765,16 @@ const styles = StyleSheet.create({
   },
   playerCard: {
     marginBottom: SPACING.md,
-    borderRadius: 12,
+    borderRadius: 16,
     backgroundColor: COLORS.white,
-    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: COLORS.grey[200],
+    overflow: 'hidden'
   },
   playerHeader: {
     flexDirection: 'row',
@@ -774,12 +790,12 @@ const styles = StyleSheet.create({
     marginRight: SPACING.sm,
   },
   playerName: {
-    fontSize: 18,
+    fontSize: FONT_SIZES.lg,
     fontWeight: '600',
     color: COLORS.text,
   },
   teamName: {
-    fontSize: 14,
+    fontSize: FONT_SIZES.sm,
     color: COLORS.grey[600],
   },
   divider: {
@@ -796,7 +812,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   infoLabel: {
-    fontSize: 12,
+    fontSize: FONT_SIZES.xs,
     color: COLORS.grey[600],
     marginBottom: 4,
   },
@@ -809,7 +825,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statusText: {
-    fontSize: 12,
+    fontSize: FONT_SIZES.xs,
     fontWeight: '600',
   },
   additionalInfo: {
@@ -939,12 +955,12 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.lg,
   },
   playerDetailName: {
-    fontSize: 20,
+    fontSize: FONT_SIZES.xl,
     fontWeight: 'bold',
     marginTop: SPACING.sm,
   },
   teamDetailName: {
-    fontSize: 16,
+    fontSize: FONT_SIZES.md,
     color: COLORS.grey[600],
   },
   detailsSection: {
@@ -955,7 +971,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: FONT_SIZES.md,
     fontWeight: 'bold',
     marginBottom: SPACING.md,
     color: COLORS.primary,
@@ -967,11 +983,11 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
   },
   detailLabel: {
-    fontSize: 14,
+    fontSize: FONT_SIZES.sm,
     color: COLORS.grey[600],
   },
   detailValue: {
-    fontSize: 14,
+    fontSize: FONT_SIZES.sm,
     color: COLORS.text,
     fontWeight: '500',
   },
@@ -1007,11 +1023,11 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   ageLabel: {
-    fontSize: 12,
+    fontSize: FONT_SIZES.xs,
     color: COLORS.grey[600],
   },
   ageValue: {
-    fontSize: 14,
+    fontSize: FONT_SIZES.sm,
     fontWeight: '500',
     color: COLORS.text,
   },

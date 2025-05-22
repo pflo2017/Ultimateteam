@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, TextInput, RefreshControl, Alert } from 'react-native';
-import { Text, ActivityIndicator, Card, Snackbar, IconButton } from 'react-native-paper';
-import { COLORS, SPACING } from '../../constants/theme';
+import { Text, ActivityIndicator, Card, Snackbar, IconButton, Divider } from 'react-native-paper';
+import { COLORS, SPACING, FONT_SIZES } from '../../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -41,52 +41,195 @@ export const ManageCoachesScreen: React.FC<ManageCoachesScreenProps> = ({
   const [showSnackbar, setShowSnackbar] = useState(false);
 
   const renderCoachCard = (coach: Coach) => (
-    <View key={coach.id} style={styles.coachCard}>
-      <View style={styles.cardPressable}>
-        <View style={styles.coachCardContent}>
-          <View style={styles.nameRow}>
-            <Text style={styles.coachName}>{coach.name}</Text>
-            <IconButton
-              icon="pencil"
-              size={20}
-              iconColor="#0CC1EC"
-              onPress={() => navigation.navigate('EditCoach', { coachId: coach.id })}
-            />
-          </View>
-          
-          <View style={styles.infoRow}>
-            <MaterialCommunityIcons name="phone" size={20} color="#0CC1EC" />
-            <Text style={styles.infoLabel}>Phone number: <Text style={styles.infoValue}>{coach.phone_number}</Text></Text>
-          </View>
-          
-          <View style={styles.infoRow}>
-            <MaterialCommunityIcons name="key" size={20} color="#0CC1EC" />
-            <Text style={styles.infoLabel}>Access code: <Text style={styles.infoValue}>{coach.access_code}</Text></Text>
-            <TouchableOpacity
-              onPress={() => onCopyAccessCode(coach.access_code)}
-              style={styles.copyButton}
-            >
-              <MaterialCommunityIcons name="content-copy" size={20} color="#0CC1EC" />
-            </TouchableOpacity>
-          </View>
-          
-          <View style={styles.teamsContainer}>
-            <Text style={styles.teamsLabel}>Assigned Teams:</Text>
-            <View style={styles.teamsList}>
-              {coach.teams.length > 0 ? (
-                coach.teams.map(team => (
-                  <View key={team.id} style={styles.teamChip}>
-                    <Text style={styles.teamChipText}>{team.name}</Text>
-                  </View>
-                ))
-              ) : (
-                <Text style={styles.noTeams}>No teams assigned</Text>
-              )}
+    <Card 
+      key={coach.id} 
+      style={{
+        marginBottom: SPACING.md,
+        borderRadius: 16,
+        backgroundColor: COLORS.white,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+        borderWidth: 1,
+        borderColor: COLORS.grey[200],
+        overflow: 'hidden'
+      }}
+      mode="outlined"
+    >
+      <Card.Content style={{ padding: SPACING.md }}>
+        {/* Coach Header */}
+        <View style={{
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: SPACING.md,
+          paddingTop: SPACING.sm
+        }}>
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            flex: 3
+          }}>
+            <View style={{
+              width: 48,
+              height: 48,
+              borderRadius: 24,
+              backgroundColor: COLORS.primary + '15',
+              justifyContent: 'center',
+              alignItems: 'center',
+              marginRight: SPACING.md
+            }}>
+              <MaterialCommunityIcons 
+                name="account-tie" 
+                size={28} 
+                color={COLORS.primary} 
+              />
+            </View>
+            
+            <View style={{ flex: 1 }}>
+              <Text 
+                style={{
+                  fontSize: FONT_SIZES.lg,
+                  fontWeight: '700',
+                  color: COLORS.text,
+                  marginBottom: 2
+                }}
+                numberOfLines={1}
+              >
+                {coach.name}
+              </Text>
+              <Text 
+                style={{
+                  fontSize: FONT_SIZES.sm,
+                  color: COLORS.grey[600],
+                }}
+                numberOfLines={1}
+              >
+                Coach
+              </Text>
             </View>
           </View>
+          
+          <IconButton
+            icon="pencil"
+            size={20}
+            iconColor={COLORS.primary}
+            style={{
+              backgroundColor: COLORS.primary + '15',
+              margin: 0
+            }}
+            onPress={() => navigation.navigate('EditCoach', { coachId: coach.id })}
+          />
         </View>
-      </View>
-    </View>
+        
+        <Divider style={{ 
+          height: 1,
+          backgroundColor: COLORS.grey[200],
+          marginBottom: SPACING.md
+        }} />
+        
+        {/* Info Section */}
+        <View style={{
+          gap: SPACING.md,
+          marginBottom: SPACING.md
+        }}>
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: SPACING.sm
+          }}>
+            <MaterialCommunityIcons name="phone" size={20} color={COLORS.primary} />
+            <Text style={{
+              fontSize: FONT_SIZES.sm,
+              color: COLORS.grey[600],
+            }}>
+              Phone: <Text style={{
+                fontWeight: '600',
+                color: COLORS.text
+              }}>{coach.phone_number}</Text>
+            </Text>
+          </View>
+          
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: SPACING.sm,
+            justifyContent: 'space-between'
+          }}>
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: SPACING.sm,
+              flex: 1
+            }}>
+              <MaterialCommunityIcons name="key" size={20} color={COLORS.primary} />
+              <Text style={{
+                fontSize: FONT_SIZES.sm,
+                color: COLORS.grey[600],
+              }}>
+                Access: <Text style={{
+                  fontWeight: '600',
+                  color: COLORS.text
+                }}>{coach.access_code}</Text>
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => onCopyAccessCode(coach.access_code)}
+              style={{
+                padding: SPACING.xs,
+                backgroundColor: COLORS.primary + '15',
+                borderRadius: 8
+              }}
+            >
+              <MaterialCommunityIcons name="content-copy" size={18} color={COLORS.primary} />
+            </TouchableOpacity>
+          </View>
+        </View>
+        
+        {/* Teams Section */}
+        <View>
+          <Text style={{
+            fontSize: FONT_SIZES.sm,
+            fontWeight: '600',
+            color: COLORS.text,
+            marginBottom: SPACING.xs
+          }}>
+            Assigned Teams:
+          </Text>
+          
+          <View style={{
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            gap: SPACING.xs
+          }}>
+            {coach.teams.length > 0 ? (
+              coach.teams.map(team => (
+                <View key={team.id} style={{
+                  backgroundColor: COLORS.primary,
+                  paddingHorizontal: SPACING.sm,
+                  paddingVertical: SPACING.xs,
+                  borderRadius: 100
+                }}>
+                  <Text style={{
+                    color: COLORS.white,
+                    fontSize: FONT_SIZES.xs,
+                    fontWeight: '500'
+                  }}>{team.name}</Text>
+                </View>
+              ))
+            ) : (
+              <Text style={{
+                fontSize: FONT_SIZES.sm,
+                color: COLORS.grey[400],
+                fontStyle: 'italic'
+              }}>No teams assigned</Text>
+            )}
+          </View>
+        </View>
+      </Card.Content>
+    </Card>
   );
 
   if (isLoading) {
@@ -200,78 +343,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: SPACING.xl * 4,
-  },
-  coachCard: {
-    marginBottom: SPACING.md,
-    backgroundColor: '#EEFBFF',
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  cardPressable: {
-    padding: SPACING.md,
-  },
-  coachCardContent: {
-    gap: SPACING.sm,
-  },
-  nameRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  coachName: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: COLORS.text,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.sm,
-  },
-  infoText: {
-    fontSize: 14,
-    color: COLORS.grey[600],
-  },
-  infoLabel: {
-    fontSize: 14,
-    color: COLORS.grey[600],
-  },
-  infoValue: {
-    fontSize: 14,
-    color: COLORS.text,
-    fontWeight: '500',
-  },
-  copyButton: {
-    marginLeft: 'auto',
-  },
-  teamsContainer: {
-    marginTop: SPACING.sm,
-  },
-  teamsLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: COLORS.text,
-    marginBottom: SPACING.xs,
-  },
-  teamsList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: SPACING.xs,
-  },
-  teamChip: {
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    borderRadius: 100,
-  },
-  teamChipText: {
-    color: COLORS.white,
-    fontSize: 12,
-  },
-  noTeams: {
-    fontSize: 14,
-    color: COLORS.grey[400],
-    fontStyle: 'italic',
   },
   emptyText: {
     textAlign: 'center',
