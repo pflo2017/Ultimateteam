@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, FlatList, ScrollView, TouchableOpacity, Alert, RefreshControl } from 'react-native';
+import { View, StyleSheet, FlatList, ScrollView, TouchableOpacity, Alert, RefreshControl, Modal, TextInput } from 'react-native';
 import { Text, Card, ActivityIndicator, Button } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
@@ -18,6 +18,12 @@ interface PaymentCollection {
   notes: string | null;
   player_name?: string;
   team_name?: string;
+  team_id?: string;
+}
+
+interface TeamType {
+  id: string;
+  name: string;
 }
 
 interface CollectionsProps {
@@ -30,12 +36,49 @@ export const CoachCollectionsScreen = ({
   onRefresh = () => Promise.resolve()
 }: CollectionsProps) => {
   const [collections, setCollections] = useState<PaymentCollection[]>([]);
+  const [allCollections, setAllCollections] = useState<PaymentCollection[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
+  
+  // State for filters
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [selectedCollectionStatus, setSelectedCollectionStatus] = useState<boolean | null>(null);
+  const [teams, setTeams] = useState<TeamType[]>([]);
+  const [isTeamModalVisible, setIsTeamModalVisible] = useState(false);
+  const [isCollectionStatusModalVisible, setIsCollectionStatusModalVisible] = useState(false);
+
+  const collectionStatusOptions = [
+    { value: null, label: 'All Status' },
+    { value: false, label: 'Pending Review' },
+    { value: true, label: 'Reviewed by Admin' },
+  ];
   
   useEffect(() => {
     fetchCollections();
   }, []);
+  
+  // Apply filters when they change
+  useEffect(() => {
+    applyFilters();
+  }, [selectedTeamId, selectedCollectionStatus, allCollections]);
+  
+  const applyFilters = () => {
+    if (!allCollections.length) return;
+    
+    let filtered = [...allCollections];
+    
+    // Apply team filter
+    if (selectedTeamId) {
+      filtered = filtered.filter(collection => collection.team_id === selectedTeamId);
+    }
+    
+    // Apply status filter
+    if (selectedCollectionStatus !== null) {
+      filtered = filtered.filter(collection => collection.is_processed === selectedCollectionStatus);
+    }
+    
+    setCollections(filtered);
+  };
   
   const fetchCollections = async () => {
     try {
@@ -60,16 +103,28 @@ export const CoachCollectionsScreen = ({
       }
       
       console.log('Collections data fetched:', data?.length, 'records');
-      console.log('Raw collections data:', JSON.stringify(data, null, 2));
       
       if (!data || data.length === 0) {
+        setAllCollections([]);
         setCollections([]);
         setLoading(false);
         return;
       }
       
       // The data already includes player_name and team_name from the RPC function
+      setAllCollections(data);
       setCollections(data);
+      
+      // Extract unique teams from collections
+      const uniqueTeams = Array.from(
+        new Map(
+          data
+            .filter(item => item.team_id && item.team_name)
+            .map(item => [item.team_id, { id: item.team_id!, name: item.team_name! }])
+        ).values()
+      );
+      
+      setTeams(uniqueTeams);
       
     } catch (error) {
       console.error('Error fetching collections:', error);
@@ -79,10 +134,20 @@ export const CoachCollectionsScreen = ({
     }
   };
   
+  const handleTeamSelect = (teamId: string | null) => {
+    setSelectedTeamId(teamId);
+    setIsTeamModalVisible(false);
+  };
+
+  const handleCollectionStatusSelect = (status: boolean | null) => {
+    setSelectedCollectionStatus(status);
+    setIsCollectionStatusModalVisible(false);
+  };
+  
   const handleDeleteCollection = async (collection: PaymentCollection) => {
     Alert.alert(
       'Confirm Deletion',
-      'Make sure that admin has reviewed your note and changed the payment status before deleting.',
+      'Make sure the admin has reviewed your note and updated the player\'s payment status before deleting.',
       [
         {
           text: 'Cancel',
@@ -140,6 +205,33 @@ export const CoachCollectionsScreen = ({
   
   return (
     <View style={styles.container}>
+      {/* Filter Section */}
+      <View style={styles.filtersContainer}>
+        <View style={styles.filtersRow}>
+          <TouchableOpacity
+            style={styles.filterButton}
+            onPress={() => setIsTeamModalVisible(true)}
+          >
+            <MaterialCommunityIcons name="shield-outline" size={20} color={COLORS.primary} style={styles.filterIcon} />
+            <Text style={styles.filterButtonText} numberOfLines={1}>
+              {selectedTeamId ? teams.find(t => t.id === selectedTeamId)?.name || 'Unknown Team' : 'All Teams'}
+            </Text>
+            <MaterialCommunityIcons name="chevron-down" size={20} color={COLORS.grey[400]} />
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={styles.filterButton}
+            onPress={() => setIsCollectionStatusModalVisible(true)}
+          >
+            <MaterialCommunityIcons name="cash-check" size={20} color={COLORS.primary} style={styles.filterIcon} />
+            <Text style={styles.filterButtonText} numberOfLines={1}>
+              {collectionStatusOptions.find(opt => opt.value === selectedCollectionStatus)?.label || 'All Status'}
+            </Text>
+            <MaterialCommunityIcons name="chevron-down" size={20} color={COLORS.grey[400]} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
       <FlatList
         data={collections}
         keyExtractor={(item) => item.id}
@@ -226,6 +318,24 @@ export const CoachCollectionsScreen = ({
             </Card.Content>
           </Card>
         )}
+      />
+
+      {/* Team Filter Modal */}
+      <TeamFilterModal
+        isVisible={isTeamModalVisible}
+        onClose={() => setIsTeamModalVisible(false)}
+        teams={teams}
+        selectedTeamId={selectedTeamId}
+        onSelect={handleTeamSelect}
+      />
+
+      {/* Collection Status Filter Modal */}
+      <CollectionStatusFilterModal
+        isVisible={isCollectionStatusModalVisible}
+        onClose={() => setIsCollectionStatusModalVisible(false)}
+        options={collectionStatusOptions}
+        selectedStatus={selectedCollectionStatus}
+        onSelect={handleCollectionStatusSelect}
       />
     </View>
   );
@@ -320,4 +430,197 @@ const styles = StyleSheet.create({
   deleteIcon: {
     padding: SPACING.sm,
   },
-}); 
+  filtersContainer: {
+    padding: SPACING.lg,
+    gap: SPACING.md,
+  },
+  filtersRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: SPACING.md,
+  },
+  filterButton: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    borderRadius: 8,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    elevation: 0,
+    shadowColor: 'transparent',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
+  },
+  filterButtonText: {
+    flex: 1,
+    color: COLORS.text,
+    fontSize: 14,
+    marginLeft: SPACING.xs,
+  },
+  filterIcon: {
+    marginRight: SPACING.xs,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingVertical: SPACING.lg,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.lg,
+    marginBottom: SPACING.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.grey[200],
+    paddingBottom: SPACING.md,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.text,
+  },
+  closeButton: {
+    padding: 4,
+  },
+  modalOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: SPACING.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.grey[200],
+  },
+  modalOptionSelected: {
+    backgroundColor: COLORS.primary + '10',
+  },
+  modalOptionText: {
+    fontSize: 16,
+    color: COLORS.text,
+  },
+  modalOptionTextSelected: {
+    color: COLORS.primary,
+    fontWeight: '500',
+  },
+});
+
+// Add Modals here
+interface TeamFilterModalProps {
+  isVisible: boolean;
+  onClose: () => void;
+  teams: TeamType[];
+  selectedTeamId: string | null;
+  onSelect: (teamId: string | null) => void;
+}
+
+const TeamFilterModal = ({ isVisible, onClose, teams, selectedTeamId, onSelect }: TeamFilterModalProps) => (
+  <Modal
+    visible={isVisible}
+    animationType="slide"
+    transparent={true}
+    onRequestClose={onClose}
+  >
+    <View style={styles.modalOverlay}>
+      <View style={styles.modalContent}>
+        <View style={styles.modalHeader}>
+          <Text style={styles.modalTitle}>Select Team</Text>
+          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+            <MaterialCommunityIcons name="close" size={24} color={COLORS.text} />
+          </TouchableOpacity>
+        </View>
+        
+        <TouchableOpacity
+          style={[styles.modalOption, !selectedTeamId && styles.modalOptionSelected]}
+          onPress={() => onSelect(null)}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <MaterialCommunityIcons name="shield-outline" size={20} color={COLORS.primary} style={{ marginRight: 8 }} />
+            <Text style={[styles.modalOptionText, !selectedTeamId && styles.modalOptionTextSelected]}>All Teams</Text>
+          </View>
+          {!selectedTeamId && (
+            <MaterialCommunityIcons name="check" size={20} color={COLORS.primary} />
+          )}
+        </TouchableOpacity>
+        
+        {teams.map(team => (
+          <TouchableOpacity
+            key={team.id}
+            style={[styles.modalOption, selectedTeamId === team.id && styles.modalOptionSelected]}
+            onPress={() => onSelect(team.id)}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <MaterialCommunityIcons name="shield-outline" size={20} color={COLORS.primary} style={{ marginRight: 8 }} />
+              <Text style={[styles.modalOptionText, selectedTeamId === team.id && styles.modalOptionTextSelected]}>
+                {team.name}
+              </Text>
+            </View>
+            {selectedTeamId === team.id && (
+              <MaterialCommunityIcons name="check" size={20} color={COLORS.primary} />
+            )}
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  </Modal>
+);
+
+interface CollectionStatusFilterModalProps {
+  isVisible: boolean;
+  onClose: () => void;
+  options: { value: boolean | null; label: string }[];
+  selectedStatus: boolean | null;
+  onSelect: (status: boolean | null) => void;
+}
+
+const CollectionStatusFilterModal = ({ isVisible, onClose, options, selectedStatus, onSelect }: CollectionStatusFilterModalProps) => (
+  <Modal
+    visible={isVisible}
+    animationType="slide"
+    transparent={true}
+    onRequestClose={onClose}
+  >
+    <View style={styles.modalOverlay}>
+      <View style={styles.modalContent}>
+        <View style={styles.modalHeader}>
+          <Text style={styles.modalTitle}>Select Status</Text>
+          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+            <MaterialCommunityIcons name="close" size={24} color={COLORS.text} />
+          </TouchableOpacity>
+        </View>
+        
+        {options.map(option => (
+          <TouchableOpacity
+            key={option.label}
+            style={[styles.modalOption, selectedStatus === option.value && styles.modalOptionSelected]}
+            onPress={() => onSelect(option.value)}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+               <MaterialCommunityIcons 
+                name={option.value === true ? 'check-circle-outline' : option.value === false ? 'clock-outline' : 'cash-check'} 
+                size={20} 
+                color={option.value === true ? COLORS.success : option.value === false ? '#FFA500' : COLORS.primary} 
+                style={{ marginRight: 8 }} 
+              />
+              <Text style={[styles.modalOptionText, selectedStatus === option.value && styles.modalOptionTextSelected]}>
+                {option.label}
+              </Text>
+            </View>
+            {selectedStatus === option.value && (
+              <MaterialCommunityIcons name="check" size={20} color={COLORS.primary} />
+            )}
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  </Modal>
+); 

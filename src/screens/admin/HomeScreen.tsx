@@ -35,7 +35,8 @@ export const AdminHomeScreen = () => {
     teams: 0,
     coaches: 0,
     players: 0,
-    pendingPayments: 0
+    pendingPayments: 0,
+    collectionsCount: 0
   });
   const navigation = useNavigation<AdminNavigationProp>();
   const isFocused = useIsFocused();
@@ -136,17 +137,50 @@ export const AdminHomeScreen = () => {
       const playersCount = playersData?.length || 0;
       console.log('Active players count:', playersCount);
 
+      // Get unpaid payments count
+      const { data: unpaidPaymentsData, error: unpaidPaymentsError } = await supabase
+        .from('players')
+        .select('id')
+        .eq('club_id', club.id)
+        .eq('is_active', true)
+        .eq('player_status', 'unpaid');
+
+      if (unpaidPaymentsError) {
+        console.error('Error fetching unpaid payments:', unpaidPaymentsError);
+        return;
+      }
+
+      const unpaidPaymentsCount = unpaidPaymentsData?.length || 0;
+      console.log('Unpaid payments count:', unpaidPaymentsCount);
+
+      // Get collections count (payments collected by coaches pending review)
+      const { data: collectionsData, error: collectionsError } = await supabase
+        .from('payment_collections')
+        .select('id')
+        .eq('is_processed', false);
+
+      if (collectionsError) {
+        console.error('Error fetching collections:', collectionsError);
+        return;
+      }
+
+      const collectionsCount = collectionsData?.length || 0;
+      console.log('Pending review collections count:', collectionsCount);
+
       console.log('Setting stats:', {
         teams: teamsCount,
         coaches: coachesCount,
-        players: playersCount
+        players: playersCount,
+        pendingPayments: unpaidPaymentsCount,
+        collectionsCount: collectionsCount
       });
 
       setStats({
         teams: teamsCount,
         coaches: coachesCount,
         players: playersCount,
-        pendingPayments: 0 // We'll implement this later
+        pendingPayments: unpaidPaymentsCount,
+        collectionsCount: collectionsCount
       });
     } catch (error) {
       console.error('Error loading stats:', error);
@@ -277,11 +311,21 @@ export const AdminHomeScreen = () => {
           {renderCard(
             'Payments',
             stats.pendingPayments,
-            'Track payment status',
+            'Unpaid Payments',
             'credit-card-outline',
             'Payments',
             'payments',
             400
+          )}
+          
+          {renderCard(
+            'Collected',
+            stats.collectionsCount,
+            'Collected by coaches',
+            'cash-register',
+            'Payments',
+            'payments',
+            500
           )}
         </View>
       </ScrollView>
@@ -296,15 +340,14 @@ const styles = StyleSheet.create({
   },
   header: {
     padding: SPACING.xl,
-    backgroundColor: COLORS.primary,
+    paddingBottom: SPACING.md,
   },
   title: {
-    color: COLORS.white,
+    color: COLORS.text,
     fontWeight: 'bold',
   },
   subtitle: {
-    color: COLORS.white,
-    opacity: 0.9,
+    color: COLORS.grey[600],
     marginTop: SPACING.xs,
   },
   scrollView: {

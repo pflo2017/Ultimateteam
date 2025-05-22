@@ -286,9 +286,9 @@ export const CoachDashboardScreen = () => {
               600
             )}
             {renderCard(
-              'Collections',
+              'Collected',
               stats.collectionsCount,
-              'Cash collected',
+              'Cash collected pending review',
               'cash-register',
               'Payments',
               'collections',

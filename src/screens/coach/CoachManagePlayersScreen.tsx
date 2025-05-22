@@ -111,12 +111,15 @@ const PlayerCard = ({ player, onDetailsPress, onDelete }: {
           .single();
           
         if (!error && data) {
+          // Use payment_status directly - no mapping needed
+          const newStatus = data.payment_status;
+          
           console.log(`[PlayerCard] Got fresh status for ${player.player_name}:`, {
             old: player.payment_status,
-            new: data.player_status || data.payment_status
+            new: newStatus
           });
-          // Prefer player_status ENUM over payment_status
-          setRefreshedStatus(data.player_status || data.payment_status);
+          
+          setRefreshedStatus(newStatus);
         }
       } catch (err) {
         console.error("Error fetching fresh status:", err);

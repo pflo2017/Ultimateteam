@@ -17,6 +17,20 @@ export const refreshTimestamps: Record<string, number> = {
   teams: Date.now(),
 };
 
+// Debounce timers for refresh operations
+const refreshDebounceTimers: Record<string, NodeJS.Timeout | null> = {
+  players: null,
+  payments: null,
+  teams: null,
+};
+
+// Tracks if updates are in progress to prevent cascading
+const refreshInProgress: Record<string, boolean> = {
+  players: false,
+  payments: false,
+  teams: false,
+};
+
 const EVENT_STORE_KEY = '@event_listeners';
 
 // List of available events - must add here to be valid
@@ -85,25 +99,80 @@ export const triggerEvent = (event: string, ...args: any[]): void => {
     });
   }
   
+  // Using debounced refresh to prevent cascading events
+  
   // If this is a payment status change event, update refresh timestamps
-  // ALWAYS UPDATE TIMESTAMPS EVEN IF NO LISTENERS
   if (event === 'payment_status_changed') {
-    console.log('[Events] Payment status changed - forcing refresh for players and payments');
-    forceRefresh('players');
-    forceRefresh('payments');
+    console.log('[Events] Payment status changed - scheduling refresh for players and payments');
+    // Use setTimeout to prevent immediate refresh cascading
+    setTimeout(() => {
+      debouncedForceRefresh('players');
+      
+      // Delay the second refresh to avoid simultaneous updates
+      setTimeout(() => {
+        debouncedForceRefresh('payments');
+      }, 500);
+    }, 300);
   }
 
   // Handle payment collection events
   if (event === 'payment_collection_added') {
-    console.log('[Events] Payment collection added - forcing refresh for payments');
-    forceRefresh('payments');
+    console.log('[Events] Payment collection added - scheduling refresh for payments');
+    setTimeout(() => {
+      debouncedForceRefresh('payments');
+    }, 300);
   }
 
   if (event === 'payment_collection_processed') {
-    console.log('[Events] Payment collection processed - forcing refresh for players and payments');
-    forceRefresh('players');
-    forceRefresh('payments');
+    console.log('[Events] Payment collection processed - scheduling refresh for players and payments');
+    setTimeout(() => {
+      debouncedForceRefresh('players');
+      
+      // Delay the second refresh to avoid simultaneous updates
+      setTimeout(() => {
+        debouncedForceRefresh('payments');
+      }, 500);
+    }, 300);
   }
+};
+
+/**
+ * Debounced version of forceRefresh to prevent multiple rapid refreshes
+ * @param dataType The type of data to refresh
+ */
+const debouncedForceRefresh = (dataType: string): void => {
+  // Cancel any pending refresh for this data type
+  if (refreshDebounceTimers[dataType]) {
+    clearTimeout(refreshDebounceTimers[dataType]!);
+  }
+  
+  // If refresh is already in progress, postpone
+  if (refreshInProgress[dataType]) {
+    console.log(`[Events] Refresh already in progress for ${dataType}, postponing`);
+    
+    // Schedule another check after 500ms
+    refreshDebounceTimers[dataType] = setTimeout(() => {
+      debouncedForceRefresh(dataType);
+    }, 500);
+    return;
+  }
+  
+  // Schedule the refresh with debounce
+  refreshDebounceTimers[dataType] = setTimeout(() => {
+    // Set in-progress flag
+    refreshInProgress[dataType] = true;
+    
+    // Perform the refresh
+    forceRefresh(dataType);
+    
+    // Clear in-progress flag after a delay
+    setTimeout(() => {
+      refreshInProgress[dataType] = false;
+    }, 1000);
+    
+    // Clear the timer reference
+    refreshDebounceTimers[dataType] = null;
+  }, 300);
 };
 
 /**

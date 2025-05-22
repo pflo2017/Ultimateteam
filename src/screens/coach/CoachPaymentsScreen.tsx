@@ -108,6 +108,9 @@ export const CoachPaymentsScreen = () => {
   const [collections, setCollections] = useState<PaymentCollection[]>([]);
   const [collectionsLoading, setCollectionsLoading] = useState(false);
 
+  // State for info text visibility
+  const [showInfoText, setShowInfoText] = useState(false);
+
   useEffect(() => {
     fetchData();
     if (showCollections) {
@@ -153,26 +156,53 @@ export const CoachPaymentsScreen = () => {
         .rpc('get_coach_players', { p_coach_id: coachData.id });
       
       if (playersError) throw playersError;
-      
+
+      console.log('Raw players data from RPC:', playersData?.map((p: { 
+        player_id: string; 
+        player_name: string; 
+        last_payment_date: string | null; 
+      }) => ({
+        player_id: p.player_id,
+        player_name: p.player_name,
+        last_payment_date: p.last_payment_date
+      })));
+
       // Also fetch player_status ENUM values directly from the database
+      console.log('Player IDs to fetch:', playersData?.map((p: { player_id: string }) => p.player_id));
+      
+      // Get complete player data directly from the database
       const { data: playerStatusData, error: playerStatusError } = await supabase
         .from('players')
-        .select('id, player_status')
-        .in('id', (playersData || []).map((p: any) => p.player_id));
-        
+        .select(`
+          id,
+          name,
+          player_status,
+          payment_status,
+          last_payment_date
+        `)
+        .in('id', (playersData || []).map((p: any) => p.player_id))
+        .eq('is_active', true);
+      
       if (playerStatusError) {
         console.error('Error fetching player_status values:', playerStatusError);
       }
-      
-      console.log('Player status data from database:', playerStatusData);
-      
-      // Create a map for quick lookup of player_status values
-      const playerStatusMap = new Map();
+
+      console.log('Direct query SQL error:', playerStatusError);
+      console.log('Direct query response:', playerStatusData);
+
+      // Create a map for quick lookup of player data
+      const playerDataMap = new Map();
       (playerStatusData || []).forEach((item: any) => {
-        playerStatusMap.set(item.id, item.player_status);
-        console.log(`Setting player_status for ${item.id}: ${item.player_status}`);
+        playerDataMap.set(item.id, {
+          player_status: item.player_status,
+          last_payment_date: item.last_payment_date
+        });
+        console.log(`Player ${item.id} data:`, {
+          player_status: item.player_status,
+          last_payment_date: item.last_payment_date
+        });
       });
-      
+
       // Fetch player birthdates from parent_children table
       const { data: parentChildrenData, error: parentChildrenError } = await supabase
         .from('parent_children')
@@ -192,24 +222,49 @@ export const CoachPaymentsScreen = () => {
         console.error('Error fetching teams creation dates:', teamsCreateDatesError);
       }
       
-      // Enhance player data with team creation dates and birthdates
+      // Enhance player data using data from the RPC and other sources
       const enhancedPlayersData = await Promise.all((playersData || []).map(async (player: any) => {
-        // Find team creation date as fallback for player join date
-        const teamCreationDate = teamsCreateDates?.find(t => t.id === player.team_id)?.created_at;
+        // Get additional data from the direct query
+        const playerData = playerDataMap.get(player.player_id);
         
-        // Find matching child record for birthdate
-        const childRecord = parentChildrenData?.find(
-          child => child.parent_id === player.parent_id && 
-                  child.full_name.toLowerCase() === player.player_name.toLowerCase()
-        );
+        console.log('Processing player:', {
+          player_id: player.player_id,
+          player_name: player.player_name,
+          rpc_last_payment_date: player.last_payment_date,
+          direct_query_last_payment_date: playerData?.last_payment_date
+        });
         
+        // Format the last payment date properly - try both sources
+        let formattedLastPaymentDate = 'No payment';
+        const lastPaymentDate = player.last_payment_date || playerData?.last_payment_date;
+        
+        if (lastPaymentDate) {
+          try {
+            const date = new Date(lastPaymentDate);
+            if (!isNaN(date.getTime())) { // Check if date is valid
+              formattedLastPaymentDate = date.toLocaleDateString('en-GB');
+              console.log('Formatted last payment date:', {
+                original: lastPaymentDate,
+                formatted: formattedLastPaymentDate,
+                player_name: player.player_name
+              });
+            } else {
+              console.error("Invalid date format:", lastPaymentDate);
+              formattedLastPaymentDate = 'No payment';
+            }
+          } catch (e) {
+            console.error("Error formatting last_payment_date:", e);
+            formattedLastPaymentDate = 'No payment';
+          }
+        }
+
+        // Determine payment status (prioritize stored UI status > playerStatusMap > RPC data)
+        const dbPlayerStatus = playerData?.player_status || player.payment_status;
+
         // Try to get the stored UI payment status (for UI display)
         const playerStatusKey = `player_status_${player.player_id}`;
-        
-        // Use player_status ENUM from database as primary source if available
-        const dbPlayerStatus = playerStatusMap.get(player.player_id);
-        let uiPaymentStatus = dbPlayerStatus || player.payment_status;
-        
+        let uiPaymentStatus = dbPlayerStatus;
+
         // If AsyncStorage has a value, it overrides other sources (for this particular session)
         try {
           const storedStatus = await AsyncStorage.getItem(playerStatusKey);
@@ -220,43 +275,25 @@ export const CoachPaymentsScreen = () => {
         } catch (e) {
           console.error("Error reading stored payment status:", e);
         }
-        
+
         console.log("Final payment status for player", player.player_name, ":", {
-          raw_payment_status: player.payment_status,
-          db_player_status: dbPlayerStatus,
-          ui_payment_status: uiPaymentStatus
+          raw_payment_status: player.payment_status, // Original from RPC
+          db_player_status: dbPlayerStatus, // Status from database (playerStatusMap or RPC)
+          ui_payment_status: uiPaymentStatus // Final status used in UI
         });
-        
-        // Fetch and format the last payment date
-        console.log("Processing player for last payment date:", player.player_id);
-        console.log("Raw last_payment_date value:", player.last_payment_date);
-        
-        // Format the last payment date properly
-        let formattedLastPaymentDate = player.last_payment_date;
-        if (player.last_payment_date) {
-          try {
-            // If it looks like a date string, format it
-            if (player.last_payment_date.includes('T') || player.last_payment_date.includes('-')) {
-              formattedLastPaymentDate = new Date(player.last_payment_date).toLocaleDateString('en-GB');
-              console.log("Formatted last_payment_date:", formattedLastPaymentDate);
-            } else {
-              // Already formatted or not a valid date string
-              console.log("Using existing last_payment_date format");
-            }
-          } catch (e) {
-            console.error("Error formatting last_payment_date:", e);
-          }
-        }
-        
+
         return {
           ...player,
-          id: player.player_id, // Add id field for compatibility
+          id: player.player_id, // Use player_id as id for compatibility
           // Use team creation date as fallback if player has no creation date
-          created_at: player.created_at || teamCreationDate,
+          created_at: player.created_at || player.created_at,
           // Use birthdate from parent_children if available
-          birth_date: childRecord?.birth_date || player.birth_date,
+          birth_date: parentChildrenData?.find(
+            child => child.parent_id === player.parent_id && 
+                    child.full_name.toLowerCase() === player.player_name.toLowerCase()
+          )?.birth_date || player.birth_date,
           // Use our properly formatted last_payment_date
-          last_payment_date: formattedLastPaymentDate || null,
+          last_payment_date: formattedLastPaymentDate,
           // Use the UI payment status for display
           payment_status: uiPaymentStatus,
           // Also include the raw player_status from database for reference
@@ -569,10 +606,7 @@ export const CoachPaymentsScreen = () => {
         return 'on_trial';
       case 'trial_ended':
         return 'trial_ended';
-      case 'active':
-        return 'paid'; // Map 'active' database status to 'paid' for UI
-      case 'archived':
-        return 'unpaid'; // Map 'archived' database status to 'unpaid' for UI
+      // Remove incorrect mappings that change payment statuses
       default:
         return dbStatus;
     }
@@ -705,9 +739,10 @@ export const CoachPaymentsScreen = () => {
           is_same: selectedPlayer.id === selectedPlayer.player_id
         });
         
+        // Update both fields - don't do any status conversion, use the exact payment status values
         const updateData: any = { 
-          payment_status: getValidDatabaseStatus(newStatus), // Update the legacy TEXT field
-          player_status: newStatus // Update the ENUM field directly with the UI value
+          payment_status: newStatus,  // Use exact status, no mapping
+          player_status: newStatus    // Use exact status, no mapping
         };
         
         // If status is paid, update the last_payment_date
@@ -887,7 +922,7 @@ export const CoachPaymentsScreen = () => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
+    <View style={styles.container}>
         {/* Stats Cards - fixed position at top */}
         <View style={styles.statsContainer}>
           <View style={styles.statsCard}>
@@ -902,40 +937,64 @@ export const CoachPaymentsScreen = () => {
           
           <View style={styles.statsCard}>
             <Text style={styles.statsLabel}>Unpaid</Text>
-            <Text style={styles.statsValue}>{stats.unpaidPlayers + stats.pendingPlayers}</Text>
+            <Text style={styles.statsValue}>{stats.unpaidPlayers}</Text>
           </View>
         </View>
         
-        {/* Toggle between Payments and Collections */}
-        <View style={styles.toggleContainer}>
-          <Button 
-            mode="text"
-            onPress={() => setShowCollections(false)}
-            style={[
-              styles.toggleButton,
-              !showCollections && styles.activeSegmentButton,
-              showCollections && styles.inactiveSegmentButton,
-              styles.leftSegmentButton,
-            ]}
-            contentStyle={styles.toggleButtonContent}
-            labelStyle={!showCollections ? styles.activeSegmentText : styles.inactiveSegmentText}
-          >
-            Payments
-          </Button>
-          <Button
-            mode="text"
-            onPress={() => setShowCollections(true)}
-            style={[
-              styles.toggleButton,
-              showCollections ? styles.activeSegmentButton : styles.inactiveSegmentButton,
-              styles.rightSegmentButton,
-            ]}
-            contentStyle={styles.toggleButtonContent}
-            labelStyle={showCollections ? styles.activeSegmentText : styles.inactiveSegmentText}
-          >
-            Collections
-          </Button>
+        {/* Toggle between Payments and Collected */}
+        <View style={styles.toggleRow}>
+          <View style={styles.toggleContainer}>
+            <Button 
+              mode="text" // Use text mode for the segmented control look
+              onPress={() => setShowCollections(false)}
+              style={[
+                styles.toggleButton,
+                !showCollections && styles.activeSegmentButton, // Active style
+                showCollections && styles.inactiveSegmentButton, // Inactive style
+                styles.leftSegmentButton, // Left button styling
+              ]}
+              contentStyle={styles.toggleButtonContent}
+              labelStyle={!showCollections ? styles.activeSegmentText : styles.inactiveSegmentText}
+            >
+          Payments
+            </Button>
+            <Button
+              mode="text" // Use text mode
+              onPress={() => setShowCollections(true)}
+              style={[
+                styles.toggleButton,
+                showCollections ? styles.activeSegmentButton : styles.inactiveSegmentButton, // Active/inactive styles
+                styles.rightSegmentButton, // Right button styling
+              ]}
+              contentStyle={styles.toggleButtonContent}
+              // Ensure no icon prop here
+              labelStyle={showCollections ? styles.activeSegmentText : styles.inactiveSegmentText}
+            >
+              Collected
+            </Button>
+          </View>
+          {/* Single Info icon outside tabs */}
+          <TouchableOpacity onPress={() => setShowInfoText(!showInfoText)} style={styles.infoIconContainer}>
+            <MaterialCommunityIcons 
+              name="information-outline" 
+              size={24} // Slightly larger icon
+              color={COLORS.grey[600]} 
+            />
+          </TouchableOpacity>
         </View>
+
+        {/* Info Text Label */}
+        {showInfoText && (
+          <View style={styles.infoTextContainer}>
+            <Text style={styles.infoTextTitle}>Information:</Text>
+            <Text style={styles.infoText}>
+              <Text style={{ fontWeight: 'bold' }}>Payments View:</Text> General view of current payment statuses for all players
+            </Text>
+            <Text style={styles.infoText}>
+              <Text style={{ fontWeight: 'bold' }}>Collected View:</Text> Coach-collected payments waiting for admin action
+        </Text>
+          </View>
+        )}
         
         {/* Conditionally render collections or payments content */}
         {showCollections ? (
@@ -1352,8 +1411,8 @@ export const CoachPaymentsScreen = () => {
                                   <Text style={[styles.statusText, { color: COLORS.grey[600] }]}>No data</Text>
                                 </View>
                               )}
-                            </View>
-                          </View>
+      </View>
+    </View>
                         );
                       })}
                     </View>
@@ -1917,13 +1976,19 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     marginTop: SPACING.sm,
   },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: SPACING.lg,
+    marginBottom: SPACING.md,
+  },
   toggleContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
+    flex: 1, // Allow container to take available space
     padding: 0,
     backgroundColor: COLORS.white,
     borderRadius: 100,
-    margin: SPACING.lg,
     elevation: 2,
     shadowColor: '#000000', 
     shadowOffset: { width: 0, height: 1 },
@@ -1949,20 +2014,39 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 100,
   },
   activeSegmentButton: {
-    backgroundColor: '#EEFBFF',
+    backgroundColor: '#EEFBFF', // Light blue background when active
   },
   inactiveSegmentButton: {
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.white, // White background when inactive
   },
   activeSegmentText: {
-    color: COLORS.text,
-    fontWeight: 'bold',
+    color: COLORS.text, // Dark text when active
+    fontWeight: 'bold', // Bold text when active
   },
   inactiveSegmentText: {
-    color: COLORS.text,
-    fontWeight: 'normal',
+    color: COLORS.text, // Dark text when inactive
+    fontWeight: 'normal', // Normal weight text when inactive
   },
   toggleButtonContent: {
     height: 40,
+  },
+  infoIconContainer: {
+    marginLeft: SPACING.md,
+    padding: SPACING.sm, // Add padding to make it easier to press
+  },
+  infoTextContainer: {
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.md,
+  },
+  infoTextTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    marginBottom: SPACING.sm,
+  },
+  infoText: {
+    fontSize: 14,
+    color: COLORS.grey[700],
+    marginBottom: SPACING.xs,
   },
 }); 

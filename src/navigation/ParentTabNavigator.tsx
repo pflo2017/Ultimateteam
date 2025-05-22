@@ -189,9 +189,9 @@ const TabNavigator = () => {
         name="Manage"
         component={ParentManageScreen}
         options={{
-          tabBarLabel: 'My Children',
+          tabBarLabel: 'Manage',
           tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="account-multiple-outline" size={24} color={color} />
+            <MaterialCommunityIcons name="account-multiple-plus-outline" size={24} color={color} />
           ),
         }}
       />

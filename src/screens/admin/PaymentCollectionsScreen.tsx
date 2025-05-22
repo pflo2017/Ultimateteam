@@ -168,7 +168,7 @@ export const PaymentCollectionsScreen = ({
   const handleDeleteCollection = async (collection: PaymentCollection) => {
     Alert.alert(
       'Confirm Deletion',
-      'Make sure that admin has reviewed your note and changed the payment status before deleting.',
+      'Make sure the player\'s payment status has been updated before deleting this note.',
       [
         {
           text: 'Cancel',

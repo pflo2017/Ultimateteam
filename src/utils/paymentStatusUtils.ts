@@ -1,27 +1,30 @@
 import { supabase } from '../lib/supabase';
 
-// Define payment status types for better type safety
+// Define the standard payment status values
 export type PaymentStatus = 
-  | 'select_status'  // Default status for new players
+  | 'select_status'  // Default for new players
   | 'on_trial'       // 30-day free trial
-  | 'trial_ended'    // After trial expires
+  | 'trial_ended'    // Automatically set after trial period
   | 'pending'        // Not paid for current month yet
-  | 'unpaid'         // Status when pending rolls over
+  | 'unpaid'         // Automatically set when pending rolls over
   | 'paid';          // Payment confirmed
 
-// Function to check and update payment statuses
-export const checkAndUpdatePaymentStatuses = async (): Promise<void> => {
+// Call Supabase RPC to run payment status transitions
+export const checkAndUpdatePaymentStatuses = async () => {
   try {
-    // Call the database function to run the status transitions
-    const { error } = await supabase.rpc('run_status_transitions');
+    const { data, error } = await supabase
+      .rpc('run_status_transitions');
     
     if (error) {
-      console.error('Error running payment status transitions:', error);
-    } else {
-      console.log('Payment status transitions completed successfully');
+      console.error('Error running status transitions:', error);
+      return false;
     }
-  } catch (error) {
-    console.error('Unexpected error in checkAndUpdatePaymentStatuses:', error);
+    
+    console.log('Status transitions completed successfully');
+    return true;
+  } catch (err) {
+    console.error('Exception running status transitions:', err);
+    return false;
   }
 };
 
@@ -51,14 +54,15 @@ export const getPaymentStatusColor = (status: string): string => {
   }
 };
 
-// Function to get payment history for a player
-export const getPlayerPaymentHistory = async (playerId: string): Promise<any[]> => {
+// Get payment history for a player
+export const getPlayerPaymentHistory = async (playerId: string, year: number) => {
   try {
     const { data, error } = await supabase
       .from('player_status_history')
       .select('*')
       .eq('player_id', playerId)
-      .order('changed_at', { ascending: false });
+      .order('changed_at', { ascending: false })
+      .limit(20);
       
     if (error) {
       console.error('Error fetching player payment history:', error);
@@ -66,8 +70,8 @@ export const getPlayerPaymentHistory = async (playerId: string): Promise<any[]> 
     }
     
     return data || [];
-  } catch (error) {
-    console.error('Unexpected error in getPlayerPaymentHistory:', error);
+  } catch (err) {
+    console.error('Exception fetching payment history:', err);
     return [];
   }
 }; 
