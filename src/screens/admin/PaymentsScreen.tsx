@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, TextInput, ScrollView, TouchableOpacity, Modal, Alert, Platform, SafeAreaView, KeyboardAvoidingView } from 'react-native';
+import { View, StyleSheet, TextInput, ScrollView, TouchableOpacity, Modal, Alert, Platform, SafeAreaView, KeyboardAvoidingView, Dimensions } from 'react-native';
 import { Text, Card, ActivityIndicator, SegmentedButtons, Button, Divider, Portal, Dialog, Menu } from 'react-native-paper';
 import { COLORS, SPACING, FONT_SIZES } from '../../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -15,7 +15,7 @@ interface Player {
   team: {
     name: string;
   };
-  payment_status: 'select_status' | 'on_trial' | 'pending' | 'paid' | 'unpaid' | 'trial_ended';
+  payment_status: 'no_data' | 'on_trial' | 'paid' | 'unpaid' | 'trial_ended';
   last_payment_date: string;
   parent_id: string | null;
   created_at: string;
@@ -40,7 +40,7 @@ interface PaymentStats {
 interface PlayerPayment {
   year: number;
   month: number;
-  status: 'select_status' | 'on_trial' | 'pending' | 'paid' | 'unpaid' | 'trial_ended';
+  status: 'no_data' | 'on_trial' | 'paid' | 'unpaid' | 'trial_ended';
 }
 
 interface HistoryMonth { year: number; month: number; date: Date; }
@@ -81,6 +81,8 @@ const PaymentsScreenComponent = () => {
   const [openDropdownMonth, setOpenDropdownMonth] = useState<string | null>(null);
   const [showCollections, setShowCollections] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  // Add state for storing player payment history to prevent random changes
+  const [playersPaymentHistory, setPlayersPaymentHistory] = useState<{[playerId: string]: {[key: string]: string}}>({});
 
   // State for info text visibility
   const [showInfoText, setShowInfoText] = useState(false);
@@ -113,6 +115,15 @@ const PaymentsScreenComponent = () => {
     console.log("[AdminPaymentsScreen] Payment collection detected - refreshing data");
     fetchData();
   });
+
+  // Monthly Reset Logic:
+  // At the start of each new month, all players' payment statuses will be reset to 'no_data'
+  // This requires a scheduled function on the server/backend that runs on the 1st day of each month
+  // The function should:
+  // 1. Set all active players' payment_status to 'no_data' in the players table
+  // 2. Create new records in player_payments table for the new month with status 'no_data'
+  // 3. Trigger a 'payment_status_reset' event that this component can listen for
+  // This ensures admins must manually set each player's payment status every month
 
   const fetchData = async () => {
     try {
@@ -179,8 +190,8 @@ const PaymentsScreenComponent = () => {
 
       // Transform player data to include payment info
       const transformedPlayers = playersData.map((player: any) => {
-        // Default for new players is 'select_status' unless specifically set
-        let paymentStatus = player.payment_status || 'select_status';
+        // Default for new players is 'no_data' unless specifically set
+        let paymentStatus = player.payment_status || 'no_data';
         
         // Calculate player age (time since created)
         const createdAt = new Date(player.created_at);
@@ -189,7 +200,7 @@ const PaymentsScreenComponent = () => {
         const daysSinceCreated = diff / (24 * 60 * 60 * 1000);
         
         // Auto-status logic based on user requirements
-        // 1. If no status is set and player is new, default to 'select_status'
+        // 1. If no status is set and player is new, default to 'no_data'
         // 2. If player is on trial and 30 days have passed, switch to 'trial_ended'
         // 3. If player status is 'on_trial' and < 30 days, keep as 'on_trial'
         
@@ -239,8 +250,7 @@ const PaymentsScreenComponent = () => {
       const unpaidPlayers = transformedPlayers.filter(p => p.payment_status === 'unpaid').length;
       const onTrialPlayers = transformedPlayers.filter(p => p.payment_status === 'on_trial').length;
       const trialEndedPlayers = transformedPlayers.filter(p => p.payment_status === 'trial_ended').length;
-      const pendingPlayers = transformedPlayers.filter(p => p.payment_status === 'pending').length;
-      const selectStatusPlayers = transformedPlayers.filter(p => p.payment_status === 'select_status').length;
+      const noDataPlayers = transformedPlayers.filter(p => p.payment_status === 'no_data').length;
 
       setTeams(teamsData || []);
       setPlayers(transformedPlayers);
@@ -250,9 +260,31 @@ const PaymentsScreenComponent = () => {
         unpaidPlayers,
         onTrialPlayers,
         trialEndedPlayers,
-        pendingPlayers,
-        selectStatusPlayers
+        pendingPlayers: 0, // Keep for backward compatibility but always 0
+        selectStatusPlayers: noDataPlayers // Map selectStatusPlayers to noDataPlayers for backward compatibility
       });
+
+      // Calculate previous month and year
+      const now = new Date();
+      const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const prevMonth = prevDate.getMonth() + 1;
+      const prevYear = prevDate.getFullYear();
+
+      // Fetch previous month's payment statuses for all players
+      const { data: prevPayments, error: prevPaymentsError } = await supabase
+        .from('player_payments')
+        .select('player_id, year, month, status')
+        .eq('year', prevYear)
+        .eq('month', prevMonth);
+      if (prevPaymentsError) throw prevPaymentsError;
+
+      // Build playersPaymentHistory state
+      const paymentHistoryMap: { [playerId: string]: { [key: string]: string } } = {};
+      (prevPayments || []).forEach((rec: any) => {
+        if (!paymentHistoryMap[rec.player_id]) paymentHistoryMap[rec.player_id] = {};
+        paymentHistoryMap[rec.player_id][`${rec.year}-${rec.month}`] = rec.status;
+      });
+      setPlayersPaymentHistory(paymentHistoryMap);
     } catch (error) {
       console.error('Error fetching data:', error);
       Alert.alert('Error', 'Failed to load data');
@@ -317,117 +349,90 @@ const PaymentsScreenComponent = () => {
   };
 
   const handleChangePaymentStatus = async (status: string) => {
-    // Prevent multiple simultaneous calls that could cause freezing
     if (!selectedPlayer || isUpdatingPayment) return;
     
-    // Set flag to indicate update in progress
     setIsUpdatingPayment(true);
     
     try {
+      // Close modal immediately for better UX
+      setIsStatusChangeModalVisible(false);
+
       const today = new Date().toISOString();
-      
-      // Update with consistent status value - no mapping needed
-      const updateData: any = { 
-        payment_status: status,    // Use status directly
-        player_status: status,     // Use the same status value for both fields
-        status_changed_by: 'admin' // This should now be accepted as TEXT type
+      const updateData: any = {
+        payment_status: status,
+        player_status: status,
+        status_changed_by: 'admin'
       };
-      
-      // If status is paid, update the last_payment_date
+
       if (status === 'paid') {
         updateData.last_payment_date = today;
       }
-      
-      console.log("Admin changing payment status:", {
-        playerId: selectedPlayer.id,
-        newStatus: status,
-        updateData
-      });
-      
+
       // Update player record
-      const { error } = await supabase
+      const { error: playerError } = await supabase
         .from('players')
         .update(updateData)
         .eq('id', selectedPlayer.id);
-      
-      if (error) {
-        console.error("Error updating player:", error);
-        throw error;
-      }
-      
-      // Update May 2025 payment record
-      try {
-        const { error: paymentError } = await supabase
-          .from('player_payments')
-          .upsert({
-            player_id: selectedPlayer.id,
-            year: 2025,
-            month: 5, // May 2025
-            status: status as any,
-            updated_at: today
-          }, { onConflict: 'player_id,year,month' });
-          
-        if (paymentError) {
-          console.error("Error updating payment history:", paymentError);
-        } else {
-          console.log("Successfully updated May 2025 payment record to:", status);
-          
-          // Update local payment history state
-          const updatedPaymentHistory = [...paymentHistory];
-          const mayRecordIndex = updatedPaymentHistory.findIndex(p => 
-            p.year === 2025 && p.month === 5
-          );
-          
-          if (mayRecordIndex >= 0) {
-            updatedPaymentHistory[mayRecordIndex].status = status as any;
+
+      if (playerError) throw playerError;
+
+      // Update current month payment record
+      const currentDate = new Date();
+      const currentMonth = currentDate.getMonth() + 1;
+      const currentYear = currentDate.getFullYear();
+
+      const { error: paymentError } = await supabase
+        .from('player_payments')
+        .upsert({
+          player_id: selectedPlayer.id,
+          year: currentYear,
+          month: currentMonth,
+          status: status,
+          updated_at: today
+        }, { onConflict: 'player_id,year,month' });
+
+      if (paymentError) throw paymentError;
+
+      // Update selected player state
+      setSelectedPlayer(prev => ({
+        ...prev!,
+        payment_status: status as any,
+        last_payment_date: status === 'paid' ? new Date().toLocaleDateString('en-GB') : prev!.last_payment_date
+      }));
+
+      // Update payment history if it's loaded
+      if (paymentHistory.length > 0) {
+        setPaymentHistory(prev => {
+          const updated = [...prev];
+          const index = updated.findIndex(p => p.year === currentYear && p.month === currentMonth);
+          if (index >= 0) {
+            updated[index].status = status as any;
           } else {
-            updatedPaymentHistory.push({
-              year: 2025,
-              month: 5,
-              status: status as any
-            });
+            updated.push({ year: currentYear, month: currentMonth, status: status as any });
           }
-          
-          setPaymentHistory(updatedPaymentHistory);
-        }
-      } catch (paymentError) {
-        console.error("Error updating payment history:", paymentError);
-        // Continue even if this fails - don't block the UI
+          return updated;
+        });
       }
-      
-      // Trigger event to notify other screens
-      try {
-        triggerEvent('payment_status_changed', selectedPlayer.id, status, 
-          status === 'paid' ? today : null);
-      } catch (eventError) {
-        console.error("Error triggering event:", eventError);
-      }
-      
-      // Close modal before refreshing data to prevent UI freeze
-      setIsStatusChangeModalVisible(false);
-      
-      // Update the selected player with the new status and properly formatted payment date
-      const formattedDate = status === 'paid' ? new Date().toLocaleDateString('en-GB') : selectedPlayer.last_payment_date;
-      
-      setSelectedPlayer({
-        ...selectedPlayer,
-        payment_status: status as 'select_status' | 'on_trial' | 'pending' | 'paid' | 'unpaid' | 'trial_ended',
-        last_payment_date: formattedDate
-      });
-      
-      // Reload data with a slight delay to prevent UI freezing
+
+      // Notify other screens
+      triggerEvent('payment_status_changed', selectedPlayer.id, status, 
+        status === 'paid' ? today : null);
+
+      // Show success message
+      Alert.alert(
+        'Success',
+        `Payment status updated to ${getPaymentStatusText(status)}`
+      );
+
+      // Refresh data after a short delay
       setTimeout(() => {
         fetchData().catch(err => console.error("Error refreshing data:", err));
       }, 300);
-      
-      // Show success message
-      Alert.alert('Success', `Payment status updated to ${getPaymentStatusText(status)}.`);
-        
+
     } catch (error) {
       console.error('Error updating payment status:', error);
       Alert.alert('Error', 'Failed to update payment status. Please try again.');
     } finally {
-      // Always reset the updating flag, even if there's an error
       setIsUpdatingPayment(false);
     }
   };
@@ -484,24 +489,42 @@ const PaymentsScreenComponent = () => {
         });
       }
     
-      // Create array of all months in 2025
-      const months = [
-        { year: 2025, month: 5, date: new Date(2025, 4, 1) }, // May
-        { year: 2025, month: 4, date: new Date(2025, 3, 1) }, // April
-        { year: 2025, month: 3, date: new Date(2025, 2, 1) }, // March
-        { year: 2025, month: 2, date: new Date(2025, 1, 1) }, // February
-        { year: 2025, month: 1, date: new Date(2025, 0, 1) }  // January
-      ];
+      // Dynamically generate months based on current date
+      const currentDate = new Date();
+      const currentMonth = currentDate.getMonth() + 1; // 1-12 format
+      const currentYear = currentDate.getFullYear();
+      
+      // Generate months for current year only
+      const months: HistoryMonth[] = [];
+      const years: number[] = [];
+      
+      // Add current year to available years
+      if (!years.includes(currentYear)) {
+        years.push(currentYear);
+      }
+      
+      // Generate months for current year (from January to current month)
+      for (let month = currentMonth; month >= 1; month--) {
+        months.push({
+          year: currentYear,
+          month: month,
+          date: new Date(currentYear, month - 1, 1)
+        });
+      }
+      
+      // Sort years in descending order
+      years.sort((a, b) => b - a);
       
       setHistoryMonths(months);
-      setAvailableYears([2025]); // Just 2025 for now
+      setAvailableYears(years);
+      setSelectedHistoryYear(currentYear); // Default to current year
       
-      // Fetch all payment history records for this player in 2025
+      // Fetch all payment history records for this player for current year
       const { data, error } = await supabase
         .from('player_payments')
         .select('year, month, status')
         .eq('player_id', player.id)
-        .eq('year', 2025);
+        .in('year', years);
       
       if (error) {
         console.error('Error fetching payment history:', error);
@@ -510,23 +533,23 @@ const PaymentsScreenComponent = () => {
       
       console.log('Payment history data received:', data);
       
-      // Check if there's a mismatch between May's payment record and player's current status
-      const mayRecord = data?.find(p => p.year === 2025 && p.month === 5);
+      // Check if there's a mismatch between current month's payment record and player's current status
+      const currentMonthRecord = data?.find(p => p.year === currentYear && p.month === currentMonth);
       const playerStatus = playerData?.payment_status || player.payment_status;
       
-      if (mayRecord && mayRecord.status !== playerStatus) {
-        console.log(`MISMATCH DETECTED: May record status "${mayRecord.status}" doesn't match player status "${playerStatus}"`);
+      if (currentMonthRecord && currentMonthRecord.status !== playerStatus) {
+        console.log(`MISMATCH DETECTED: Current month record status "${currentMonthRecord.status}" doesn't match player status "${playerStatus}"`);
         
-        // Force update the May record to match the player's current status
+        // Force update the current month record to match the player's current status
         try {
-          console.log("Updating May payment record to match player's current status:", playerStatus);
+          console.log("Updating current month payment record to match player's current status:", playerStatus);
           
           const { error: updateError } = await supabase
             .from('player_payments')
             .upsert({
               player_id: player.id,
-              year: 2025,
-              month: 5,
+              year: currentYear,
+              month: currentMonth,
               status: playerStatus as any,
               updated_at: new Date().toISOString()
             }, { onConflict: 'player_id,year,month' });
@@ -537,12 +560,12 @@ const PaymentsScreenComponent = () => {
             console.log("Successfully fixed payment status mismatch");
             
             // Update the local data with the correct status
-            if (mayRecord) {
-              mayRecord.status = playerStatus as any;
+            if (currentMonthRecord) {
+              currentMonthRecord.status = playerStatus as any;
             } else {
               data?.push({
-                year: 2025,
-                month: 5,
+                year: currentYear,
+                month: currentMonth,
                 status: playerStatus as any
               });
             }
@@ -563,6 +586,25 @@ const PaymentsScreenComponent = () => {
 
   const handleYearChange = (year: number) => {
     setSelectedHistoryYear(year);
+    
+    // Refresh payment history for the selected year
+    if (historyPlayer) {
+      // Just refresh the payment history data for the new year
+      supabase
+        .from('player_payments')
+        .select('year, month, status')
+        .eq('player_id', historyPlayer.id)
+        .eq('year', year)
+        .then(({ data, error }) => {
+          if (error) {
+            console.error('Error fetching payment history for year:', error);
+          } else {
+            console.log(`Fetched ${data?.length || 0} payment records for year ${year}`);
+            // Update payment history with the new data
+            setPaymentHistory(data || []);
+          }
+        });
+    }
   };
 
   // When admin changes status for a month:
@@ -570,61 +612,129 @@ const PaymentsScreenComponent = () => {
     player: any,
     year: number,
     month: number,
-    newStatus: 'paid' | 'pending' | 'unpaid' | 'on_trial' | 'trial_ended' | 'select_status'
+    newStatus: string
   ) => {
+    if (!player?.id) {
+      Alert.alert('Error', 'Invalid player data');
+      return;
+    }
+
     try {
-      console.log(`Changing payment status for ${player.name} - ${month}/${year} to ${newStatus}`);
+      // Close dropdown immediately for better UX
+      setOpenDropdownMonth(null);
+
+      const today = new Date().toISOString();
       
-      // Update the player_payments record
-      await supabase
+      // Update payment history record
+      const { error: paymentError, data: paymentData } = await supabase
         .from('player_payments')
         .upsert({
           player_id: player.id,
           year,
           month,
-          status: newStatus, // Use status directly without any mapping
-          updated_at: new Date().toISOString()
-        });
-      
-      // If this is the current month/year, also update the player's status
+          status: newStatus,
+          updated_at: today
+        }, { onConflict: 'player_id,year,month' });
+
+      if (paymentError) {
+        console.error('Supabase upsert error (player_payments):', paymentError);
+        Alert.alert('Error', 'Failed to save payment status to server. Please try again.');
+        return;
+      } else {
+        console.log('Supabase upsert success (player_payments):', paymentData);
+      }
+
+      // If this is the current month, update player status
       const currentDate = new Date();
-      const currentMonth = currentDate.getMonth() + 1; // 1-12 format
-      const currentYear = 2025; // Hardcoded for now
-      
+      const currentMonth = currentDate.getMonth() + 1;
+      const currentYear = currentDate.getFullYear();
+
       if (month === currentMonth && year === currentYear) {
-        // Update with consistent status values - no mapping needed
-        const updateData: any = { 
-          payment_status: newStatus,    // Use status directly
-          player_status: newStatus,     // Use the same status value for both fields
-          status_changed_by: 'admin'    // Track who made the change
+        const updateData: any = {
+          payment_status: newStatus,
+          player_status: newStatus,
+          status_changed_by: 'admin'
         };
-        
-        // If paid, also update last payment date
+
         if (newStatus === 'paid') {
-          updateData.last_payment_date = new Date().toISOString();
+          updateData.last_payment_date = today;
         }
-        
-        // Update the player record
-        await supabase
+
+        const { error: playerError, data: playerUpdateData } = await supabase
           .from('players')
           .update(updateData)
           .eq('id', player.id);
-        
-        // Trigger event to notify other screens that payment status has changed
+
+        if (playerError) {
+          console.error('Supabase update error (players):', playerError);
+          Alert.alert('Error', 'Failed to save player status to server. Please try again.');
+          return;
+        } else {
+          console.log('Supabase update success (players):', playerUpdateData);
+        }
+
+        // Update selected player state if it's the current player
+        if (selectedPlayer?.id === player.id) {
+          setSelectedPlayer(prev => ({
+            ...prev!,
+            payment_status: newStatus as any,
+            last_payment_date: newStatus === 'paid' ? new Date().toLocaleDateString('en-GB') : prev!.last_payment_date
+          }));
+        }
+
+        // Notify other screens
         triggerEvent('payment_status_changed', player.id, newStatus, 
-          newStatus === 'paid' ? new Date().toISOString() : null);
+          newStatus === 'paid' ? today : null);
       }
-      
-      // Refresh payment history
-      const { data } = await supabase
-        .from('player_payments')
-        .select('year, month, status')
-        .eq('player_id', player.id)
-        .eq('year', selectedHistoryYear);
-      
-      setPaymentHistory(data || []);
+
+      // Update local payment history state
+      setPaymentHistory(prev => {
+        const updated = [...prev];
+        const index = updated.findIndex(p => p.year === year && p.month === month);
+        if (index >= 0) {
+          updated[index].status = newStatus as any;
+        } else {
+          updated.push({ year, month, status: newStatus as any });
+        }
+        return updated;
+      });
+
+      // Update playersPaymentHistory for the relevant player and month
+      setPlayersPaymentHistory(prev => {
+        const playerId = player.id;
+        const monthKey = `${year}-${month}`;
+        const updated = { ...prev };
+        updated[playerId] = { ...(updated[playerId] || {}), [monthKey]: newStatus };
+        return updated;
+      });
+
+      // Update players list to reflect the change
+      setPlayers(prevPlayers => {
+        return prevPlayers.map(p => {
+          if (p.id === player.id && month === currentMonth && year === currentYear) {
+            return {
+              ...p,
+              payment_status: newStatus as any,
+              last_payment_date: newStatus === 'paid' ? new Date().toLocaleDateString('en-GB') : p.last_payment_date
+            };
+          }
+          return p;
+        });
+      });
+
+      // Show success message
+      Alert.alert(
+        'Success',
+        `Payment status updated to ${getPaymentStatusText(newStatus)} for ${month}/${year}`
+      );
+
+      // After success, force fetchData to reload from server
+      setTimeout(() => {
+        fetchData().catch(err => console.error("Error refreshing data after save:", err));
+      }, 300);
+
     } catch (error) {
-      console.error('Error updating payment status for month:', error);
+      console.error('Error updating payment status:', error);
       Alert.alert('Error', 'Failed to update payment status. Please try again.');
     }
   };
@@ -658,11 +768,10 @@ const PaymentsScreenComponent = () => {
   const getPaymentStatusColor = (status: string) => {
     switch (status) {
       case 'paid': return COLORS.success;
-      case 'pending': return '#FFA500'; // Orange
       case 'unpaid': return COLORS.error;
       case 'on_trial': return COLORS.primary;
       case 'trial_ended': return COLORS.grey[800];
-      case 'select_status': return COLORS.text;
+      case 'no_data': return COLORS.grey[600];
       default: return COLORS.grey[600];
     }
   };
@@ -670,20 +779,18 @@ const PaymentsScreenComponent = () => {
   const getPaymentStatusText = (status: string) => {
     switch (status) {
       case 'paid': return 'Paid';
-      case 'pending': return 'Pending';
       case 'unpaid': return 'Unpaid';
       case 'on_trial': return 'On Trial';
       case 'trial_ended': return 'Trial Ended';
-      case 'select_status': return 'Select Status';
+      case 'no_data': return 'No Data';
       default: return status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Unknown';
     }
   };
 
   const selectedTeam = teams.find(team => team.id === selectedTeamId);
   const statusOptions = [
-    { value: 'select_status', label: 'Select Status' },
+    { value: 'no_data', label: 'No Data' },
     { value: 'on_trial', label: 'On Trial' },
-    { value: 'pending', label: 'Pending' },
     { value: 'paid', label: 'Paid' },
     { value: 'unpaid', label: 'Unpaid' },
     { value: 'trial_ended', label: 'Trial Ended' },
@@ -711,26 +818,110 @@ const PaymentsScreenComponent = () => {
 
   // Create a PlayerCard component for a cleaner design
   const PlayerCard = ({ player }: { player: Player }) => {
-    // Format the birth date if it exists
-    let formattedBirthDate = 'Not available';
-    if (player.birth_date) {
-      try {
-        const date = new Date(player.birth_date);
-        if (!isNaN(date.getTime())) {
-          formattedBirthDate = date.toLocaleDateString();
-        }
-      } catch (e) {
-        console.error("Error formatting birth date:", e);
-      }
-    }
-    
     // Function to capture the position of the Manage button for menu placement
     const handleManagePress = (event: any) => {
       // Get the current position of the touch event
       const { pageX, pageY } = event.nativeEvent;
-      setMenuPosition({ x: pageX - 160, y: pageY + 10 });
+      
+      // Get screen dimensions
+      const screenWidth = Dimensions.get('window').width;
+      const screenHeight = Dimensions.get('window').height;
+      
+      // Modal dimensions
+      const modalWidth = 220; // Approximate width of the modal
+      const modalHeight = 200; // Approximate height of the modal
+      
+      // Calculate positions ensuring the modal stays within screen bounds
+      let xPos = pageX - 160; // Default position
+      let yPos = pageY + 10;  // Default position with small offset
+      
+      // Adjust X position if needed
+      if (xPos + modalWidth > screenWidth) {
+        xPos = screenWidth - modalWidth - 10; // Keep 10px margin from right edge
+      }
+      if (xPos < 10) {
+        xPos = 10; // Keep 10px margin from left edge
+      }
+      
+      // Adjust Y position if needed
+      if (yPos + modalHeight > screenHeight - 100) { // 100px buffer for bottom navigation/safe area
+        yPos = pageY - modalHeight - 10; // Position above the button with margin
+      }
+      
+      setMenuPosition({ x: xPos, y: yPos });
       setShowManageOptions(player.id);
     };
+    
+    // Format the join date
+    const formatJoinDate = (dateString: string) => {
+      try {
+        const date = new Date(dateString);
+        if (!isNaN(date.getTime())) {
+          return date.toLocaleDateString('en-GB');
+        }
+      } catch (e) {
+        console.error("Error formatting join date:", e);
+      }
+      return 'Unknown';
+    };
+    
+    // Get current and previous month names and status
+    const getCurrentAndPreviousMonthInfo = () => {
+      const now = new Date();
+      const currentMonth = now.getMonth() + 1; // 1-12 format
+      const currentYear = now.getFullYear();
+      const currentMonthName = now.toLocaleString('default', { month: 'short' });
+      
+      // Get previous month
+      const prevDate = new Date();
+      prevDate.setMonth(prevDate.getMonth() - 1);
+      const previousMonth = prevDate.getMonth() + 1;
+      const previousYear = prevDate.getFullYear();
+      const previousMonthName = prevDate.toLocaleString('default', { month: 'short' });
+      
+      // Get previous month status from stored history
+      const prevMonthKey = `${previousYear}-${previousMonth}`;
+      const previousMonthStatus = playersPaymentHistory[player.id]?.[prevMonthKey] || 'no_data';
+      
+      return { 
+        currentMonthName, 
+        previousMonthName, 
+        previousMonthStatus
+      };
+    };
+    
+    const { currentMonthName, previousMonthName, previousMonthStatus } = getCurrentAndPreviousMonthInfo();
+    
+    // Current month status is the player's current status
+    const currentMonthStatus = player.payment_status;
+    
+    // Find the oldest unpaid month for this player
+    const getOldestUnpaidMonth = () => {
+      const history = playersPaymentHistory[player.id] || {};
+      // Convert keys to {year, month} objects and filter unpaid
+      const unpaidMonths = Object.entries(history)
+        .filter(([_, status]) => status === 'unpaid')
+        .map(([key]) => {
+          const [year, month] = key.split('-').map(Number);
+          return { year, month };
+        });
+      if (unpaidMonths.length === 0) return null;
+      // Sort by year, then month
+      unpaidMonths.sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month);
+      return unpaidMonths[0];
+    };
+
+    const oldestUnpaid = getOldestUnpaidMonth();
+
+    // Card border color logic
+    const cardBorderColor = oldestUnpaid ? COLORS.error : getPaymentStatusColor(player.payment_status);
+
+    // For badge display
+    let unpaidBadge = null;
+    if (oldestUnpaid) {
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      unpaidBadge = `Unpaid since ${monthNames[oldestUnpaid.month - 1]} ${oldestUnpaid.year}`;
+    }
     
     return (
       <Card 
@@ -745,7 +936,7 @@ const PaymentsScreenComponent = () => {
           shadowRadius: 4,
           elevation: 3,
           borderWidth: 1,
-          borderColor: COLORS.grey[200],
+          borderColor: cardBorderColor,
           overflow: 'hidden'
         }}
         mode="outlined"
@@ -756,12 +947,12 @@ const PaymentsScreenComponent = () => {
           left: 0,
           width: 8,
           height: '100%',
-          backgroundColor: getPaymentStatusColor(player.payment_status),
+          backgroundColor: cardBorderColor,
           zIndex: 1
         }} />
         
-        <Card.Content style={{ paddingLeft: SPACING.md }}>
-          {/* Player Header */}
+        <Card.Content style={{ padding: SPACING.md }}>
+          {/* Player Header - Name and Join Date */}
           <View style={{
             flexDirection: 'row',
             justifyContent: 'space-between',
@@ -772,7 +963,7 @@ const PaymentsScreenComponent = () => {
             <View style={{
               flexDirection: 'row',
               alignItems: 'center',
-              flex: 3
+              flex: 1
             }}>
               <View style={{
                 width: 48,
@@ -790,7 +981,7 @@ const PaymentsScreenComponent = () => {
                 />
               </View>
               
-              <View style={{ flex: 1 }}>
+              <View>
                 <Text 
                   style={{
                     fontSize: FONT_SIZES.lg,
@@ -798,7 +989,6 @@ const PaymentsScreenComponent = () => {
                     color: COLORS.text,
                     marginBottom: 2
                   }}
-                  numberOfLines={1}
                 >
                   {player.name}
                 </Text>
@@ -807,28 +997,28 @@ const PaymentsScreenComponent = () => {
                     fontSize: FONT_SIZES.sm,
                     color: COLORS.grey[600],
                   }}
-                  numberOfLines={1}
                 >
                   {player.team.name}
                 </Text>
               </View>
             </View>
             
-            <View style={{
-              backgroundColor: getPaymentStatusColor(player.payment_status) + '20',
-              paddingHorizontal: SPACING.md,
-              paddingVertical: 6,
-              borderRadius: 20,
-              alignSelf: 'flex-start',
-              minWidth: 85,
-              alignItems: 'center'
-            }}>
+            <View style={{ justifyContent: 'center' }}>
               <Text style={{
                 fontSize: FONT_SIZES.xs,
-                fontWeight: '700',
-                color: getPaymentStatusColor(player.payment_status)
+                color: COLORS.grey[600],
+                marginBottom: 4,
+                textAlign: 'right'
               }}>
-                {getPaymentStatusText(player.payment_status)}
+                Join Date
+              </Text>
+              <Text style={{
+                fontSize: FONT_SIZES.sm,
+                fontWeight: '500',
+                color: COLORS.text,
+                textAlign: 'right'
+              }}>
+                {formatJoinDate(player.created_at)}
               </Text>
             </View>
           </View>
@@ -839,28 +1029,91 @@ const PaymentsScreenComponent = () => {
             marginBottom: SPACING.md
           }} />
           
-          {/* Info Section */}
+          {/* Info Section - Payment Statuses and Last Payment */}
           <View style={{
             flexDirection: 'row',
             justifyContent: 'space-between',
             marginBottom: SPACING.md,
             paddingHorizontal: SPACING.xs
           }}>
-            <View style={{ flex: 1 }}>
-              <Text style={{
-                fontSize: FONT_SIZES.xs,
-                color: COLORS.grey[500],
-                marginBottom: 4
-              }}>
-                Birth Date
-              </Text>
-              <Text style={{
-                fontSize: FONT_SIZES.sm,
-                fontWeight: '600',
-                color: COLORS.text
-              }}>
-                {player.birth_date ? formattedBirthDate : 'Not available'}
-              </Text>
+            <View style={{ 
+              flexDirection: 'row',
+              alignItems: 'flex-start', // align items to the top
+              flex: 2
+            }}>
+              {/* Previous Month Status */}
+              <View style={{ alignItems: 'center', marginRight: SPACING.md }}>
+                <View style={{
+                  backgroundColor: getPaymentStatusColor(previousMonthStatus) + '20',
+                  paddingHorizontal: SPACING.sm,
+                  paddingVertical: 6,
+                  borderRadius: 12,
+                  minWidth: 70,
+                  alignItems: 'center'
+                }}>
+                  <Text style={{
+                    fontSize: FONT_SIZES.xs,
+                    fontWeight: '600',
+                    color: getPaymentStatusColor(previousMonthStatus)
+                  }}>
+                    {getPaymentStatusText(previousMonthStatus)}
+                  </Text>
+                </View>
+                <Text style={{
+                  fontSize: FONT_SIZES.xs,
+                  color: COLORS.grey[500],
+                  marginTop: 4
+                }}>
+                  {previousMonthName}
+                </Text>
+              </View>
+              {/* Current Month Status */}
+              <View style={{ alignItems: 'center', marginRight: SPACING.md }}>
+                <View style={{
+                  backgroundColor: getPaymentStatusColor(currentMonthStatus) + '20',
+                  paddingHorizontal: SPACING.sm,
+                  paddingVertical: 6,
+                  borderRadius: 12,
+                  minWidth: 70,
+                  alignItems: 'center'
+                }}>
+                  <Text style={{
+                    fontSize: FONT_SIZES.xs,
+                    fontWeight: '600',
+                    color: getPaymentStatusColor(currentMonthStatus)
+                  }}>
+                    {getPaymentStatusText(currentMonthStatus)}
+                  </Text>
+                </View>
+                <Text style={{
+                  fontSize: FONT_SIZES.xs,
+                  color: COLORS.grey[500],
+                  marginTop: 4
+                }}>
+                  {currentMonthName}
+                </Text>
+              </View>
+              {/* History Icon */}
+              <TouchableOpacity 
+                style={{
+                  alignSelf: 'flex-start', // top align
+                  padding: SPACING.xs,
+                  backgroundColor: COLORS.grey[200],
+                  borderRadius: 20,
+                  width: 36,
+                  height: 36,
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  marginRight: SPACING.md // keep spacing consistent
+                }}
+                onPress={() => handlePlayerAction('history', player)}
+              >
+                <MaterialCommunityIcons 
+                  name="history" 
+                  size={20} 
+                  color={COLORS.grey[700]} 
+                />
+              </TouchableOpacity>
             </View>
             
             <View style={{ 
@@ -869,14 +1122,14 @@ const PaymentsScreenComponent = () => {
             }}>
               <Text style={{
                 fontSize: FONT_SIZES.xs,
-                color: COLORS.grey[500],
+                color: COLORS.grey[600],
                 marginBottom: 4
               }}>
                 Last Payment
               </Text>
               <Text style={{
                 fontSize: FONT_SIZES.sm,
-                fontWeight: '600',
+                fontWeight: '500',
                 color: COLORS.text
               }}>
                 {player.last_payment_date}
@@ -884,40 +1137,32 @@ const PaymentsScreenComponent = () => {
             </View>
           </View>
           
+          {/* Unpaid badge below statuses, aligned right above Manage button */}
+          {unpaidBadge && (
+            <View style={{
+              flexDirection: 'row',
+              justifyContent: 'flex-end',
+              marginTop: 4,
+              marginBottom: 0, // tight to Manage button
+            }}>
+              <View style={{
+                backgroundColor: COLORS.error + '20',
+                borderRadius: 12,
+                paddingHorizontal: 10,
+                paddingVertical: 4,
+                alignSelf: 'flex-end',
+              }}>
+                <Text style={{ color: COLORS.error, fontWeight: 'bold', fontSize: 12 }}>{unpaidBadge}</Text>
+              </View>
+            </View>
+          )}
+          
           {/* Action Buttons */}
           <View style={{
             flexDirection: 'row',
             justifyContent: 'flex-end',
-            gap: SPACING.sm,
             marginTop: SPACING.sm
           }}>
-            <TouchableOpacity 
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                backgroundColor: COLORS.grey[200],
-                paddingHorizontal: SPACING.md,
-                paddingVertical: SPACING.sm,
-                borderRadius: 8,
-                justifyContent: 'center'
-              }}
-              onPress={() => handlePlayerAction('history', player)}
-            >
-              <MaterialCommunityIcons 
-                name="history" 
-                size={16} 
-                color={COLORS.grey[800]} 
-              />
-              <Text style={{
-                color: COLORS.grey[800],
-                fontSize: FONT_SIZES.sm,
-                fontWeight: '600',
-                marginLeft: 4
-              }}>
-                History
-              </Text>
-            </TouchableOpacity>
-            
             <TouchableOpacity 
               style={{
                 flexDirection: 'row',
@@ -1323,7 +1568,7 @@ const PaymentsScreenComponent = () => {
                     <MaterialCommunityIcons name="close" size={24} color={COLORS.text} />
                   </TouchableOpacity>
                 </View>
-                
+
                 {selectedPlayer && (
                   <ScrollView>
                     <View style={styles.paymentHistoryHeader}>
@@ -1348,10 +1593,32 @@ const PaymentsScreenComponent = () => {
                             color: getPaymentStatusColor(selectedPlayer.payment_status)
                           }}>
                             {getPaymentStatusText(selectedPlayer.payment_status)}
-                          </Text>
+                    </Text>
                         </View>
                       </View>
                     </View>
+                    
+                    {/* Year selector */}
+                    {availableYears.length > 1 && (
+                      <View style={{
+                        flexDirection: 'row',
+                        justifyContent: 'center',
+                        marginTop: SPACING.md,
+                        marginBottom: SPACING.md,
+                      }}>
+                        <SegmentedButtons
+                          value={selectedHistoryYear.toString()}
+                          onValueChange={(value) => handleYearChange(parseInt(value))}
+                          buttons={availableYears.map(year => ({
+                            value: year.toString(),
+                            label: year.toString(),
+                            style: { minWidth: 80 }
+                          }))}
+                          theme={{ colors: { primary: COLORS.primary } }}
+                          style={{ backgroundColor: COLORS.primary + '10' }}
+                        />
+                      </View>
+                    )}
                     
                     <View style={[styles.detailsSection, { marginTop: SPACING.lg }]}>
                       <Text style={{ 
@@ -1363,26 +1630,29 @@ const PaymentsScreenComponent = () => {
                         Monthly Status
                       </Text>
                       
-                      {historyMonths.map(({ year, month, date }) => {
+                      {historyMonths
+                        .filter(month => month.year === selectedHistoryYear)
+                        .map(({ year, month, date }) => {
                         // Get payment record for this month/year if it exists
                         const payment = paymentHistory.find(p => 
-                          p.year === year && p.month === month
-                        );
+                        p.year === year && p.month === month
+                      );
                         
-                        // Get current month
+                        // Get current month/year
                         const currentDate = new Date();
                         const currentMonth = currentDate.getMonth() + 1; // 1-12 format
+                        const currentYear = currentDate.getFullYear();
                         
                         // Determine status to display
                         let displayStatus;
                         
-                        if (month === 5) {
-                          // For May (current month), ALWAYS use player's current status, regardless of payment history
+                        if (month === currentMonth && year === currentYear) {
+                          // For current month, ALWAYS use player's current status, regardless of payment history
                           displayStatus = selectedPlayer.payment_status;
                         } else if (payment) {
                           // For other months with payment records, use the record
                           displayStatus = payment.status;
-                        } else {
+                                } else {
                           // For months with no record - show No data
                           displayStatus = null;
                         }
@@ -1406,7 +1676,7 @@ const PaymentsScreenComponent = () => {
                           >
                             {/* Month and year */}
                             <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-                              <Text style={{ 
+                              <Text style={{
                                 fontSize: 18, 
                                 fontWeight: 'bold', 
                                 color: COLORS.text 
@@ -1432,7 +1702,7 @@ const PaymentsScreenComponent = () => {
                                   backgroundColor: COLORS.grey[200]
                                 }}>
                                   <Text style={{ color: COLORS.grey[600] }}>
-                                    No data
+                                    No Data
                                   </Text>
                                 </View>
                               ) : (
@@ -1444,11 +1714,11 @@ const PaymentsScreenComponent = () => {
                                 }}>
                                   <Text style={{
                                     fontSize: 14,
-                                    fontWeight: '600',
-                                    color: getPaymentStatusColor(displayStatus)
-                                  }}>
-                                    {getPaymentStatusText(displayStatus)}
-                                  </Text>
+                                fontWeight: '600',
+                                color: getPaymentStatusColor(displayStatus)
+                              }}>
+                                {getPaymentStatusText(displayStatus)}
+                              </Text>
                                 </View>
                               )}
                               
@@ -1457,17 +1727,17 @@ const PaymentsScreenComponent = () => {
                                   setOpenDropdownMonth(openDropdownMonth === `${year}-${month}` ? null : `${year}-${month}`);
                                 }}
                               >
-                                <MaterialCommunityIcons 
+                              <MaterialCommunityIcons 
                                   name="chevron-down" 
                                   size={24} 
                                   color={COLORS.grey[600]} 
                                   style={{ marginLeft: 8 }}
-                                />
-                              </TouchableOpacity>
-                            </View>
-                            
+                              />
+                            </TouchableOpacity>
+                          </View>
+
                             {/* Dropdown menu */}
-                            {openDropdownMonth === `${year}-${month}` && (
+                          {openDropdownMonth === `${year}-${month}` && (
                               <View style={{
                                 position: 'absolute',
                                 top: '100%',
@@ -1485,7 +1755,7 @@ const PaymentsScreenComponent = () => {
                                 width: 150,
                               }}>
                                 {/* Paid option */}
-                                <TouchableOpacity 
+                              <TouchableOpacity 
                                   style={{
                                     flexDirection: 'row',
                                     alignItems: 'center',
@@ -1493,48 +1763,7 @@ const PaymentsScreenComponent = () => {
                                     paddingVertical: SPACING.sm,
                                     paddingHorizontal: SPACING.xs,
                                   }}
-                                  onPress={() => {
-                                    // Close dropdown
-                                    setOpenDropdownMonth(null);
-                                    
-                                    // Update UI first for immediate feedback
-                                    const updatedHistory = [...paymentHistory];
-                                    const existingIndex = updatedHistory.findIndex(p => 
-                                      p.year === year && p.month === month
-                                    );
-                                    
-                                    if (existingIndex >= 0) {
-                                      updatedHistory[existingIndex].status = 'paid';
-                                    } else {
-                                      updatedHistory.push({
-                                        year, month, status: 'paid'
-                                      });
-                                    }
-                                    setPaymentHistory(updatedHistory);
-                                    
-                                    // Then update DB
-                                    supabase
-                                      .from('player_payments')
-                                      .upsert([{
-                                        player_id: selectedPlayer.id,
-                                        year,
-                                        month,
-                                        status: 'paid',
-                                      }], { onConflict: 'player_id,year,month' })
-                                      .then(({ error }) => {
-                                        if (error) {
-                                          console.error('Error:', error);
-                                        } else {
-                                          // If this is May (current month), also update player status
-                                          if (month === 5) {
-                                            handleChangePaymentStatus('paid');
-                                          } else {
-                                            // Just refresh the history
-                                            fetchPaymentHistory(selectedPlayer);
-                                          }
-                                        }
-                                      });
-                                  }}
+                                  onPress={() => handleChangePaymentStatusForMonth(selectedPlayer, year, month, 'paid')}
                                 >
                                   <View style={{
                                     backgroundColor: getPaymentStatusColor('paid') + '20',
@@ -1550,18 +1779,18 @@ const PaymentsScreenComponent = () => {
                                     }}>
                                       Paid
                                     </Text>
-                                  </View>
-                                  {displayStatus === 'paid' && (
+                                </View>
+                                {displayStatus === 'paid' && (
                                     <MaterialCommunityIcons 
                                       name="check" 
                                       size={20} 
                                       color={getPaymentStatusColor('paid')} 
                                     />
-                                  )}
-                                </TouchableOpacity>
-                                
+                                )}
+                              </TouchableOpacity>
+
                                 {/* Unpaid option */}
-                                <TouchableOpacity 
+                              <TouchableOpacity 
                                   style={{
                                     flexDirection: 'row',
                                     alignItems: 'center',
@@ -1569,48 +1798,7 @@ const PaymentsScreenComponent = () => {
                                     paddingVertical: SPACING.sm,
                                     paddingHorizontal: SPACING.xs,
                                   }}
-                                  onPress={() => {
-                                    // Close dropdown
-                                    setOpenDropdownMonth(null);
-                                    
-                                    // Update UI first for immediate feedback
-                                    const updatedHistory = [...paymentHistory];
-                                    const existingIndex = updatedHistory.findIndex(p => 
-                                      p.year === year && p.month === month
-                                    );
-                                    
-                                    if (existingIndex >= 0) {
-                                      updatedHistory[existingIndex].status = 'unpaid';
-                                    } else {
-                                      updatedHistory.push({
-                                        year, month, status: 'unpaid'
-                                      });
-                                    }
-                                    setPaymentHistory(updatedHistory);
-                                    
-                                    // Then update DB
-                                    supabase
-                                      .from('player_payments')
-                                      .upsert([{
-                                        player_id: selectedPlayer.id,
-                                        year,
-                                        month,
-                                        status: 'unpaid',
-                                      }], { onConflict: 'player_id,year,month' })
-                                      .then(({ error }) => {
-                                        if (error) {
-                                          console.error('Error:', error);
-                                        } else {
-                                          // If this is May (current month), also update player status
-                                          if (month === 5) {
-                                            handleChangePaymentStatus('unpaid');
-                                          } else {
-                                            // Just refresh the history
-                                            fetchPaymentHistory(selectedPlayer);
-                                          }
-                                        }
-                                      });
-                                  }}
+                                  onPress={() => handleChangePaymentStatusForMonth(selectedPlayer, year, month, 'unpaid')}
                                 >
                                   <View style={{
                                     backgroundColor: getPaymentStatusColor('unpaid') + '20',
@@ -1626,18 +1814,18 @@ const PaymentsScreenComponent = () => {
                                     }}>
                                       Unpaid
                                     </Text>
-                                  </View>
-                                  {displayStatus === 'unpaid' && (
+                                </View>
+                                {displayStatus === 'unpaid' && (
                                     <MaterialCommunityIcons 
                                       name="check" 
                                       size={20} 
                                       color={getPaymentStatusColor('unpaid')} 
                                     />
-                                  )}
-                                </TouchableOpacity>
+                                )}
+                              </TouchableOpacity>
 
                                 {/* On Trial option */}
-                                <TouchableOpacity 
+                              <TouchableOpacity 
                                   style={{
                                     flexDirection: 'row',
                                     alignItems: 'center',
@@ -1645,48 +1833,7 @@ const PaymentsScreenComponent = () => {
                                     paddingVertical: SPACING.sm,
                                     paddingHorizontal: SPACING.xs,
                                   }}
-                                  onPress={() => {
-                                    // Close dropdown
-                                    setOpenDropdownMonth(null);
-                                    
-                                    // Update UI first for immediate feedback
-                                    const updatedHistory = [...paymentHistory];
-                                    const existingIndex = updatedHistory.findIndex(p => 
-                                      p.year === year && p.month === month
-                                    );
-                                    
-                                    if (existingIndex >= 0) {
-                                      updatedHistory[existingIndex].status = 'on_trial';
-                                    } else {
-                                      updatedHistory.push({
-                                        year, month, status: 'on_trial'
-                                      });
-                                    }
-                                    setPaymentHistory(updatedHistory);
-                                    
-                                    // Then update DB
-                                    supabase
-                                      .from('player_payments')
-                                      .upsert([{
-                                        player_id: selectedPlayer.id,
-                                        year,
-                                        month,
-                                        status: 'on_trial',
-                                      }], { onConflict: 'player_id,year,month' })
-                                      .then(({ error }) => {
-                                        if (error) {
-                                          console.error('Error:', error);
-                                        } else {
-                                          // If this is May (current month), also update player status
-                                          if (month === 5) {
-                                            handleChangePaymentStatus('on_trial');
-                                          } else {
-                                            // Just refresh the history
-                                            fetchPaymentHistory(selectedPlayer);
-                                          }
-                                        }
-                                      });
-                                  }}
+                                  onPress={() => handleChangePaymentStatusForMonth(selectedPlayer, year, month, 'on_trial')}
                                 >
                                   <View style={{
                                     backgroundColor: getPaymentStatusColor('on_trial') + '20',
@@ -1702,21 +1849,91 @@ const PaymentsScreenComponent = () => {
                                     }}>
                                       On Trial
                                     </Text>
-                                  </View>
-                                  {displayStatus === 'on_trial' && (
+                                </View>
+                                {displayStatus === 'on_trial' && (
                                     <MaterialCommunityIcons 
                                       name="check" 
                                       size={20} 
                                       color={getPaymentStatusColor('on_trial')} 
                                     />
-                                  )}
-                                </TouchableOpacity>
-                              </View>
-                            )}
-                          </View>
-                        );
-                      })}
-                    </View>
+                                )}
+                              </TouchableOpacity>
+
+                                {/* Trial Ended option */}
+                              <TouchableOpacity 
+                                  style={{
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    paddingVertical: SPACING.sm,
+                                    paddingHorizontal: SPACING.xs,
+                                  }}
+                                  onPress={() => handleChangePaymentStatusForMonth(selectedPlayer, year, month, 'trial_ended')}
+                                >
+                                  <View style={{
+                                    backgroundColor: getPaymentStatusColor('trial_ended') + '20',
+                                    paddingHorizontal: SPACING.sm,
+                                    paddingVertical: 4,
+                                    borderRadius: 12,
+                                    marginRight: 10
+                                  }}>
+                                    <Text style={{
+                                      fontSize: 12,
+                                      fontWeight: '600',
+                                      color: getPaymentStatusColor('trial_ended')
+                                    }}>
+                                      Trial Ended
+                                    </Text>
+                                </View>
+                                {displayStatus === 'trial_ended' && (
+                                    <MaterialCommunityIcons 
+                                      name="check" 
+                                      size={20} 
+                                      color={getPaymentStatusColor('trial_ended')} 
+                                    />
+                                )}
+                              </TouchableOpacity>
+
+                                {/* No Data option */}
+                              <TouchableOpacity 
+                                  style={{
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    paddingVertical: SPACING.sm,
+                                    paddingHorizontal: SPACING.xs,
+                                  }}
+                                  onPress={() => handleChangePaymentStatusForMonth(selectedPlayer, year, month, 'no_data')}
+                                >
+                                  <View style={{
+                                    backgroundColor: getPaymentStatusColor('no_data') + '20',
+                                    paddingHorizontal: SPACING.sm,
+                                    paddingVertical: 4,
+                                    borderRadius: 12,
+                                    marginRight: 10
+                                  }}>
+                                    <Text style={{
+                                      fontSize: 12,
+                                      fontWeight: '600',
+                                      color: getPaymentStatusColor('no_data')
+                                    }}>
+                                      No Data
+                                    </Text>
+                                </View>
+                                {displayStatus === 'no_data' && (
+                                    <MaterialCommunityIcons 
+                                      name="check" 
+                                      size={20} 
+                                      color={getPaymentStatusColor('no_data')} 
+                                    />
+                                )}
+                              </TouchableOpacity>
+                            </View>
+                          )}
+                        </View>
+                      );
+                    })}
+                  </View>
                   </ScrollView>
                 )}
               </View>
@@ -1757,14 +1974,6 @@ const PaymentsScreenComponent = () => {
                     </TouchableOpacity>
                     
                     <TouchableOpacity
-                      style={[styles.statusButton, { backgroundColor: '#FFA500' + '20' }]}
-                      onPress={() => handleChangePaymentStatus('pending')}
-                    >
-                      <MaterialCommunityIcons name="clock" size={24} color={'#FFA500'} />
-                      <Text style={[styles.statusButtonText, { color: '#FFA500' }]}>Pending</Text>
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity
                       style={[styles.statusButton, { backgroundColor: COLORS.error + '20' }]}
                       onPress={() => handleChangePaymentStatus('unpaid')}
                     >
@@ -1786,6 +1995,14 @@ const PaymentsScreenComponent = () => {
                     >
                       <MaterialCommunityIcons name="ticket-confirmation" size={24} color={COLORS.grey[800]} />
                       <Text style={[styles.statusButtonText, { color: COLORS.grey[800] }]}>Trial Ended</Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity
+                      style={[styles.statusButton, { backgroundColor: COLORS.grey[600] + '20' }]}
+                      onPress={() => handleChangePaymentStatus('no_data')}
+                    >
+                      <MaterialCommunityIcons name="help-circle" size={24} color={COLORS.grey[600]} />
+                      <Text style={[styles.statusButtonText, { color: COLORS.grey[600] }]}>No Data</Text>
                     </TouchableOpacity>
                   </View>
                 )}
@@ -1966,7 +2183,7 @@ const PaymentsScreenComponent = () => {
                   left: 0,
                   right: 0,
                   bottom: 0,
-                  backgroundColor: 'rgba(0,0,0,0.1)',
+                  backgroundColor: 'rgba(0,0,0,0.3)',
                 }}
                 activeOpacity={1}
                 onPress={() => setShowManageOptions(null)}
@@ -1987,6 +2204,7 @@ const PaymentsScreenComponent = () => {
                     borderWidth: 1,
                     borderColor: COLORS.grey[200],
                     zIndex: 9999,
+                    overflow: 'hidden',
                   }}
                 >
                   <TouchableOpacity 
@@ -1996,6 +2214,7 @@ const PaymentsScreenComponent = () => {
                       padding: SPACING.md,
                       borderBottomWidth: 1,
                       borderBottomColor: COLORS.grey[200],
+                      backgroundColor: COLORS.white,
                     }}
                     onPress={() => {
                       setShowManageOptions(null);
@@ -2023,6 +2242,7 @@ const PaymentsScreenComponent = () => {
                       padding: SPACING.md,
                       borderBottomWidth: 1,
                       borderBottomColor: COLORS.grey[200],
+                      backgroundColor: COLORS.white,
                     }}
                     onPress={() => {
                       setShowManageOptions(null);
@@ -2048,6 +2268,7 @@ const PaymentsScreenComponent = () => {
                       flexDirection: 'row',
                       alignItems: 'center',
                       padding: SPACING.md,
+                      backgroundColor: COLORS.white,
                     }}
                     onPress={() => {
                       setShowManageOptions(null);
@@ -2072,25 +2293,19 @@ const PaymentsScreenComponent = () => {
                   <TouchableOpacity
                     style={{
                       position: 'absolute',
-                      top: -12,
-                      right: -12,
-                      backgroundColor: COLORS.white,
+                      top: 8,
+                      right: 8,
+                      backgroundColor: COLORS.grey[200],
                       borderRadius: 15,
                       width: 30,
                       height: 30,
                       justifyContent: 'center',
                       alignItems: 'center',
-                      borderWidth: 1,
-                      borderColor: COLORS.grey[200],
-                      elevation: 3,
-                      shadowColor: '#000',
-                      shadowOffset: { width: 0, height: 1 },
-                      shadowOpacity: 0.2,
-                      shadowRadius: 2,
+                      zIndex: 10,
                     }}
                     onPress={() => setShowManageOptions(null)}
                   >
-                    <MaterialCommunityIcons name="close" size={16} color={COLORS.grey[700]} />
+                    <MaterialCommunityIcons name="close" size={18} color={COLORS.grey[800]} />
                   </TouchableOpacity>
                 </View>
               </TouchableOpacity>
@@ -2215,9 +2430,16 @@ const styles = StyleSheet.create({
   },
   playerCard: {
     marginBottom: SPACING.md,
-    borderRadius: 12,
+    borderRadius: 16,
     backgroundColor: COLORS.white,
-    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: COLORS.grey[200],
+    overflow: 'hidden',
   },
   playerHeader: {
     flexDirection: 'row',
@@ -2569,7 +2791,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     borderRadius: 100,
     elevation: 2,
-    shadowColor: '#000000', 
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
@@ -2635,5 +2857,28 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.grey[700],
     marginBottom: SPACING.xs,
+  },
+  summaryItem: {
+    alignItems: 'center',
+    padding: SPACING.sm,
+    minWidth: 60,
+  },
+  summaryValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    marginBottom: 4,
+  },
+  summaryLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  summaryBadge: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 6,
   },
 }); 
