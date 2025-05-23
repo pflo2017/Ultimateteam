@@ -29,6 +29,7 @@ interface Player {
   last_payment_date?: string;
   birth_date?: string | null;
   parent_id?: string;
+  medicalVisaIssueDate?: string;
 }
 
 interface ManagePlayersScreenProps {
@@ -60,13 +61,22 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
   const [isUpdatingPayment, setIsUpdatingPayment] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [playerMenuVisible, setPlayerMenuVisible] = useState<string | null>(null);
+  const [selectedMedicalStatus, setSelectedMedicalStatus] = useState<string | null>(null);
+  const [isMedicalModalVisible, setIsMedicalModalVisible] = useState(false);
+  const medicalStatusOptions = [
+    { value: null, label: 'All Medical' },
+    { value: 'valid', label: 'Valid' },
+    { value: 'pending', label: 'Pending' },
+    { value: 'expired', label: 'Expired' },
+  ];
 
   const selectedTeam = teams.find(team => team.id === selectedTeamId);
 
   const filteredPlayers = players.filter(player => {
     const matchesSearch = player.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesTeam = !selectedTeamId || player.team_id === selectedTeamId;
-    return matchesSearch && matchesTeam;
+    const matchesMedical = !selectedMedicalStatus || player.medicalVisaStatus === selectedMedicalStatus;
+    return matchesSearch && matchesTeam && matchesMedical;
   });
 
   const handleOpenPlayerDetails = async (player: Player) => {
@@ -387,35 +397,41 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
           
           <Divider style={styles.divider} />
           
-          <View style={styles.infoRow}>
-            <View style={styles.infoItem}>
-              <Text style={styles.infoLabel}>Medical Visa</Text>
-              <View style={[
-                styles.statusBadge, 
-                { backgroundColor: getMedicalVisaStatusColor(player.medicalVisaStatus) + '20' }
-              ]}>
-                <Text style={[
-                  styles.statusText,
-                  { color: getMedicalVisaStatusColor(player.medicalVisaStatus) }
-                ]}>
-                  {player.medicalVisaStatus.charAt(0).toUpperCase() + player.medicalVisaStatus.slice(1)}
-                </Text>
-              </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: SPACING.md }}>
+            <MaterialCommunityIcons name="medical-bag" size={20} color={COLORS.primary} />
+            <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500' }}>
+              Medical Visa
+            </Text>
+            <View style={{
+              backgroundColor: getMedicalVisaStatusColor(player.medicalVisaStatus) + '20',
+              borderRadius: 12,
+              paddingHorizontal: SPACING.md,
+              paddingVertical: 4,
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginLeft: 4,
+            }}>
+              <Text style={{
+                fontSize: FONT_SIZES.xs,
+                fontWeight: '600',
+                color: getMedicalVisaStatusColor(player.medicalVisaStatus)
+              }}>
+                {player.medicalVisaStatus.charAt(0).toUpperCase() + player.medicalVisaStatus.slice(1)}
+              </Text>
             </View>
-
-            <View style={styles.infoItem}>
-              <Text style={styles.infoLabel}>Payment Status</Text>
-              <View style={[
-                styles.statusBadge, 
-                { backgroundColor: getPaymentStatusColor(displayStatus) + '20' }
-              ]}>
-                <Text style={[
-                  styles.statusText,
-                  { color: getPaymentStatusColor(displayStatus) }
-                ]}>
-                  {getPaymentStatusText(displayStatus)}
-                </Text>
-              </View>
+            <View style={{ alignItems: 'flex-end', marginLeft: 'auto' }}>
+              <Text style={{ fontSize: FONT_SIZES.xs, color: COLORS.grey[600], fontWeight: '500' }}>Until</Text>
+              <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '600' }}>
+                {player.medicalVisaStatus === 'valid' && player.medicalVisaIssueDate ?
+                  (() => {
+                    const issueDate = new Date(player.medicalVisaIssueDate);
+                    if (isNaN(issueDate.getTime())) return 'N/A';
+                    const expiryDate = new Date(issueDate);
+                    expiryDate.setMonth(expiryDate.getMonth() + 6);
+                    return expiryDate.toLocaleDateString('en-GB');
+                  })()
+                  : 'N/A'}
+              </Text>
             </View>
           </View>
           
@@ -450,20 +466,20 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
         </View>
       </View>
 
-      <View style={styles.filtersContainer}>
-        <View style={styles.searchContainer}>
-          <MaterialCommunityIcons name="magnify" size={20} color={COLORS.grey[400]} style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search player"
-            placeholderTextColor={COLORS.grey[400]}
-            value={searchQuery}
-            onChangeText={onSearchChange}
-          />
-        </View>
+      <View style={styles.searchContainer}>
+        <MaterialCommunityIcons name="magnify" size={20} color={COLORS.grey[400]} style={styles.searchIcon} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search player"
+          placeholderTextColor={COLORS.grey[400]}
+          value={searchQuery}
+          onChangeText={onSearchChange}
+        />
+      </View>
 
+      <View style={styles.filtersRow}>
         <Pressable
-          style={styles.teamSelector}
+          style={[styles.filterButton]}
           onPress={() => setIsTeamModalVisible(true)}
         >
           <MaterialCommunityIcons 
@@ -471,8 +487,26 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
             size={20} 
             color={COLORS.primary}
           />
-          <Text style={styles.teamSelectorText} numberOfLines={1}>
+          <Text style={[styles.filterButtonText]} numberOfLines={1}>
             {selectedTeam ? selectedTeam.name : 'All Teams'}
+          </Text>
+          <MaterialCommunityIcons 
+            name="chevron-down" 
+            size={20} 
+            color={COLORS.grey[400]}
+          />
+        </Pressable>
+        <Pressable
+          style={[styles.filterButton]}
+          onPress={() => setIsMedicalModalVisible(true)}
+        >
+          <MaterialCommunityIcons 
+            name="medical-bag" 
+            size={20} 
+            color={COLORS.primary}
+          />
+          <Text style={[styles.filterButtonText]} numberOfLines={1}>
+            {medicalStatusOptions.find(opt => opt.value === selectedMedicalStatus)?.label || 'All Medical'}
           </Text>
           <MaterialCommunityIcons 
             name="chevron-down" 
@@ -690,6 +724,63 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
           </View>
         </View>
       </Modal>
+
+      <Modal
+        visible={isMedicalModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setIsMedicalModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Medical Status</Text>
+              <Pressable 
+                onPress={() => setIsMedicalModalVisible(false)}
+                style={styles.closeButton}
+              >
+                <MaterialCommunityIcons
+                  name="close"
+                  size={24}
+                  color={COLORS.text}
+                />
+              </Pressable>
+            </View>
+            <ScrollView>
+              {medicalStatusOptions.map(option => (
+                <Pressable
+                  key={option.value ?? 'all'}
+                  style={[
+                    styles.teamItem,
+                    selectedMedicalStatus === option.value && styles.selectedTeamItem
+                  ]}
+                  onPress={() => {
+                    setSelectedMedicalStatus(option.value);
+                    setIsMedicalModalVisible(false);
+                  }}
+                >
+                  <View style={styles.teamItemContent}>
+                    <MaterialCommunityIcons
+                      name="medical-bag"
+                      size={20}
+                      color={option.value === 'valid' ? COLORS.success : option.value === 'pending' ? '#FFA500' : option.value === 'expired' ? COLORS.error : COLORS.primary}
+                      style={{ marginRight: 8 }}
+                    />
+                    <Text style={styles.teamItemText}>{option.label}</Text>
+                  </View>
+                  {selectedMedicalStatus === option.value && (
+                    <MaterialCommunityIcons
+                      name="check"
+                      size={24}
+                      color={COLORS.primary}
+                    />
+                  )}
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -716,22 +807,13 @@ const styles = StyleSheet.create({
     color: COLORS.grey[600],
     marginTop: 4,
   },
-  filtersContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: SPACING.lg,
-    gap: SPACING.md,
-  },
   searchContainer: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.white,
-    paddingHorizontal: 12,
+    backgroundColor: COLORS.grey[100],
     borderRadius: 8,
-    borderWidth: 1,
-    borderColor: COLORS.grey[200],
+    paddingHorizontal: SPACING.md,
+    marginBottom: SPACING.lg,
   },
   searchIcon: {
     marginRight: 8,
@@ -742,23 +824,33 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontSize: 16,
   },
-  teamSelector: {
+  filtersRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: SPACING.md,
+    marginBottom: SPACING.lg,
+  },
+  filterButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.white,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
     borderRadius: 8,
-    borderWidth: 1,
-    borderColor: COLORS.grey[200],
-    gap: SPACING.xs,
-    maxWidth: 200,
-    minWidth: 180,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    elevation: 1,
+    minWidth: 0,
+    maxWidth: '48%',
   },
-  teamSelectorText: {
-    fontSize: 14,
-    color: COLORS.text,
+  filterButtonText: {
     flex: 1,
+    color: COLORS.text,
+    fontSize: 14,
+    marginLeft: SPACING.xs,
+  },
+  filterIcon: {
+    marginRight: SPACING.xs,
   },
   scrollContent: {
     paddingBottom: SPACING.xl * 4,

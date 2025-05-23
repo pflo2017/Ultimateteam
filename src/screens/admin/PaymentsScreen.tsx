@@ -936,21 +936,13 @@ const PaymentsScreenComponent = () => {
           shadowRadius: 4,
           elevation: 3,
           borderWidth: 1,
-          borderColor: cardBorderColor,
+          borderColor: COLORS.grey[200], // normal border for top, right, bottom
+          borderLeftWidth: 4,
+          borderLeftColor: cardBorderColor, // status color for left border only
           overflow: 'hidden'
         }}
         mode="outlined"
       >
-        <View style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: 8,
-          height: '100%',
-          backgroundColor: cardBorderColor,
-          zIndex: 1
-        }} />
-        
         <Card.Content style={{ padding: SPACING.md }}>
           {/* Player Header - Name and Join Date */}
           <View style={{

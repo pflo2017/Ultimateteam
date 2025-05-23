@@ -317,14 +317,12 @@ export const AdminManageScreen = () => {
 
       // Transform players data with parent_children data
       const transformedPlayers = playersData.map(player => {
-        // Find matching child record
         let medicalVisaStatus = 'unknown';
-        // Use payment_status from database or default to 'pending' if not set
         let paymentStatus = player.payment_status || 'pending';
         let teamId = player.team_id;
         let teamName = null;
         let birthDate = player.birth_date;
-        
+        let matchingChild = undefined;
         // Check for recently joined players - set to on_trial ONLY if no status is set
         if (!player.payment_status) {
           const createdAt = new Date(player.created_at);
@@ -333,17 +331,13 @@ export const AdminManageScreen = () => {
           const isOnTrial = diff < 30 * 24 * 60 * 60 * 1000;
           if (isOnTrial) paymentStatus = 'on_trial';
         }
-        
-        // Always prefer team from parent_children if available
         if (player.parent_id && childrenMap.has(player.parent_id)) {
           const childrenForParent = childrenMap.get(player.parent_id);
-          // Find child with matching name
-          const matchingChild = childrenForParent?.find(
+          matchingChild = childrenForParent?.find(
             child => child.full_name.toLowerCase() === player.name.toLowerCase()
           );
           if (matchingChild) {
             medicalVisaStatus = matchingChild.medical_visa_status;
-            // Update birth date from parent_children if available
             if (matchingChild.birth_date) {
               birthDate = matchingChild.birth_date;
             }
@@ -353,7 +347,6 @@ export const AdminManageScreen = () => {
             }
           }
         }
-        // Fallback to player's own team if no parent_children match
         if (!teamName && player.team_id && teamsMap.has(player.team_id)) {
           teamName = teamsMap.get(player.team_id).name;
         }
@@ -365,11 +358,12 @@ export const AdminManageScreen = () => {
           team_id: teamId,
           team: teamName ? { name: teamName } : null,
           medicalVisaStatus,
-          paymentStatus, // Now using the database value
-          payment_status: paymentStatus, // For consistency with PaymentsScreen
+          paymentStatus,
+          payment_status: paymentStatus,
           parent_id: player.parent_id,
           birth_date: birthDate,
-          last_payment_date: player.last_payment_date
+          last_payment_date: player.last_payment_date,
+          medicalVisaIssueDate: matchingChild?.medical_visa_issue_date || null,
         };
       });
 
