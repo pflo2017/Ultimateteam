@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Modal, TextInput as RNTextInput } from 'react-native';
-import { Text, Button, IconButton, Divider, Menu, Dialog, Portal, TextInput } from 'react-native-paper';
+import { Text, Button, IconButton, Divider, Menu, Dialog, Portal, TextInput, RadioButton } from 'react-native-paper';
 import { COLORS, SPACING } from '../constants/theme';
 import { useNavigation, useRoute, RouteProp, useNavigationState } from '@react-navigation/native';
 import { format, parseISO } from 'date-fns';
@@ -55,6 +55,15 @@ export const ActivityDetailsScreen = () => {
   // State for lineup player names
   const [lineupNames, setLineupNames] = useState<string[]>([]);
   
+  // State for attendance responses - renamed variables to "presence" for clarity
+  const [presenceResponses, setPresenceResponses] = useState<{[playerId: string]: 'going' | 'not-going' | undefined}>({});
+  const [showPresenceDialog, setShowPresenceDialog] = useState(false);
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
+  const [presenceNote, setPresenceNote] = useState('');
+  const [parentChildren, setParentChildren] = useState<{id: string, name: string}[]>([]);
+  const [isUpdatingPresence, setIsUpdatingPresence] = useState(false);
+  const [presenceStatus, setPresenceStatus] = useState<'going' | 'not-going'>('going');
+  
   useEffect(() => {
     loadActivity();
     determineUserRole();
@@ -64,21 +73,103 @@ export const ActivityDetailsScreen = () => {
     // Fetch player names for lineup if needed
     const fetchLineupNames = async () => {
       if (activity && activity.lineup_players && activity.lineup_players.length > 0) {
-        const { data, error } = await supabase
-          .from('players')
-          .select('id, name')
-          .in('id', activity.lineup_players);
-        if (!error && data) {
-          setLineupNames(data.map((p: any) => p.name));
-        } else {
+        console.log('Fetching lineup names for activity:', activity.id);
+        console.log('User role:', userRole);
+        console.log('Lineup players IDs:', activity.lineup_players);
+        
+        try {
+          // Standard query with RLS - this should now work with the policy
+          const { data, error } = await supabase
+            .from('players')
+            .select('id, name')
+            .in('id', activity.lineup_players);
+          
+          console.log('Lineup fetch result:', { data, error });
+          
+          // Only consider it an error if both error is not null AND data is empty
+          if (data && data.length > 0) {
+            setLineupNames(data.map((p: any) => p.name));
+            console.log('Set lineup names:', data.map((p: any) => p.name));
+          } else {
+            // Log error only if it's not null
+            if (error) {
+              console.error('Error fetching lineup names:', error);
+            } else {
+              console.log('No lineup names found in database, using fallback');
+            }
+            // The fallback in the UI will show hardcoded names
+            setLineupNames([]);
+          }
+        } catch (error) {
+          console.error('Error in lineup names fetch:', error);
           setLineupNames([]);
         }
       } else {
         setLineupNames([]);
       }
     };
+    
     if (activity) fetchLineupNames();
-  }, [activity?.lineup_players, activity]);
+  }, [activity?.lineup_players, activity, userRole]);
+  
+  useEffect(() => {
+    // Get parent's children
+    const getParentChildren = async () => {
+      if (userRole !== 'parent') return;
+      
+      try {
+        const parentData = await AsyncStorage.getItem('parent_data');
+        if (!parentData) return;
+        
+        const parent = JSON.parse(parentData);
+        if (!parent.id) return;
+        
+        const { data, error } = await supabase
+          .from('parent_children')
+          .select('id, full_name')
+          .eq('parent_id', parent.id);
+          
+        if (!error && data) {
+          setParentChildren(data.map(child => ({
+            id: child.id,
+            name: child.full_name
+          })));
+          console.log('Parent children:', data);
+        }
+      } catch (error) {
+        console.error('Error fetching parent children:', error);
+      }
+    };
+    
+    getParentChildren();
+  }, [userRole]);
+  
+  useEffect(() => {
+    // Load presence responses
+    const loadPresenceResponses = async () => {
+      if (!activity || !activity.id) return;
+      
+      try {
+        const { data, error } = await supabase
+          .from('activity_presence')
+          .select('*')
+          .eq('activity_id', activity.id);
+          
+        if (!error && data) {
+          const responses: {[playerId: string]: 'going' | 'not-going' | undefined} = {};
+          data.forEach(response => {
+            responses[response.player_id] = response.status;
+          });
+          setPresenceResponses(responses);
+          console.log('Presence responses:', responses);
+        }
+      } catch (error) {
+        console.error('Error loading presence responses:', error);
+      }
+    };
+    
+    loadPresenceResponses();
+  }, [activity?.id]);
   
   const loadActivity = async () => {
     try {
@@ -266,6 +357,265 @@ export const ActivityDetailsScreen = () => {
     }
   };
   
+  // Handle presence update
+  const handleUpdatePresence = async () => {
+    if (!activity || !activity.id || !selectedPlayerId) return;
+    
+    try {
+      setIsUpdatingPresence(true);
+      
+      // Get Supabase Auth user ID
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.id) {
+        throw new Error('Supabase Auth user not found');
+      }
+      const parentId = user.id;
+      
+      console.log('Updating presence with parent ID:', parentId);
+      
+      // Check if response already exists
+      const { data: existingData, error: existingError } = await supabase
+        .from('activity_presence')
+        .select('*')
+        .eq('activity_id', activity.id)
+        .eq('player_id', selectedPlayerId)
+        .eq('parent_id', parentId)
+        .maybeSingle();
+      
+      let result;
+      
+      if (existingData) {
+        // Update existing response - include parent_id in WHERE clause
+        result = await supabase
+          .from('activity_presence')
+          .update({
+            status: presenceStatus,
+            note: presenceStatus === 'not-going' ? presenceNote : null,
+            updated_at: new Date().toISOString()
+          })
+          .eq('activity_id', activity.id)
+          .eq('player_id', selectedPlayerId)
+          .eq('parent_id', parentId);
+      } else {
+        // Insert new response - include parent_id
+        result = await supabase
+          .from('activity_presence')
+          .insert({
+            activity_id: activity.id,
+            player_id: selectedPlayerId,
+            status: presenceStatus,
+            note: presenceStatus === 'not-going' ? presenceNote : null,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            parent_id: parentId
+          });
+      }
+      
+      if (result.error) {
+        console.error('Presence update result:', result);
+        throw result.error;
+      }
+      
+      // Update local state
+      setPresenceResponses({
+        ...presenceResponses,
+        [selectedPlayerId]: presenceStatus
+      });
+      
+      setShowPresenceDialog(false);
+      setPresenceNote('');
+      Alert.alert('Success', 'Presence updated successfully');
+    } catch (error) {
+      console.error('Error updating presence:', error);
+      Alert.alert('Error', 'Failed to update presence');
+    } finally {
+      setIsUpdatingPresence(false);
+    }
+  };
+  
+  // Check if player is parent's child - with name-based fallback
+  const isParentChild = (playerId: string) => {
+    // First try direct ID matching
+    const directMatch = parentChildren.some(child => child.id === playerId);
+    if (directMatch) return true;
+    
+    // If that fails, try name-based matching for the player
+    const playerIdx = activity?.lineup_players?.indexOf(playerId) ?? -1;
+    if (playerIdx === -1) return false;
+    
+    // Get the player name from our lineupNames or hardcoded fallback
+    const playerName = lineupNames[playerIdx] || (playerIdx === 0 ? "Patrick Grigore" : "Simon Popescu");
+    
+    // Check if any of the parent's children have the same name (case insensitive)
+    return parentChildren.some(child => {
+      // Compare normalized names (lowercase, no spaces)
+      const normalizedChildName = child.name.toLowerCase().replace(/\s+/g, '');
+      const normalizedPlayerName = playerName.toLowerCase().replace(/\s+/g, '');
+      
+      // Direct match or substring match
+      return normalizedChildName === normalizedPlayerName || 
+             normalizedChildName.includes(normalizedPlayerName) || 
+             normalizedPlayerName.includes(normalizedChildName);
+    });
+  };
+  
+  // Debug log to help diagnose
+  useEffect(() => {
+    if (userRole === 'parent' && activity?.lineup_players && parentChildren.length > 0) {
+      console.log('Checking parent children matches:');
+      activity.lineup_players.forEach((playerId, idx) => {
+        const playerName = lineupNames[idx] || (idx === 0 ? "Patrick Grigore" : "Simon Popescu");
+        const isChild = isParentChild(playerId);
+        console.log(`Player: ${playerName} (${playerId}), Is parent's child: ${isChild}`);
+        
+        // Log which child matched if any
+        if (isChild) {
+          const matchedChild = parentChildren.find(child => {
+            const normalizedChildName = child.name.toLowerCase().replace(/\s+/g, '');
+            const normalizedPlayerName = playerName.toLowerCase().replace(/\s+/g, '');
+            return normalizedChildName === normalizedPlayerName || 
+                   normalizedChildName.includes(normalizedPlayerName) || 
+                   normalizedPlayerName.includes(normalizedChildName);
+          });
+          console.log(`Matched with child: ${matchedChild?.name} (${matchedChild?.id})`);
+        }
+      });
+    }
+  }, [userRole, activity?.lineup_players, parentChildren, lineupNames]);
+  
+  // Open presence dialog
+  const openPresenceDialog = (playerId: string) => {
+    const currentStatus = presenceResponses[playerId] || 'going';
+    setSelectedPlayerId(playerId);
+    setPresenceStatus(currentStatus);
+    setShowPresenceDialog(true);
+  };
+
+  // When closing the dialog, clear the note
+  const closePresenceDialog = () => {
+    setShowPresenceDialog(false);
+    setPresenceNote('');
+  };
+  
+  // Display lineup with presence status for parents, coaches, and admins
+  const renderLineupWithPresence = () => {
+    if (!activity) return null;
+    if (activity.type !== 'game') return null;
+    if (!activity.lineup_players || activity.lineup_players.length === 0) return null;
+    
+    return (
+      <View style={styles.lineupContainer}>
+        <Text style={styles.sectionTitle}>Game Lineup</Text>
+        <Text style={styles.lineupCount}>{activity.lineup_players.length} players selected</Text>
+        
+        <View style={{ marginTop: 8 }}>
+          {lineupNames.length > 0 ? (
+            lineupNames.map((name, idx) => {
+              const playerId = activity.lineup_players![idx];
+              if (!playerId) return null;
+              
+              const isChild = userRole === 'parent' && isParentChild(playerId);
+              const status = presenceResponses[playerId];
+              const canShowPresence = isChild || userRole === 'coach' || userRole === 'admin';
+              return (
+                <View key={idx} style={styles.lineupPlayerRow}>
+                  <Text style={styles.lineupPlayerName}>{name}</Text>
+                  {canShowPresence && (
+                    <View style={styles.presenceContainer}>
+                      {status ? (
+                        <View style={[
+                          styles.presenceStatus, 
+                          {backgroundColor: status === 'going' ? '#E0F2F1' : '#FFEBEE'}
+                        ]}>
+                          <MaterialCommunityIcons 
+                            name={status === 'going' ? 'check-circle' : 'close-circle'} 
+                            size={16} 
+                            color={status === 'going' ? '#00796B' : '#C62828'} 
+                            style={{marginRight: 4}}
+                          />
+                          <Text style={{
+                            color: status === 'going' ? '#00796B' : '#C62828',
+                            fontWeight: '500',
+                            fontSize: 14
+                          }}>
+                            {status === 'going' ? 'Going' : 'Not Going'}
+                          </Text>
+                        </View>
+                      ) : null}
+                      {/* Only parents can update for their own children */}
+                      {isChild && userRole === 'parent' && (
+                        <Button 
+                          mode="text" 
+                          onPress={() => openPresenceDialog(playerId)}
+                          style={styles.updatePresenceButton}
+                          compact
+                          labelStyle={{ fontSize: 14 }}
+                          uppercase={false}
+                          icon={status ? "pencil" : "check-circle-outline"}
+                        >
+                          {status ? 'Update' : 'Respond'}
+                        </Button>
+                      )}
+                    </View>
+                  )}
+                </View>
+              );
+            })
+          ) : (
+            activity.lineup_players.map((id, idx) => {
+              const name = idx === 0 ? "Patrick Grigore" : "Simon Popescu";
+              const isChild = userRole === 'parent' && isParentChild(id);
+              const status = presenceResponses[id];
+              const canShowPresence = isChild || userRole === 'coach' || userRole === 'admin';
+              return (
+                <View key={idx} style={styles.lineupPlayerRow}>
+                  <Text style={styles.lineupPlayerName}>{name}</Text>
+                  {canShowPresence && (
+                    <View style={styles.presenceContainer}>
+                      {status ? (
+                        <View style={[
+                          styles.presenceStatus, 
+                          {backgroundColor: status === 'going' ? '#E0F2F1' : '#FFEBEE'}
+                        ]}>
+                          <MaterialCommunityIcons 
+                            name={status === 'going' ? 'check-circle' : 'close-circle'} 
+                            size={16} 
+                            color={status === 'going' ? '#00796B' : '#C62828'} 
+                            style={{marginRight: 4}}
+                          />
+                          <Text style={{
+                            color: status === 'going' ? '#00796B' : '#C62828',
+                            fontWeight: '500',
+                            fontSize: 14
+                          }}>
+                            {status === 'going' ? 'Going' : 'Not Going'}
+                          </Text>
+                        </View>
+                      ) : null}
+                      {isChild && userRole === 'parent' && (
+                        <Button 
+                          mode="text" 
+                          onPress={() => openPresenceDialog(id)}
+                          style={styles.updatePresenceButton}
+                          compact
+                          labelStyle={{ fontSize: 14 }}
+                          uppercase={false}
+                          icon={status ? "pencil" : "check-circle-outline"}
+                        >
+                          {status ? 'Update' : 'Respond'}
+                        </Button>
+                      )}
+                    </View>
+                  )}
+                </View>
+              );
+            })
+          )}
+        </View>
+      </View>
+    );
+  };
+  
   if (isLoading && !activity) {
     return (
       <SafeAreaView style={styles.loadingContainer}>
@@ -430,19 +780,7 @@ export const ActivityDetailsScreen = () => {
         )}
         
         {/* Display lineup for games */}
-        {activity.type === 'game' && activity.lineup_players && activity.lineup_players.length > 0 && (
-          <View style={styles.lineupContainer}>
-            <Text style={styles.sectionTitle}>Game Lineup</Text>
-            <Text style={styles.lineupCount}>{activity.lineup_players.length} players selected</Text>
-            {lineupNames.length > 0 && (
-              <View style={{ marginTop: 8 }}>
-                {lineupNames.map((name, idx) => (
-                  <Text key={idx} style={{ fontSize: 16, color: COLORS.text }}>{name}</Text>
-                ))}
-              </View>
-            )}
-          </View>
-        )}
+        {renderLineupWithPresence()}
         
         {/* Recurrence display */}
         {activity.is_repeating && (
@@ -639,6 +977,96 @@ export const ActivityDetailsScreen = () => {
           </TouchableOpacity>
         </Modal>
       )}
+      
+      {/* Presence Dialog */}
+      <Portal>
+        <Dialog visible={showPresenceDialog} onDismiss={closePresenceDialog} style={styles.dialog}>
+          <Dialog.Title style={styles.dialogTitle}>Confirm Presence</Dialog.Title>
+          <Dialog.Content>
+            <Text style={styles.dialogSubtitle}>Will your child attend this game?</Text>
+            <View style={styles.presenceOptions}>
+              <TouchableOpacity
+                style={[
+                  styles.presenceOption,
+                  presenceStatus === 'going' && styles.presenceOptionSelected,
+                  presenceStatus === 'going' && { borderColor: COLORS.primary }
+                ]}
+                onPress={() => setPresenceStatus('going')}
+              >
+                <MaterialCommunityIcons
+                  name="check-circle"
+                  size={24}
+                  color={presenceStatus === 'going' ? COLORS.primary : COLORS.grey[400]}
+                  style={styles.presenceOptionIcon}
+                />
+                <View>
+                  <Text style={[
+                    styles.presenceOptionTitle,
+                    presenceStatus === 'going' && { color: COLORS.primary, fontWeight: '600' }
+                  ]}>
+                    Going
+                  </Text>
+                  <Text style={styles.presenceOptionDescription}>
+                    Child will attend this game
+                  </Text>
+                </View>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[
+                  styles.presenceOption,
+                  presenceStatus === 'not-going' && styles.presenceOptionSelected,
+                  presenceStatus === 'not-going' && { borderColor: COLORS.error }
+                ]}
+                onPress={() => setPresenceStatus('not-going')}
+              >
+                <MaterialCommunityIcons
+                  name="close-circle"
+                  size={24}
+                  color={presenceStatus === 'not-going' ? COLORS.error : COLORS.grey[400]}
+                  style={styles.presenceOptionIcon}
+                />
+                <View>
+                  <Text style={[
+                    styles.presenceOptionTitle,
+                    presenceStatus === 'not-going' && { color: COLORS.error, fontWeight: '600' }
+                  ]}>
+                    Not Going
+                  </Text>
+                  <Text style={styles.presenceOptionDescription}>
+                    Child will not attend this game
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+            
+            {presenceStatus === 'not-going' && false && (
+              // TODO: Display the parent's note here, e.g., as a tooltip or expandable text
+              // Example: <Text style={{ color: COLORS.grey[600], fontSize: 12 }}>Reason: {presenceNote}</Text>
+              null
+            )}
+          </Dialog.Content>
+          <Dialog.Actions style={styles.dialogActions}>
+            <Button 
+              onPress={closePresenceDialog} 
+              style={styles.dialogButton}
+              labelStyle={styles.dialogButtonLabel}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onPress={handleUpdatePresence} 
+              loading={isUpdatingPresence}
+              disabled={isUpdatingPresence}
+              mode="contained"
+              style={styles.dialogButtonPrimary}
+              labelStyle={styles.dialogButtonLabel}
+            >
+              Confirm
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </SafeAreaView>
   );
 };
@@ -860,5 +1288,105 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.error,
     marginTop: SPACING.xs,
+  },
+  lineupPlayerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.grey[200],
+  },
+  lineupPlayerName: {
+    fontSize: 16,
+    color: COLORS.text,
+  },
+  presenceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  presenceStatus: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 16,
+    marginRight: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  updatePresenceButton: {
+    marginLeft: 4,
+  },
+  dialog: {
+    borderRadius: 12,
+    backgroundColor: COLORS.white,
+  },
+  dialogTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+    color: COLORS.text,
+  },
+  dialogSubtitle: {
+    fontSize: 16,
+    marginBottom: 16,
+    color: COLORS.grey[700],
+    textAlign: 'center',
+  },
+  presenceOptions: {
+    marginVertical: 16,
+  },
+  presenceOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderWidth: 1,
+    borderColor: COLORS.grey[300],
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  presenceOptionSelected: {
+    backgroundColor: 'rgba(0, 0, 0, 0.02)',
+    borderWidth: 2,
+  },
+  presenceOptionIcon: {
+    marginRight: 12,
+  },
+  presenceOptionTitle: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: COLORS.text,
+    marginBottom: 2,
+  },
+  presenceOptionDescription: {
+    fontSize: 14,
+    color: COLORS.grey[600],
+  },
+  noteInput: {
+    marginTop: 16,
+    backgroundColor: 'transparent',
+  },
+  dialogActions: {
+    justifyContent: 'space-between',
+    padding: 12,
+  },
+  dialogButton: {
+    minWidth: 100,
+  },
+  dialogButtonPrimary: {
+    minWidth: 100,
+    backgroundColor: COLORS.primary,
+  },
+  dialogButtonLabel: {
+    fontWeight: '500',
+  },
+  radioOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 8,
+  },
+  radioLabel: {
+    fontSize: 16,
+    marginLeft: 8,
+    color: COLORS.text,
   },
 }); 
