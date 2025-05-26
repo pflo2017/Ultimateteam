@@ -1,8 +1,8 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Navigation } from './src/navigation';
 import { PaperProvider, DefaultTheme } from 'react-native-paper';
 import { SplashScreen } from './src/components/SplashScreen';
-import { View, StatusBar } from 'react-native';
+import { View, StatusBar, LogBox } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 const customTheme = {
@@ -15,6 +15,23 @@ const customTheme = {
 
 export default function App() {
   const [isLoading, setIsLoading] = useState(true);
+
+  // Ignore specific error messages
+  useEffect(() => {
+    // Ignore auth session missing errors
+    LogBox.ignoreLogs([
+      'Auth session missing!',
+      'AuthSessionMissingError',
+      '[AuthSessionMissingError: Auth session missing!]'
+    ]);
+    
+    // Ignore other common non-critical warnings
+    LogBox.ignoreLogs([
+      'Warning: ...',
+      'EventEmitter.removeListener',
+      'Animated: `useNativeDriver`'
+    ]);
+  }, []);
 
   const handleAnimationFinish = useCallback(() => {
     setIsLoading(false);

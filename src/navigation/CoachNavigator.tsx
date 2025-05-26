@@ -10,6 +10,8 @@ import { CoachPaymentsScreen } from '../screens/coach/CoachPaymentsScreen';
 import { CoachChatScreen } from '../screens/coach/CoachChatScreen';
 import { CoachNewsScreen } from '../screens/coach/NewsScreen';
 import { CoachSettingsScreen } from '../screens/coach/CoachSettingsScreen';
+import { CreateActivityScreen } from '../screens/CreateActivityScreen';
+import { ActivityDetailsScreen } from '../screens/ActivityDetailsScreen';
 import { Image, Pressable, View, StyleSheet, Text, Platform, Alert } from 'react-native';
 import { Menu } from 'react-native-paper';
 import { supabase } from '../lib/supabase';
@@ -21,6 +23,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 export type CoachStackParamList = {
   CoachTabs: undefined;
   Settings: undefined;
+  CreateActivity: { type: 'practice' | 'match' | 'event' };
+  ActivityDetails: { activityId: string };
 };
 
 export type CoachTabParamList = {
@@ -279,6 +283,20 @@ export const CoachNavigator = () => {
               },
               headerTintColor: COLORS.text,
               headerShadowVisible: false,
+            }}
+          />
+          <Stack.Screen
+            name="CreateActivity"
+            component={CreateActivityScreen}
+            options={{
+              headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name="ActivityDetails"
+            component={ActivityDetailsScreen}
+            options={{
+              headerShown: false,
             }}
           />
         </Stack.Navigator>

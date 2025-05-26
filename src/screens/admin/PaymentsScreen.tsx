@@ -7,6 +7,7 @@ import { supabase } from '../../lib/supabase';
 import { triggerEvent } from '../../utils/events';
 import { useDataRefresh } from '../../utils/useDataRefresh';
 import { PaymentCollectionsScreen } from './PaymentCollectionsScreen';
+import { useRoute } from '@react-navigation/native';
 
 interface Player {
   id: string;
@@ -46,6 +47,7 @@ interface PlayerPayment {
 interface HistoryMonth { year: number; month: number; date: Date; }
 
 const PaymentsScreenComponent = () => {
+  const route = useRoute();
   const [players, setPlayers] = useState<Player[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [stats, setStats] = useState<PaymentStats>({
@@ -79,7 +81,7 @@ const PaymentsScreenComponent = () => {
   const [isUpdateMonthModalVisible, setIsUpdateMonthModalVisible] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState<{year: number, month: number, date: Date} | null>(null);
   const [openDropdownMonth, setOpenDropdownMonth] = useState<string | null>(null);
-  const [showCollections, setShowCollections] = useState(false);
+  const [showCollections, setShowCollections] = useState(((route as any)?.params?.showCollections) === true);
   const [refreshing, setRefreshing] = useState(false);
   // Add state for storing player payment history to prevent random changes
   const [playersPaymentHistory, setPlayersPaymentHistory] = useState<{[playerId: string]: {[key: string]: string}}>({});
@@ -1103,7 +1105,7 @@ const PaymentsScreenComponent = () => {
                 <MaterialCommunityIcons 
                   name="history" 
                   size={20} 
-                  color={COLORS.grey[700]} 
+                  color={COLORS.primary} 
                 />
               </TouchableOpacity>
             </View>
@@ -1186,6 +1188,12 @@ const PaymentsScreenComponent = () => {
       </Card>
     );
   };
+
+  useEffect(() => {
+    if (((route as any)?.params?.showCollections) !== undefined) {
+      setShowCollections(((route as any)?.params?.showCollections) === true);
+    }
+  }, [((route as any)?.params?.showCollections)]);
 
   if (isLoading) {
     return <ActivityIndicator style={styles.loader} color={COLORS.primary} />;

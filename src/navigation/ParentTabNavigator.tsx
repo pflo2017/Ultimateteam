@@ -20,6 +20,8 @@ import type { RootStackParamList, ParentStackParamList, ParentTabParamList } fro
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
+import { ActivityDetailsScreen } from '../screens/ActivityDetailsScreen';
+import { EditActivityScreen } from '../screens/EditActivityScreen';
 
 const Tab = createBottomTabNavigator<ParentTabParamList>();
 const Stack = createNativeStackNavigator<ParentStackParamList>();
@@ -255,36 +257,39 @@ export const ParentNavigator = () => {
             name="Settings"
             component={ParentSettingsScreen}
             options={{
-              title: 'Settings',
-              headerStyle: {
-                backgroundColor: COLORS.background,
-              },
-              headerTintColor: COLORS.text,
-              headerShadowVisible: false,
+              headerTitle: 'Settings',
+              headerBackTitle: 'Back',
             }}
           />
           <Stack.Screen
             name="EditChild"
             component={EditChildScreen}
             options={{
-              title: 'Edit Child',
-              headerStyle: {
-                backgroundColor: COLORS.background,
-              },
-              headerTintColor: COLORS.text,
-              headerShadowVisible: false,
+              headerTitle: 'Edit Child',
+              headerBackTitle: 'Back',
             }}
           />
           <Stack.Screen
             name="AddChild"
             component={AddChildScreen}
             options={{
-              title: 'Add Child',
-              headerStyle: {
-                backgroundColor: COLORS.background,
-              },
-              headerTintColor: COLORS.text,
-              headerShadowVisible: false,
+              headerTitle: 'Add Child',
+              headerBackTitle: 'Back',
+            }}
+          />
+          <Stack.Screen
+            name="ActivityDetails"
+            component={ActivityDetailsScreen}
+            options={{
+              headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name="EditActivity"
+            component={EditActivityScreen}
+            options={{
+              headerTitle: 'Edit Activity',
+              headerBackTitle: 'Back',
             }}
           />
         </Stack.Navigator>

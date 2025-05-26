@@ -1,17 +1,24 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
-import { Text } from 'react-native-paper';
+import { View, StyleSheet, Platform } from 'react-native';
 import { COLORS } from '../../constants/theme';
+import { ScheduleCalendar } from '../../components/Schedule/ScheduleCalendar';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { ParentStackParamList } from '../../types/navigation';
+
+type NavigationProp = NativeStackNavigationProp<ParentStackParamList>;
 
 export const ParentEventsScreen = () => {
+  const navigation = useNavigation<NavigationProp>();
+
+  // Empty handler since parents can't create activities
+  const handleCreateActivity = () => {
+    // This is never called for parents since the FAB is hidden
+  };
+
   return (
     <View style={styles.container}>
-      <View style={styles.content}>
-        <Text variant="bodyMedium" style={styles.placeholder}>
-          Events calendar coming soon! Here you'll be able to view upcoming 
-          matches, training sessions, and team events.
-        </Text>
-      </View>
+      <ScheduleCalendar userRole="parent" onCreateActivity={handleCreateActivity} />
     </View>
   );
 };
@@ -19,16 +26,6 @@ export const ParentEventsScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
-  },
-  content: {
-    flex: 1,
-    padding: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  placeholder: {
-    textAlign: 'center',
-    color: COLORS.grey[600],
+    backgroundColor: COLORS.background,
   },
 }); 

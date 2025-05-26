@@ -10,6 +10,9 @@ import { ParentTeamCodeScreen } from '../screens/ParentTeamCode';
 import { ParentRegistrationScreen } from '../screens/ParentRegistration';
 import ParentVerificationScreen from '../screens/ParentVerification';
 import { ParentPasswordLoginScreen } from '../screens/ParentPasswordLogin';
+import { CreateActivityScreen } from '../screens/CreateActivityScreen';
+import { ActivityDetailsScreen } from '../screens/ActivityDetailsScreen';
+import { EditActivityScreen } from '../screens/EditActivityScreen';
 import { AdminNavigator } from './AdminTabNavigator';
 import { CoachNavigator } from './CoachNavigator';
 import { ParentNavigator } from './ParentTabNavigator';
@@ -102,32 +105,101 @@ export const Navigation = () => {
       <NavigationContainer>
         <Stack.Navigator screenOptions={{ headerShown: false }}>
           {session ? (
-            <Stack.Screen 
-              name="AdminRoot" 
-              component={AdminNavigator}
-              options={{
-                headerShown: false,
-                gestureEnabled: false,
-              }}
-            />
+            <>
+              <Stack.Screen 
+                name="AdminRoot" 
+                component={AdminNavigator}
+                options={{
+                  headerShown: false,
+                  gestureEnabled: false,
+                }}
+              />
+              <Stack.Screen
+                name="ActivityDetails"
+                component={ActivityDetailsScreen}
+                options={{
+                  headerShown: false,
+                }}
+              />
+              <Stack.Screen
+                name="EditActivity"
+                component={EditActivityScreen}
+                options={{
+                  headerShown: false,
+                }}
+              />
+              <Stack.Screen
+                name="CreateActivity"
+                component={CreateActivityScreen}
+                options={{
+                  headerShown: false,
+                }}
+              />
+            </>
           ) : coachData ? (
-            <Stack.Screen 
-              name="Coach" 
-              component={CoachNavigator}
-              options={{
-                headerShown: false,
-                gestureEnabled: false,
-              }}
-            />
+            <>
+              <Stack.Screen 
+                name="Coach" 
+                component={CoachNavigator}
+                options={{
+                  headerShown: false,
+                  gestureEnabled: false,
+                }}
+              />
+              <Stack.Screen
+                name="ActivityDetails"
+                component={ActivityDetailsScreen}
+                options={{
+                  headerShown: false,
+                }}
+              />
+              <Stack.Screen
+                name="EditActivity"
+                component={EditActivityScreen}
+                options={{
+                  headerShown: false,
+                }}
+              />
+              <Stack.Screen
+                name="CreateActivity"
+                component={CreateActivityScreen}
+                options={{
+                  headerShown: false,
+                }}
+              />
+            </>
           ) : parentData ? (
-            <Stack.Screen 
-              name="ParentNavigator" 
-              component={ParentNavigator}
-              options={{
-                headerShown: false,
-                gestureEnabled: false,
-              }}
-            />
+            <>
+              <Stack.Screen 
+                name="ParentNavigator" 
+                component={ParentNavigator}
+                options={{
+                  headerShown: false,
+                  gestureEnabled: false,
+                }}
+              />
+              <Stack.Screen
+                name="ActivityDetails"
+                component={ActivityDetailsScreen}
+                options={{
+                  headerShown: false,
+                }}
+              />
+              <Stack.Screen
+                name="EditActivity"
+                component={EditActivityScreen}
+                options={{
+                  headerShown: false,
+                }}
+              />
+              <Stack.Screen
+                name="CreateActivity"
+                component={CreateActivityScreen}
+                options={{
+                  headerShown: false,
+                }}
+              />
+            </>
           ) : (
             <>
               <Stack.Screen name="Home" component={HomeScreen} />

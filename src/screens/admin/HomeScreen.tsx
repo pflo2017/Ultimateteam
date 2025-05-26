@@ -187,11 +187,15 @@ export const AdminHomeScreen = () => {
     }
   };
 
-  const handleCardPress = (screen: ScreenType, type: CardType) => {
+  const handleCardPress = (screen: ScreenType, type: CardType, title: string) => {
     if (screen === 'Manage') {
       navigation.navigate('Manage', { activeTab: type });
     } else if (screen === 'Payments') {
-      navigation.navigate('Payments');
+      if (type === 'payments' && title === 'Collected') {
+        navigation.navigate('Payments', { showCollections: true } as any);
+      } else {
+        navigation.navigate('Payments');
+      }
     }
   };
 
@@ -231,7 +235,7 @@ export const AdminHomeScreen = () => {
       >
         <Animated.View style={animatedStyle}>
           <TouchableRipple
-            onPress={() => handleCardPress(screen as ScreenType, type)}
+            onPress={() => handleCardPress(screen as ScreenType, type, title)}
             onPressIn={onPressIn}
             onPressOut={onPressOut}
             style={styles.touchable}

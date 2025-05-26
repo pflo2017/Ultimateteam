@@ -12,11 +12,14 @@ export type AdminStackParamList = {
   EditPlayer: { playerId: string };
   TeamDetails: { teamId: string };
   Manage: { activeTab?: CardType; refresh?: boolean };
+  CreateActivity: { type: 'practice' | 'match' | 'event' };
+  ActivityDetails: { activityId: string };
 };
 
 export type AdminTabParamList = {
   Home: undefined;
   Manage: { activeTab?: CardType };
+  Schedule: undefined;
   Payments: undefined;
   Chat: undefined;
   News: undefined;
@@ -72,6 +75,9 @@ export type RootStackParamList = {
   };
   Settings: undefined;
   AdminManage: { refresh?: boolean };
+  CreateActivity: { type: 'practice' | 'match' | 'event' };
+  ActivityDetails: { activityId: string };
+  EditActivity: { activityId: string };
 };
 
 export type ParentStackParamList = {
@@ -79,4 +85,6 @@ export type ParentStackParamList = {
   Settings: undefined;
   EditChild: { childId: string };
   AddChild: undefined;
+  ActivityDetails: { activityId: string };
+  EditActivity: { activityId: string };
 }; 

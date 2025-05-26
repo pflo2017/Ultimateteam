@@ -5,6 +5,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../constants/theme';
 import { AdminHomeScreen } from '../screens/admin/HomeScreen';
 import { AdminManageScreen } from '../screens/admin/ManageScreen';
+import { AdminScheduleScreen } from '../screens/admin/ScheduleScreen';
 import { PaymentsScreen } from '../screens/admin/PaymentsScreen';
 import { AdminChatScreen } from '../screens/admin/ChatScreen';
 import { AdminNewsScreen } from '../screens/admin/NewsScreen';
@@ -13,6 +14,8 @@ import { AddTeamScreen } from '../screens/admin/AddTeamScreen';
 import { AddCoachScreen } from '../screens/admin/AddCoachScreen';
 import { EditCoachScreen } from '../screens/admin/EditCoachScreen';
 import { EditTeamScreen } from '../screens/admin/EditTeamScreen';
+import { CreateActivityScreen } from '../screens/CreateActivityScreen';
+import { ActivityDetailsScreen } from '../screens/ActivityDetailsScreen';
 import { Image, Pressable, View, ActivityIndicator, Alert, StyleSheet, Text, Platform, StatusBar } from 'react-native';
 import { Menu } from 'react-native-paper';
 import { supabase } from '../lib/supabase';
@@ -281,6 +284,16 @@ const TabNavigator = () => {
         }}
       />
       <Tab.Screen
+        name="Schedule"
+        component={AdminScheduleScreen}
+        options={{
+          tabBarLabel: 'Schedule',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="calendar-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
         name="Payments"
         component={PaymentsScreen}
         options={{
@@ -364,6 +377,20 @@ export const AdminNavigator = () => {
           <Stack.Screen
             name="EditTeam"
             component={EditTeamScreen}
+            options={{
+              headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name="CreateActivity"
+            component={CreateActivityScreen}
+            options={{
+              headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name="ActivityDetails"
+            component={ActivityDetailsScreen}
             options={{
               headerShown: false,
             }}
