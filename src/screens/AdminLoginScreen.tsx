@@ -7,6 +7,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { supabase } from '../lib/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type RootStackParamList = {
   Home: undefined;
@@ -58,6 +59,15 @@ export const AdminLoginScreen = () => {
         setError('Account not found');
         return;
       }
+
+      // Set admin_data in AsyncStorage for role detection
+      await AsyncStorage.setItem(
+        'admin_data',
+        JSON.stringify({
+          id: data.user.id,
+          email: data.user.email
+        })
+      );
 
       navigation.navigate('AdminRoot');
     } catch (error) {

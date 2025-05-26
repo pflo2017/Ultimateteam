@@ -127,20 +127,18 @@ export const ActivityDetailsScreen = () => {
   const determineUserRole = async () => {
     try {
       const parentData = await AsyncStorage.getItem('parent_data');
+      const coachData = await AsyncStorage.getItem('coach_data');
+      const adminData = await AsyncStorage.getItem('admin_data');
+      const userData = await AsyncStorage.getItem('user_data');
+      console.log('DEBUG ROLE:', { parentData, coachData, adminData, userData });
       if (parentData) {
         setUserRole('parent');
         return;
       }
-      
-      const coachData = await AsyncStorage.getItem('coach_data');
       if (coachData) {
         setUserRole('coach');
         return;
       }
-      
-      // Try both admin_data and user_data for admin
-      const adminData = await AsyncStorage.getItem('admin_data');
-      const userData = await AsyncStorage.getItem('user_data');
       if (adminData) {
         setUserRole('admin');
         return;
