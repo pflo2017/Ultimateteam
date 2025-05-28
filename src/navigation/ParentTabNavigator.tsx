@@ -23,6 +23,12 @@ import { supabase } from '../lib/supabase';
 import { ActivityDetailsScreen } from '../screens/ActivityDetailsScreen';
 import { EditActivityScreen } from '../screens/EditActivityScreen';
 
+// Add global type declaration for reloadRole
+declare global {
+  // eslint-disable-next-line no-var
+  var reloadRole: undefined | (() => void);
+}
+
 const Tab = createBottomTabNavigator<ParentTabParamList>();
 const Stack = createNativeStackNavigator<ParentStackParamList>();
 
@@ -100,13 +106,14 @@ const ParentHeader = () => {
     try {
       // Clear parent data first - this is what the root navigator checks
       await AsyncStorage.removeItem('parent_data');
-      
       // Sign out from Supabase Auth
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
-      
-      // Don't try to navigate directly - the root navigator will handle showing Home
-      // when parentData is null
+      // Update navigation role after logout
+      if (typeof global !== 'undefined' && typeof global.reloadRole === 'function') {
+        global.reloadRole();
+      }
+      // No need to reload or navigate; the root navigator will handle it
     } catch (error) {
       console.error('Error logging out:', error);
       Alert.alert('Error', 'Failed to log out. Please try again.');

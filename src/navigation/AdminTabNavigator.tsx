@@ -16,6 +16,7 @@ import { EditCoachScreen } from '../screens/admin/EditCoachScreen';
 import { EditTeamScreen } from '../screens/admin/EditTeamScreen';
 import { CreateActivityScreen } from '../screens/CreateActivityScreen';
 import { ActivityDetailsScreen } from '../screens/ActivityDetailsScreen';
+import { AttendanceTabsScreen } from '../screens/AttendanceTabsScreen';
 import { Image, Pressable, View, ActivityIndicator, Alert, StyleSheet, Text, Platform, StatusBar } from 'react-native';
 import { Menu } from 'react-native-paper';
 import { supabase } from '../lib/supabase';
@@ -26,6 +27,7 @@ import type { AdminStackParamList, AdminTabParamList } from '../types/navigation
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const Tab = createBottomTabNavigator<AdminTabParamList>();
 const Stack = createNativeStackNavigator<AdminStackParamList>();
@@ -121,9 +123,18 @@ const AdminHeader = () => {
 
   const handleLogout = async () => {
     try {
-      await supabase.auth.signOut();
+      // Clear all role data from AsyncStorage
+      await AsyncStorage.multiRemove(['admin_data', 'coach_data', 'parent_data']);
+      // Sign out from Supabase Auth
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      // Update navigation role after logout
+      if (global.reloadRole) {
+        global.reloadRole();
+      }
     } catch (error) {
       console.error('Error signing out:', error);
+      Alert.alert('Error', 'Failed to log out. Please try again.');
     }
   };
 
@@ -294,6 +305,16 @@ const TabNavigator = () => {
         }}
       />
       <Tab.Screen
+        name="Attendance"
+        component={AttendanceTabsScreen}
+        options={{
+          tabBarLabel: 'Attendance',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="clipboard-check-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
         name="Payments"
         component={PaymentsScreen}
         options={{
@@ -302,6 +323,7 @@ const TabNavigator = () => {
           ),
         }}
       />
+      {/* Chat tab temporarily hidden
       <Tab.Screen
         name="Chat"
         component={AdminChatScreen}
@@ -311,6 +333,7 @@ const TabNavigator = () => {
           ),
         }}
       />
+      */}
       <Tab.Screen
         name="News"
         component={AdminNewsScreen}

@@ -73,13 +73,10 @@ export const ParentPaymentsScreen = () => {
     
     // Also refresh payment history if a child is selected
     if (selectedChild && selectedChild.player_id) {
-      fetchPaymentHistory(selectedChild);
+      // Only refresh data without reopening modal
+      refreshPaymentHistoryWithoutModal(selectedChild);
     }
   });
-  
-  const closePaymentHistoryModal = () => {
-    setIsPaymentHistoryModalVisible(false);
-  };
   
   // Add event listener for payment status changes
   useEffect(() => {
@@ -129,7 +126,7 @@ export const ParentPaymentsScreen = () => {
       loadChildren();
       
       if (selectedChild && isPaymentHistoryModalVisible) {
-        fetchPaymentHistory(selectedChild);
+        refreshPaymentHistoryWithoutModal(selectedChild);
       }
       
       return () => {};
@@ -141,7 +138,7 @@ export const ParentPaymentsScreen = () => {
     await loadChildren();
     
     if (selectedChild && isPaymentHistoryModalVisible) {
-      await fetchPaymentHistory(selectedChild);
+      await refreshPaymentHistoryWithoutModal(selectedChild);
     }
     
     setRefreshing(false);
@@ -196,8 +193,6 @@ export const ParentPaymentsScreen = () => {
       // CRITICAL FIX: Force RPC call to ensure we're getting fresh data
       // This bypasses any caching that might be happening
       console.log("[ParentPaymentsScreen] Making direct query for all players");
-      // Remove the RPC call that doesn't exist
-      let allPlayers: Player[] | null = null;
 
       // Make a direct query to get players
       const { data: playersData, error: playersError } = await supabase
@@ -208,69 +203,11 @@ export const ParentPaymentsScreen = () => {
       if (playersError) {
         console.error('Error fetching players:', playersError);
         setDebugInfo(prev => prev + `\nPlayers query error: ${playersError.message}`);
-      } else {
-        allPlayers = playersData;
-        console.log("[ParentPaymentsScreen] Successfully fetched players:", playersData?.length || 0);
+        throw playersError;
       }
       
-      // Last resort: hardcoded data if we still have no players
-      if (!allPlayers || allPlayers.length === 0) {
-        console.log("[ParentPaymentsScreen] No players found in database, using hardcoded fallback data");
-        setDebugInfo(prev => prev + `\nUSING HARDCODED FALLBACK DATA`);
-        
-        // Create some hardcoded player data as a last resort
-        allPlayers = [
-          {
-            id: 'hdcoded-simon-id',
-            name: 'Simon Popescu',
-            payment_status: 'paid',
-            player_status: 'paid',
-            parent_id: parent.id,
-            team_id: childrenData[0].team_id,
-            is_active: true,
-            last_payment_date: new Date().toISOString()
-          },
-          {
-            id: 'hdcoded-madalen-id',
-            name: 'Mădălin Popescu',
-            payment_status: 'paid',
-            player_status: 'paid',
-            parent_id: parent.id,
-            team_id: childrenData[0].team_id,
-            is_active: true,
-            last_payment_date: new Date().toISOString()
-          },
-          {
-            id: 'hdcoded-vladut-id',
-            name: 'Vlăduț Popescu',
-            payment_status: 'unpaid',
-            player_status: 'unpaid',
-            parent_id: parent.id,
-            team_id: childrenData[0].team_id,
-            is_active: true,
-            last_payment_date: new Date().toISOString()
-          },
-          {
-            id: 'hdcoded-corina-id',
-            name: 'Corina Popescu',
-            payment_status: 'unpaid',
-            player_status: 'unpaid',
-            parent_id: parent.id,
-            team_id: childrenData[0].team_id,
-            is_active: true,
-            last_payment_date: new Date().toISOString()
-          }
-        ];
-      }
-      
-      console.log("[ParentPaymentsScreen] Fetched players (all):", allPlayers?.length || 0);
-      setDebugInfo(prev => prev + `\nFetched ${allPlayers?.length || 0} players total`);
-      
-      if (allPlayers && allPlayers.length > 0) {
-        // Log the first few players to see what the data looks like
-        console.log("[ParentPaymentsScreen] Sample player data:", 
-          JSON.stringify(allPlayers.slice(0, 2), null, 2));
-      }
+      const allPlayers = playersData || [];
+      console.log("[ParentPaymentsScreen] Successfully fetched players:", allPlayers?.length || 0);
       
       // Filter to only the active players with this parent's ID
       const parentPlayers = allPlayers?.filter((player: Player) => 
@@ -300,104 +237,6 @@ export const ParentPaymentsScreen = () => {
             last_payment_date: player.last_payment_date,
             team_id: player.team_id
           });
-        });
-      }
-      
-      // If we didn't find all children's players by parent_id, try name matching
-      if (childrenData && playerMap.size < childrenData.length) {
-        console.log("[ParentPaymentsScreen] Not all children have player records by parent_id, trying name matching");
-        setDebugInfo(prev => prev + `\nAttempting name matching for missing players`);
-        
-        childrenData.forEach(child => {
-          const childNameLower = child.full_name.toLowerCase();
-          
-          // Skip if we already have this child mapped
-          if (playerMap.has(childNameLower)) {
-            console.log(`[ParentPaymentsScreen] Already have player for ${child.full_name}`);
-            return;
-          }
-          
-          // Try to find by exact name match first
-          let matchedPlayer = allPlayers?.find((p: Player) => 
-            p.name.toLowerCase() === childNameLower && p.is_active
-          );
-          
-          // If no exact match, try partial matching with each name component
-          if (!matchedPlayer) {
-            const childNameParts = childNameLower.split(' ');
-            
-            matchedPlayer = allPlayers?.find((p: Player) => {
-              const playerNameLower = p.name.toLowerCase();
-              // Check if any part of the child's name matches any part of the player's name
-              return childNameParts.some((part: string) => 
-                playerNameLower.includes(part) && part.length > 2
-              ) && p.is_active;
-            });
-          }
-          
-          // Last resort - try very fuzzy matching
-          if (!matchedPlayer) {
-            matchedPlayer = allPlayers?.find((p: Player) => 
-              (p.name.toLowerCase().includes(childNameLower.substring(0, 3)) || 
-               childNameLower.includes(p.name.toLowerCase().substring(0, 3))) && 
-              p.is_active
-            );
-          }
-          
-          if (matchedPlayer) {
-            console.log(`[ParentPaymentsScreen] Found player by name match for ${child.full_name}:`, matchedPlayer.id);
-            setDebugInfo(prev => prev + `\nFound player by name match: ${child.full_name} -> ${matchedPlayer.id}`);
-            
-            // Update the player's parent_id for next time if needed
-            if (matchedPlayer.parent_id !== parent.id) {
-              console.log(`[ParentPaymentsScreen] Updating parent_id for player ${matchedPlayer.name}`);
-              
-              // Don't await this - let it happen in background
-              supabase
-                .from('players')
-                .update({ parent_id: parent.id })
-                .eq('id', matchedPlayer.id)
-                .then(({ error }) => {
-                  if (error) {
-                    console.error('Error updating player parent_id:', error);
-                  } else {
-                    console.log(`[ParentPaymentsScreen] Successfully updated parent_id for ${matchedPlayer.name}`);
-                  }
-                });
-            }
-            
-            const status = matchedPlayer.payment_status || matchedPlayer.player_status || 'pending';
-            
-            playerMap.set(childNameLower, {
-              player_id: matchedPlayer.id,
-              payment_status: status,
-              last_payment_date: matchedPlayer.last_payment_date,
-              team_id: matchedPlayer.team_id
-            });
-          } else {
-            console.log(`[ParentPaymentsScreen] No matching player found for ${child.full_name}`);
-            setDebugInfo(prev => prev + `\nNo player match found for: ${child.full_name}`);
-            
-            // Use hardcoded fallback - find a matching name in our hardcoded data
-            const hardcodedMatch = [
-              { name: 'simon popescu', id: 'hdcoded-simon-id', status: 'paid', date: new Date().toISOString() },
-              { name: 'mădălin popescu', id: 'hdcoded-madalen-id', status: 'paid', date: new Date().toISOString() },
-              { name: 'vlăduț popescu', id: 'hdcoded-vladut-id', status: 'unpaid', date: new Date().toISOString() },
-              { name: 'corina popescu', id: 'hdcoded-corina-id', status: 'unpaid', date: new Date().toISOString() }
-            ].find(h => h.name.includes(childNameLower) || childNameLower.includes(h.name));
-            
-            if (hardcodedMatch) {
-              console.log(`[ParentPaymentsScreen] Using hardcoded data for ${child.full_name}`);
-              setDebugInfo(prev => prev + `\nUsing hardcoded data for: ${child.full_name}`);
-              
-              playerMap.set(childNameLower, {
-                player_id: hardcodedMatch.id,
-                payment_status: hardcodedMatch.status,
-                last_payment_date: hardcodedMatch.date,
-                team_id: child.team_id
-              });
-            }
-          }
         });
       }
       
@@ -448,7 +287,110 @@ export const ParentPaymentsScreen = () => {
     }
   };
   
+  const closePaymentHistoryModal = () => {
+    setIsPaymentHistoryModalVisible(false);
+    // Clear selected child and payment history when closing the modal
+    // to prevent stale data from being displayed if modal is reopened
+    setTimeout(() => {
+      if (!isPaymentHistoryModalVisible) {
+        setSelectedChild(null);
+        setPaymentHistory([]);
+      }
+    }, 500); // Small delay to ensure modal is closed first
+  };
+  
+  // New function that refreshes payment history data without showing the modal
+  const refreshPaymentHistoryWithoutModal = async (child: Child) => {
+    try {
+      setHistoryLoading(true);
+      
+      console.log("[ParentPaymentsScreen] Refreshing payment history data for:", 
+        child.player_id, "Name:", child.full_name);
+      
+      // Get current date info
+      const currentDate = new Date();
+      const currentYear = currentDate.getFullYear();
+      const currentMonth = currentDate.getMonth(); // 0-11
+      
+      // Create array of months for the current year only (January to current month)
+      const months = [];
+      // Start from January (month 0) and go up to the current month
+      for (let i = 0; i <= currentMonth; i++) {
+        months.push({
+          year: currentYear,
+          month: i + 1, // Convert to 1-12 format
+          date: new Date(currentYear, i, 1)
+        });
+      }
+      
+      // Reverse the order to show most recent month first
+      months.reverse();
+      setHistoryMonths(months);
+      
+      // Get the latest player data
+      const { data: latestPlayerData, error: playerError } = await supabase
+        .from('players')
+        .select('id, payment_status, player_status, last_payment_date')
+        .eq('id', child.player_id)
+        .maybeSingle();
+        
+      if (!playerError && latestPlayerData) {
+        // Update the child data with fresh status
+        const freshStatus = latestPlayerData.payment_status || latestPlayerData.player_status || 'pending';
+        
+        // Update our children array with this fresh data
+        setChildren(prev => prev.map(c => 
+          c.player_id === child.player_id 
+            ? {...c, payment_status: freshStatus, last_payment_date: latestPlayerData.last_payment_date}
+            : c
+        ));
+      }
+      
+      // Fetch payment history data
+      const { data, error } = await supabase
+        .from('player_payments')
+        .select('id, player_id, year, month, status, updated_at')
+        .eq('player_id', child.player_id)
+        .eq('year', currentYear) // Only get current year
+        .order('month', { ascending: false });
+      
+      if (!error && data) {
+        if (data.length === 0 && child.payment_status && child.player_id) {
+          // If no payment records found in database, but the player has a current status,
+          // create a virtual record for the current month
+          const virtualRecord: PaymentHistory = {
+            id: `virtual-${Date.now()}`,
+            player_id: child.player_id,
+            year: currentYear,
+            month: currentMonth + 1,
+            status: child.payment_status,
+            updated_at: new Date().toISOString()
+          };
+          
+          console.log("[ParentPaymentsScreen] No payment records found in DB. Creating virtual current month record:", 
+            JSON.stringify(virtualRecord, null, 2));
+          
+          // Set the payment history to include this virtual record
+          setPaymentHistory([virtualRecord]);
+        } else {
+          // Process the payment history data and update state
+          setPaymentHistory(data);
+        }
+      }
+    } catch (error) {
+      console.error('Error refreshing payment history:', error);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+  
   const fetchPaymentHistory = async (child: Child) => {
+    // Don't open the modal if it's already open - this prevents re-render loops
+    if (isPaymentHistoryModalVisible) {
+      console.log("[ParentPaymentsScreen] Modal already open, not reopening");
+      return;
+    }
+    
     try {
       setHistoryLoading(true);
       setSelectedChild(child);
@@ -606,7 +548,7 @@ export const ParentPaymentsScreen = () => {
         .select('id, player_id, year, month, status, updated_at')
         .eq('player_id', child.player_id)
         .eq('year', currentYear) // Only get current year
-        .order('month', { ascending: false }); // Get the most recent months first
+        .order('month', { ascending: false });
       
       if (error) {
         console.error('Error fetching player_payments:', error);
@@ -618,6 +560,25 @@ export const ParentPaymentsScreen = () => {
       
       // Get the history records as they are (no modifications initially)
       let historyRecords = data || [];
+      
+      // If no payment records found at all, create a virtual one for the current month
+      // based on the player's current payment status
+      if (historyRecords.length === 0 && child.payment_status && child.player_id) {
+        console.log("[ParentPaymentsScreen] No payment records found in database. Using current status:", child.payment_status);
+        
+        // Create a virtual payment record for the current month
+        const virtualRecord: PaymentHistory = {
+          id: `virtual-${Date.now()}`,
+          player_id: child.player_id,
+          year: currentYear,
+          month: currentMonth + 1,
+          status: child.payment_status,
+          updated_at: new Date().toISOString()
+        };
+        
+        historyRecords = [virtualRecord];
+        console.log("[ParentPaymentsScreen] Created virtual payment record:", JSON.stringify(virtualRecord, null, 2));
+      }
       
       // CRITICAL DEBUG: Log all records to see what months they're for
       historyRecords.forEach(record => {

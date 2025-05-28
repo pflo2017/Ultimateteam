@@ -10,6 +10,7 @@ import { ParentTeamCodeScreen } from '../screens/ParentTeamCode';
 import { ParentRegistrationScreen } from '../screens/ParentRegistration';
 import ParentVerificationScreen from '../screens/ParentVerification';
 import { ParentPasswordLoginScreen } from '../screens/ParentPasswordLogin';
+import { ParentResetPasswordScreen } from '../screens/ParentResetPassword';
 import { CreateActivityScreen } from '../screens/CreateActivityScreen';
 import { ActivityDetailsScreen } from '../screens/ActivityDetailsScreen';
 import { EditActivityScreen } from '../screens/EditActivityScreen';
@@ -21,6 +22,13 @@ import { Session } from '@supabase/supabase-js';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { RootStackParamList } from '../types/navigation';
+import { AttendanceReportDetailsScreen } from '../screens/AttendanceReportDetailsScreen';
+
+// Add global type declaration for reloadRole
+declare global {
+  // eslint-disable-next-line no-var
+  var reloadRole: undefined | (() => void);
+}
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -29,82 +37,92 @@ export const Navigation = () => {
   const [coachData, setCoachData] = useState<any>(null);
   const [parentData, setParentData] = useState<any>(null);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [isUserDataLoaded, setIsUserDataLoaded] = useState(false);
+  const [role, setRole] = useState<'parent' | 'admin' | 'coach' | null>(null);
 
-  useEffect(() => {
-    const initializeApp = async () => {
-      try {
-        // Check for any inconsistent auth state on startup
-        const { data } = await supabase.auth.getSession();
-        
-        if (!data.session) {
-          // If no valid session exists, make sure we clear admin state
-          await supabase.auth.signOut();
-        }
-        
-        setIsInitialized(true);
-      } catch (error) {
-        console.error('Error initializing app:', error);
-        setIsInitialized(true);
+  // Role detection logic as a function
+  const reloadRole = async () => {
+    try {
+      const { data } = await supabase.auth.getSession();
+      let session = data.session;
+      const storedParentData = await AsyncStorage.getItem('parent_data');
+      const storedCoachData = await AsyncStorage.getItem('coach_data');
+      const storedAdminData = await AsyncStorage.getItem('admin_data');
+
+      // First check stored role data, as it takes precedence
+      if (storedParentData) {
+        // If we have parent data, clear other roles
+        await AsyncStorage.multiRemove(['admin_data', 'coach_data']);
+        setRole('parent');
+      } else if (storedCoachData) {
+        // If we have coach data, clear other roles
+        await AsyncStorage.multiRemove(['admin_data', 'parent_data']);
+        setRole('coach');
+      } else if (storedAdminData && session) {
+        // Only set admin role if we have both admin data and a session
+        await AsyncStorage.multiRemove(['coach_data', 'parent_data']);
+        setRole('admin');
+      } else {
+        // No valid role data found
+        setRole(null);
       }
-    };
+    } catch (error) {
+      console.error('Error in reloadRole:', error);
+      setRole(null);
+    }
+  };
 
-    initializeApp();
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  // Listen for coach and parent data changes
+  // Expose reloadRole globally for login/logout to call
   useEffect(() => {
-    const checkUserData = async () => {
-      try {
-        const storedCoachData = await AsyncStorage.getItem('coach_data');
-        const storedParentData = await AsyncStorage.getItem('parent_data');
-        
-        if (storedCoachData) {
-          setCoachData(JSON.parse(storedCoachData));
-        } else {
-          setCoachData(null);
-        }
-
-        if (storedParentData) {
-          setParentData(JSON.parse(storedParentData));
-        } else {
-          setParentData(null);
-        }
-      } catch (error) {
-        console.error('Error checking user data:', error);
-        setCoachData(null);
-        setParentData(null);
-      }
-    };
-
-    // Check immediately
-    checkUserData();
-
-    // Set up interval to check for changes
-    const interval = setInterval(checkUserData, 1000);
-
-    // Cleanup
-    return () => {
-      clearInterval(interval);
-    };
+    global.reloadRole = reloadRole;
+    reloadRole(); // Call on mount
+    return () => { delete global.reloadRole; };
   }, []);
-
-  if (!isInitialized) {
-    // You could show a splash screen here
-    return null;
-  }
 
   return (
     <SafeAreaProvider>
       <NavigationContainer>
         <Stack.Navigator screenOptions={{ headerShown: false }}>
-          {session ? (
+          {role === 'parent' ? (
+            <>
+              <Stack.Screen 
+                name="ParentNavigator" 
+                component={ParentNavigator}
+                options={{
+                  headerShown: false,
+                  gestureEnabled: false,
+                }}
+              />
+              <Stack.Screen
+                name="ActivityDetails"
+                component={ActivityDetailsScreen}
+                options={{
+                  headerShown: false,
+                }}
+              />
+              <Stack.Screen
+                name="AttendanceReportDetails"
+                component={AttendanceReportDetailsScreen}
+                options={{
+                  headerShown: false,
+                }}
+              />
+              <Stack.Screen
+                name="EditActivity"
+                component={EditActivityScreen}
+                options={{
+                  headerShown: false,
+                }}
+              />
+              <Stack.Screen
+                name="CreateActivity"
+                component={CreateActivityScreen}
+                options={{
+                  headerShown: false,
+                }}
+              />
+            </>
+          ) : role === 'admin' ? (
             <>
               <Stack.Screen 
                 name="AdminRoot" 
@@ -122,6 +140,13 @@ export const Navigation = () => {
                 }}
               />
               <Stack.Screen
+                name="AttendanceReportDetails"
+                component={AttendanceReportDetailsScreen}
+                options={{
+                  headerShown: false,
+                }}
+              />
+              <Stack.Screen
                 name="EditActivity"
                 component={EditActivityScreen}
                 options={{
@@ -136,7 +161,7 @@ export const Navigation = () => {
                 }}
               />
             </>
-          ) : coachData ? (
+          ) : role === 'coach' ? (
             <>
               <Stack.Screen 
                 name="Coach" 
@@ -154,33 +179,8 @@ export const Navigation = () => {
                 }}
               />
               <Stack.Screen
-                name="EditActivity"
-                component={EditActivityScreen}
-                options={{
-                  headerShown: false,
-                }}
-              />
-              <Stack.Screen
-                name="CreateActivity"
-                component={CreateActivityScreen}
-                options={{
-                  headerShown: false,
-                }}
-              />
-            </>
-          ) : parentData ? (
-            <>
-              <Stack.Screen 
-                name="ParentNavigator" 
-                component={ParentNavigator}
-                options={{
-                  headerShown: false,
-                  gestureEnabled: false,
-                }}
-              />
-              <Stack.Screen
-                name="ActivityDetails"
-                component={ActivityDetailsScreen}
+                name="AttendanceReportDetails"
+                component={AttendanceReportDetailsScreen}
                 options={{
                   headerShown: false,
                 }}
@@ -207,10 +207,11 @@ export const Navigation = () => {
               <Stack.Screen name="AdminRegister" component={AdminRegisterScreen} />
               <Stack.Screen name="CoachLogin" component={CoachLoginScreen} />
               <Stack.Screen name="ParentLogin" component={ParentLoginScreen} />
-              <Stack.Screen name="ParentTeamCode" component={ParentTeamCodeScreen} />
+              <Stack.Screen name="ParentPasswordLogin" component={ParentPasswordLoginScreen} />
+              <Stack.Screen name="ParentResetPassword" component={ParentResetPasswordScreen} />
               <Stack.Screen name="ParentRegistration" component={ParentRegistrationScreen} />
               <Stack.Screen name="ParentVerification" component={ParentVerificationScreen} />
-              <Stack.Screen name="ParentPasswordLogin" component={ParentPasswordLoginScreen} />
+              <Stack.Screen name="ParentTeamCode" component={ParentTeamCodeScreen} />
             </>
           )}
         </Stack.Navigator>

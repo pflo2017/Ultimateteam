@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView, SafeAreaView, Modal, TextInput } from 'react-native';
-import { Text, Button, Card, FAB, SegmentedButtons } from 'react-native-paper';
+import { Text, Button, Card, FAB } from 'react-native-paper';
 import { Calendar, DateData } from 'react-native-calendars';
 import { COLORS, SPACING } from '../../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -239,25 +239,14 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
             <Text style={styles.eventTime}>
               {format(startTime, 'HH:mm')}
             </Text>
-            {/* Game score on the right */}
-            {activity.type === 'game' && (typeof activity.home_score === 'number' && typeof activity.away_score === 'number') && (
-              <View style={{ alignItems: 'flex-end', minWidth: 48 }}>
-                <Text style={{ fontWeight: 'bold', fontSize: 18, color: COLORS.text }}>
-                  {activity.home_score}-{activity.away_score}
-                </Text>
-                <Text style={{ fontSize: 14, color: COLORS.grey[600] }}>
-                  {activity.home_score === activity.away_score
-                    ? 'Tie'
-                    : activity.home_away === 'home'
-                      ? (activity.home_score > activity.away_score ? 'Win' : 'Loss')
-                      : (activity.away_score > activity.home_score ? 'Win' : 'Loss')}
-                </Text>
-              </View>
-            )}
           </View>
           
-          {activity.title && activity.title.toLowerCase() !== "add" && (
+          {/* Title row with score for games */}
+          <View style={styles.eventTitleRow}>
             <Text style={styles.eventTitle}>{activity.title}</Text>
+          </View>
+          {activity.teams?.name && (
+            <Text style={styles.eventTeam}>{activity.teams.name}</Text>
           )}
           
           <Text style={styles.eventDate}>
@@ -362,28 +351,21 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
           </View>
           
           {/* View Mode Toggle */}
-          <View style={styles.viewToggleContainer}>
-            <SegmentedButtons
-              value={viewMode}
-              onValueChange={(value) => setViewMode(value as ViewMode)}
-              buttons={[
-                {
-                  value: 'monthly',
-                  label: 'Monthly View',
-                  icon: 'calendar-month',
-                  style: viewMode === 'monthly' ? styles.activeSegment : styles.inactiveSegment,
-                  labelStyle: { color: viewMode === 'monthly' ? COLORS.white : COLORS.text }
-                },
-                {
-                  value: 'weekly',
-                  label: 'Weekly View',
-                  icon: 'calendar-week',
-                  style: viewMode === 'weekly' ? styles.activeSegment : styles.inactiveSegment,
-                  labelStyle: { color: viewMode === 'weekly' ? COLORS.white : COLORS.text }
-                }
-              ]}
-              style={styles.segmentedButtons}
-            />
+          <View style={styles.viewToggleChipsRow}>
+            <TouchableOpacity
+              style={[styles.toggleChipSmall, viewMode === 'monthly' && styles.toggleChipSmallActive]}
+              onPress={() => setViewMode('monthly')}
+            >
+              <MaterialCommunityIcons name="calendar-month" size={16} color={viewMode === 'monthly' ? COLORS.white : COLORS.primary} />
+              <Text style={[styles.toggleChipSmallText, viewMode === 'monthly' && styles.toggleChipSmallTextActive]}>Monthly</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.toggleChipSmall, viewMode === 'weekly' && styles.toggleChipSmallActive]}
+              onPress={() => setViewMode('weekly')}
+            >
+              <MaterialCommunityIcons name="calendar-week" size={16} color={viewMode === 'weekly' ? COLORS.white : COLORS.primary} />
+              <Text style={[styles.toggleChipSmallText, viewMode === 'weekly' && styles.toggleChipSmallTextActive]}>Weekly</Text>
+            </TouchableOpacity>
           </View>
           
           {/* Calendar or Week View */}
@@ -631,18 +613,34 @@ const styles = StyleSheet.create({
   filterIcon: {
     marginRight: SPACING.xs,
   },
-  viewToggleContainer: {
-    paddingHorizontal: SPACING.lg,
-    paddingBottom: SPACING.md,
+  viewToggleChipsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: SPACING.md,
+    gap: 8,
   },
-  segmentedButtons: {
-    backgroundColor: COLORS.grey[100],
+  toggleChipSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.grey[200],
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+    marginHorizontal: 2,
+    height: 32,
   },
-  activeSegment: {
+  toggleChipSmallActive: {
     backgroundColor: COLORS.primary,
   },
-  inactiveSegment: {
-    backgroundColor: 'transparent',
+  toggleChipSmallText: {
+    color: COLORS.primary,
+    fontWeight: '500',
+    fontSize: 14,
+    marginLeft: 6,
+  },
+  toggleChipSmallTextActive: {
+    color: COLORS.white,
   },
   weekViewContainer: {
     backgroundColor: COLORS.white,
@@ -805,5 +803,30 @@ const styles = StyleSheet.create({
   optionTextSelected: {
     fontWeight: '500',
     color: COLORS.primary,
+  },
+  eventTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.xs,
+  },
+  eventScoreBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  eventScoreText: {
+    fontSize: 14,
+    fontWeight: '400',
+    color: COLORS.text,
+  },
+  eventScoreResult: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: COLORS.grey[700],
+  },
+  eventTeam: {
+    fontSize: 14,
+    color: COLORS.grey[600],
+    marginBottom: 2,
   },
 }); 

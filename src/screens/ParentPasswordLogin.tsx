@@ -10,6 +10,12 @@ import type { RootStackParamList } from '../types/navigation';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// Add global type declaration for reloadRole
+declare global {
+  // eslint-disable-next-line no-var
+  var reloadRole: undefined | (() => void);
+}
+
 type ParentPasswordLoginScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'ParentPasswordLogin'>;
 type ParentPasswordLoginScreenRouteProp = RouteProp<RootStackParamList, 'ParentPasswordLogin'>;
 
@@ -24,6 +30,7 @@ export const ParentPasswordLoginScreen = () => {
   const { phoneNumber } = route.params;
 
   const handleLogin = async () => {
+    console.log('DEBUG: handleLogin called');
     if (!password.trim()) {
       setError('Please enter your password');
       return;
@@ -35,44 +42,96 @@ export const ParentPasswordLoginScreen = () => {
     try {
       console.log('DEBUG: Attempting login with phoneNumber:', phoneNumber, 'password:', password);
       
-      // First check if there are multiple accounts with this phone number
-      const { data: allMatches, error: checkError } = await supabase
+      // First try to get the parent data to check if it's a legacy account
+      const { data: parent, error: parentError } = await supabase
         .from('parents')
-        .select('id, email')
-        .eq('phone_number', phoneNumber);
-        
-      if (allMatches && allMatches.length > 1) {
-        console.warn('WARNING: Multiple accounts found with same phone number:', allMatches);
-      }
-      
-      // Get the parent record with full details
-      const { data: parent, error: loginError } = await supabase
-        .from('parents')
-        .select('*')  // Select all fields to ensure we have complete data
+        .select('*')
         .eq('phone_number', phoneNumber)
-        .eq('password', password)
-        .order('updated_at', { ascending: false })  // Get the most recently updated record
-        .limit(1)
         .single();
 
-      if (loginError || !parent) {
-        console.error('Login error:', loginError);
-        setError('Invalid password');
+      if (parentError || !parent) {
+        setError('Parent profile not found');
+        setIsLoading(false);
         return;
       }
 
-      console.log('DEBUG: Parent data from database:', JSON.stringify(parent));
+      // Generate a unique email for legacy accounts if they don't have one
+      const parentEmail = parent.email || `${phoneNumber.replace(/[^0-9]/g, '')}@legacy.parent`;
 
-      // Store parent data in AsyncStorage
+      // Try to sign in with Supabase Auth using email
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: parentEmail,
+        password: password
+      });
+
+      if (authError) {
+        // If auth fails, check if this is a legacy account
+        if (parent.password === password) {
+          // This is a legacy account, create the auth user with the generated email
+          const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+            email: parentEmail,
+            password: password,
+            phone: phoneNumber
+          });
+
+          if (signUpError) {
+            console.error('Error creating auth user:', signUpError);
+            setError('Failed to migrate account. Please contact support.');
+            setIsLoading(false);
+            return;
+          }
+
+          // Update the parent's email in the database if it was generated
+          if (!parent.email) {
+            const { error: updateError } = await supabase
+              .from('parents')
+              .update({ email: parentEmail })
+              .eq('id', parent.id);
+
+            if (updateError) {
+              console.error('Error updating parent email:', updateError);
+            }
+          }
+
+          // Successfully migrated, now try to sign in
+          const { data: newAuthData, error: newAuthError } = await supabase.auth.signInWithPassword({
+            email: parentEmail,
+            password: password
+          });
+
+          if (newAuthError) {
+            console.error('Error signing in after migration:', newAuthError);
+            setError('Account migrated but login failed. Please try again.');
+            setIsLoading(false);
+            return;
+          }
+
+          // Store parent data in AsyncStorage
+          await AsyncStorage.removeItem('admin_data');
+          await AsyncStorage.removeItem('coach_data');
+          await AsyncStorage.setItem('parent_data', JSON.stringify({
+            ...parent,
+            email: parentEmail
+          }));
+          
+          if (global.reloadRole) {
+            global.reloadRole();
+          }
+        } else {
+          setError('Invalid phone or password');
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      // Regular login successful
+      await AsyncStorage.removeItem('admin_data');
+      await AsyncStorage.removeItem('coach_data');
       await AsyncStorage.setItem('parent_data', JSON.stringify(parent));
       
-      // Verify data is stored correctly
-      const storedData = await AsyncStorage.getItem('parent_data');
-      const parsedData = JSON.parse(storedData || '{}');
-      console.log('DEBUG: Stored parent data in AsyncStorage:', JSON.stringify(parsedData));
-      
-      // No need to navigate - the root navigator will detect parent data and show the parent navigator
-      
+      if (global.reloadRole) {
+        global.reloadRole();
+      }
     } catch (error) {
       console.error('Error logging in:', error);
       setError('An error occurred. Please try again.');

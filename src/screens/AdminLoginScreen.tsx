@@ -69,7 +69,10 @@ export const AdminLoginScreen = () => {
         })
       );
 
-      navigation.navigate('AdminRoot');
+      // Instead of navigating directly, use the global reloadRole function
+      if (global.reloadRole) {
+        global.reloadRole();
+      }
     } catch (error) {
       console.error('Login error:', error);
       setError('An error occurred during login');

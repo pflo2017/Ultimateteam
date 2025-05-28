@@ -1,24 +1,62 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Text } from 'react-native-paper';
+import { NewsFeed } from '../../components/news/NewsFeed';
+import { Post } from '../../components/news/types';
+import { CommentModal } from '../../components/news/CommentModal';
 import { COLORS } from '../../constants/theme';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '../../lib/supabase';
+
+// Stubbed onSubmitComment function
+const onSubmitComment = async (postId: string, content: string): Promise<void> => {
+  // TODO: Replace with real API call
+  console.log('Adding comment to post', postId, ':', content);
+  return new Promise<void>(resolve => setTimeout(resolve, 500));
+};
 
 export const ParentNewsScreen = () => {
+  const [showCommentModal, setShowCommentModal] = useState(false);
+  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [teamIds, setTeamIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    const fetchTeamIds = async () => {
+      try {
+        const parentData = await AsyncStorage.getItem('parent_data');
+        if (!parentData) return;
+        const parent = JSON.parse(parentData);
+        // Get all children for this parent
+        const { data: children, error } = await supabase
+          .from('parent_children')
+          .select('team_id')
+          .eq('parent_id', parent.id)
+          .eq('is_active', true);
+        if (error) return;
+        const ids = Array.from(new Set((children || []).map((c: any) => c.team_id).filter(Boolean)));
+        setTeamIds(ids);
+      } catch (err) {
+        setTeamIds([]);
+      }
+    };
+    fetchTeamIds();
+  }, []);
+
+  const handlePressComments = (post: Post) => {
+    setSelectedPost(post);
+    setShowCommentModal(true);
+  };
+
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text variant="headlineMedium" style={styles.title}>News</Text>
-        <Text variant="bodyLarge" style={styles.subtitle}>
-          Stay updated with the latest news and announcements
-        </Text>
-      </View>
-
-      <View style={styles.content}>
-        <Text variant="bodyMedium" style={styles.placeholder}>
-          News feed coming soon! You'll be able to see team announcements, 
-          match reports, and important updates here.
-        </Text>
-      </View>
+      <NewsFeed filters={{ team_ids: teamIds }} onPressComments={handlePressComments} />
+      {selectedPost && (
+        <CommentModal
+          visible={showCommentModal}
+          onClose={() => setShowCommentModal(false)}
+          post={selectedPost}
+          onSubmitComment={onSubmitComment}
+        />
+      )}
     </View>
   );
 };
@@ -26,29 +64,7 @@ export const ParentNewsScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
-  },
-  header: {
-    padding: 24,
-    backgroundColor: COLORS.primary,
-  },
-  title: {
-    color: '#fff',
-    fontWeight: 'bold',
-  },
-  subtitle: {
-    color: '#fff',
-    opacity: 0.9,
-    marginTop: 8,
-  },
-  content: {
-    flex: 1,
-    padding: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  placeholder: {
-    textAlign: 'center',
-    color: COLORS.grey[600],
+    backgroundColor: COLORS.white,
+    paddingTop: 24,
   },
 }); 

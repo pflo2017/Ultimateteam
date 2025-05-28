@@ -12,6 +12,7 @@ import { CoachNewsScreen } from '../screens/coach/NewsScreen';
 import { CoachSettingsScreen } from '../screens/coach/CoachSettingsScreen';
 import { CreateActivityScreen } from '../screens/CreateActivityScreen';
 import { ActivityDetailsScreen } from '../screens/ActivityDetailsScreen';
+import { AttendanceTabsScreen } from '../screens/AttendanceTabsScreen';
 import { Image, Pressable, View, StyleSheet, Text, Platform, Alert } from 'react-native';
 import { Menu } from 'react-native-paper';
 import { supabase } from '../lib/supabase';
@@ -31,6 +32,7 @@ export type CoachTabParamList = {
   CoachDashboard: undefined;
   Manage: { activeTab?: 'teams' | 'players'; teamId?: string };
   Schedule: undefined;
+  Attendance: undefined;
   Payments: { showCollections?: boolean };
   Chat: undefined;
   News: undefined;
@@ -120,9 +122,12 @@ const CoachHeader = () => {
 
   const handleLogout = async () => {
     try {
-      await AsyncStorage.removeItem('coach_data');
-      // The navigation container will automatically handle the navigation
-      // when coach data is cleared
+      // Clear all role data from AsyncStorage to be safe
+      await AsyncStorage.multiRemove(['coach_data', 'admin_data', 'parent_data']);
+      // Call global.reloadRole to update navigation
+      if (global.reloadRole) {
+        global.reloadRole();
+      }
     } catch (error) {
       console.error('Error signing out:', error);
       Alert.alert('Error', 'Failed to log out. Please try again.');
@@ -224,6 +229,16 @@ const TabNavigator = () => {
         }}
       />
       <Tab.Screen
+        name="Attendance"
+        component={AttendanceTabsScreen}
+        options={{
+          tabBarLabel: 'Attendance',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="clipboard-check-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
         name="Payments"
         component={CoachPaymentsScreen}
         options={{
@@ -233,6 +248,7 @@ const TabNavigator = () => {
           ),
         }}
       />
+      {/* Chat tab temporarily hidden
       <Tab.Screen
         name="Chat"
         component={CoachChatScreen}
@@ -243,6 +259,7 @@ const TabNavigator = () => {
           ),
         }}
       />
+      */}
       <Tab.Screen
         name="News"
         component={CoachNewsScreen}

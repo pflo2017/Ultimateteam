@@ -184,15 +184,15 @@ export const AttendanceReportsScreen = () => {
       
       if (userRole === 'admin') {
         // For admin, fetch all teams from their club
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-        
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
         const { data: club } = await supabase
           .from('clubs')
-          .select('id')
+        .select('id')
           .eq('admin_id', user.id)
-          .single();
-          
+        .single();
+
         if (!club) return;
         
         const { data } = await supabase
@@ -201,7 +201,7 @@ export const AttendanceReportsScreen = () => {
           .eq('club_id', club.id)
           .eq('is_active', true)
           .order('name');
-          
+
         if (data) {
           setTeams(data);
           setSelectedTeam(null); // Default to All Teams
@@ -210,7 +210,7 @@ export const AttendanceReportsScreen = () => {
         // For coach, fetch teams using the get_coach_teams function
         const { data, error } = await supabase
           .rpc('get_coach_teams', { p_coach_id: userId });
-          
+
         if (error) {
           console.error('Error fetching teams:', error);
           return;
@@ -552,10 +552,10 @@ export const AttendanceReportsScreen = () => {
       <ScrollView style={{ flex: 1 }}>
         {groupedActivities.map((activity) => (
           <View key={activity.id} style={{ width: '100%' }}>
-            <TouchableOpacity
-              onPress={() => handleActivityPress(activity)}
-              activeOpacity={0.7}
-            >
+          <TouchableOpacity 
+            onPress={() => handleActivityPress(activity)}
+            activeOpacity={0.7}
+          >
               <Card
                 style={[
                   styles.eventCard,
@@ -567,11 +567,11 @@ export const AttendanceReportsScreen = () => {
                   },
                 ]}
               >
-                <Card.Content>
+              <Card.Content>
                   <View style={styles.eventHeader}>
                     <View style={styles.eventType}>
                       <MaterialCommunityIcons 
-                        name={getActivityTypeIcon(activity.type)} 
+                        name={getActivityTypeIcon(activity.type)}
                         size={18} 
                         color={getActivityTypeColor(activity.type)} 
                       />
@@ -598,14 +598,14 @@ export const AttendanceReportsScreen = () => {
                         <Text>{activity.records.length}</Text>
                       </Text>
                       <Text style={styles.attendanceLabel}>present</Text>
-                    </View>
                   </View>
-                </Card.Content>
-              </Card>
-            </TouchableOpacity>
-          </View>
-        ))}
-      </ScrollView>
+                </View>
+              </Card.Content>
+            </Card>
+              </TouchableOpacity>
+                </View>
+              ))}
+            </ScrollView>
     );
   };
 
@@ -658,55 +658,55 @@ export const AttendanceReportsScreen = () => {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { paddingTop: 0 }]}> 
+    <SafeAreaView style={[styles.container, { paddingTop: 0 }]}>
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: SPACING.md, paddingBottom: SPACING.xl }}>
-        {/* Filter row - modern design matching Schedule page */}
-        <View style={styles.filtersContainer}>
-          <View style={styles.filtersRow}>
-            {/* Team Selector */}
-            <TouchableOpacity
-              style={styles.filterButton}
-              onPress={() => setShowTeamFilter(true)}
-            >
-              <MaterialCommunityIcons name="account-group" size={20} color={COLORS.primary} style={styles.filterIcon} />
-              <Text style={styles.filterButtonText} numberOfLines={1}>
-                {getTeamName()}
-              </Text>
-              <MaterialCommunityIcons name="chevron-down" size={20} color={COLORS.grey[400]} />
-            </TouchableOpacity>
+      {/* Filter row - modern design matching Schedule page */}
+      <View style={styles.filtersContainer}>
+        <View style={styles.filtersRow}>
+          {/* Team Selector */}
+          <TouchableOpacity
+            style={styles.filterButton}
+            onPress={() => setShowTeamFilter(true)}
+          >
+            <MaterialCommunityIcons name="account-group" size={20} color={COLORS.primary} style={styles.filterIcon} />
+            <Text style={styles.filterButtonText} numberOfLines={1}>
+              {getTeamName()}
+            </Text>
+            <MaterialCommunityIcons name="chevron-down" size={20} color={COLORS.grey[400]} />
+          </TouchableOpacity>
 
-            {/* Activity Type Selector */}
-            <TouchableOpacity
-              style={styles.filterButton}
-              onPress={() => setShowTypeFilter(true)}
-            >
-              <MaterialCommunityIcons name="filter-variant" size={20} color={COLORS.primary} style={styles.filterIcon} />
-              <Text style={styles.filterButtonText} numberOfLines={1}>
-                {getActivityTypeLabel(selectedType)}
-              </Text>
-              <MaterialCommunityIcons name="chevron-down" size={20} color={COLORS.grey[400]} />
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.filtersRow}>
-            {/* Month Selector */}
-            <TouchableOpacity
-              style={styles.filterButton}
-              onPress={() => setShowMonthFilter(true)}
-            >
-              <MaterialCommunityIcons name="calendar-month" size={20} color={COLORS.primary} style={styles.filterIcon} />
-              <Text style={styles.filterButtonText} numberOfLines={1}>
-                {format(selectedMonth, 'MMMM yyyy')}
-              </Text>
-              <MaterialCommunityIcons name="chevron-down" size={20} color={COLORS.grey[400]} />
-            </TouchableOpacity>
-          </View>
+          {/* Activity Type Selector */}
+          <TouchableOpacity
+            style={styles.filterButton}
+            onPress={() => setShowTypeFilter(true)}
+          >
+            <MaterialCommunityIcons name="filter-variant" size={20} color={COLORS.primary} style={styles.filterIcon} />
+            <Text style={styles.filterButtonText} numberOfLines={1}>
+              {getActivityTypeLabel(selectedType)}
+            </Text>
+            <MaterialCommunityIcons name="chevron-down" size={20} color={COLORS.grey[400]} />
+          </TouchableOpacity>
         </View>
 
-        {/* Activity Cards */}
-        {renderActivityCards()}
+        <View style={styles.filtersRow}>
+          {/* Month Selector */}
+          <TouchableOpacity
+            style={styles.filterButton}
+            onPress={() => setShowMonthFilter(true)}
+          >
+            <MaterialCommunityIcons name="calendar-month" size={20} color={COLORS.primary} style={styles.filterIcon} />
+            <Text style={styles.filterButtonText} numberOfLines={1}>
+              {format(selectedMonth, 'MMMM yyyy')}
+            </Text>
+            <MaterialCommunityIcons name="chevron-down" size={20} color={COLORS.grey[400]} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Activity Cards */}
+      {renderActivityCards()}
       </ScrollView>
-      
+
       {/* Team Filter Modal */}
       <Modal
         visible={showTeamFilter}

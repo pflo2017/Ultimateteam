@@ -62,7 +62,17 @@ export const ParentRegistrationScreen = () => {
     setIsLoading(true);
 
     try {
-      // First check if email already exists in parents table
+      // 1. Create Supabase Auth user
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        phone: phoneNumber,
+        password: password
+      });
+      if (authError) {
+        setError('Could not create account: ' + authError.message);
+        setIsLoading(false);
+        return;
+      }
+      // 2. First check if email already exists in parents table
       const { data: existingParentWithEmail, error: emailCheckError } = await supabase
         .from('parents')
         .select('id')
@@ -71,6 +81,7 @@ export const ParentRegistrationScreen = () => {
 
       if (existingParentWithEmail) {
         setError('This email is already registered. Please try logging in instead.');
+        setIsLoading(false);
         return;
       }
 
@@ -83,10 +94,11 @@ export const ParentRegistrationScreen = () => {
 
       if (existingParentWithPhone) {
         setError('This phone number is already registered. Please try logging in instead.');
+        setIsLoading(false);
         return;
       }
 
-      // Create parent account
+      // Create parent account in parents table
       const { data: parent, error: createError } = await supabase
         .from('parents')
         .insert([{

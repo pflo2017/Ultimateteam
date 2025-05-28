@@ -4,7 +4,7 @@ import { addDays, addWeeks, addMonths, format, parseISO, isBefore, isAfter, isSa
 export type ActivityType = 'training' | 'game' | 'tournament' | 'other';
 
 export interface Activity {
-  id?: string;
+  id: string;
   title: string;
   location: string;
   start_time: string; // ISO date string
@@ -13,6 +13,8 @@ export interface Activity {
   type: ActivityType;
   created_by: string;
   team_id?: string;
+  team_name?: string;
+  teams?: { name: string } | null;
   is_public: boolean;
   additional_info?: string;
   private_notes?: string;
@@ -232,14 +234,21 @@ const generateRecurringInstances = (activity: Activity, startDate: string, endDa
 /**
  * Get activities for a specific date range
  */
-export const getActivitiesByDateRange = async (startDate: string, endDate: string): Promise<ActivitiesResponse> => {
+export const getActivitiesByDateRange = async (startDate: string, endDate: string, teamId?: string): Promise<ActivitiesResponse> => {
   try {
     // Get stored activities from the database
-    const { data, error } = await supabase
+    let query = supabase
       .from('activities')
-      .select('*')
+      .select('*, teams(name)')
       .or(`start_time.gte.${startDate},repeat_until.gte.${startDate}`)
       .order('start_time', { ascending: true });
+
+    // Add team filter if teamId is provided
+    if (teamId) {
+      query = query.eq('team_id', teamId);
+    }
+
+    const { data, error } = await query;
 
     if (error) throw error;
     

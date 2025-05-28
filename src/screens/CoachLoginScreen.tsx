@@ -55,6 +55,10 @@ export const CoachLoginScreen = () => {
       await AsyncStorage.setItem('coach_data', JSON.stringify(coachData));
       console.log('Coach data stored:', coachData);
 
+      // Call global.reloadRole to update navigation
+      if (global.reloadRole) {
+        global.reloadRole();
+      }
     } catch (error) {
       console.error('Login error:', error);
       Alert.alert('Error', 'An unexpected error occurred. Please try again.');

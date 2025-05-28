@@ -23,6 +23,17 @@ export type AdminTabParamList = {
   Payments: undefined;
   Chat: undefined;
   News: undefined;
+  Attendance: undefined;
+};
+
+export type CoachTabParamList = {
+  CoachDashboard: undefined;
+  Manage: undefined;
+  Schedule: undefined;
+  Payments: undefined;
+  Chat: undefined;
+  News: undefined;
+  Attendance: undefined;
 };
 
 export type ParentTabParamList = {
@@ -78,6 +89,7 @@ export type RootStackParamList = {
   CreateActivity: { type: 'practice' | 'match' | 'event' };
   ActivityDetails: { activityId: string };
   EditActivity: { activityId: string };
+  AttendanceReportDetails: { activityId: string };
 };
 
 export type ParentStackParamList = {
