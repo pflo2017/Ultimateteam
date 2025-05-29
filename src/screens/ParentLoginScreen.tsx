@@ -8,23 +8,23 @@ import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import type { RootStackParamList } from '../types/navigation';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import PhoneInput from 'react-native-phone-number-input';
 
 type ParentLoginScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'ParentLogin'>;
 
-const COUNTRY_CODE = '+40';
-
 export const ParentLoginScreen = () => {
-  const [phoneNumber, setPhoneNumber] = useState(COUNTRY_CODE);
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const navigation = useNavigation<ParentLoginScreenNavigationProp>();
+  const phoneInputRef = React.useRef<PhoneInput>(null);
 
   const handleContinue = async () => {
     // Remove spaces from phone number before sending to API
     const cleanedPhoneNumber = phoneNumber.replace(/\s/g, '');
-    
-    if (!isValidRomanianPhoneNumber(cleanedPhoneNumber)) {
-      setError('Please enter a valid Romanian phone number');
+
+    if (!isValidPhoneNumber()) {
+      setError('Please enter a valid phone number');
       return;
     }
 
@@ -60,43 +60,10 @@ export const ParentLoginScreen = () => {
     }
   };
 
-  const isValidRomanianPhoneNumber = (phone: string) => {
-    // Romanian phone numbers: +40 followed by 9 digits
-    // Valid formats: +40721234567, +40 721 234 567
-    const cleanedNumber = phone.replace(/\s/g, '');
-    return /^\+40[0-9]{9}$/.test(cleanedNumber);
-  };
-
-  const formatPhoneNumber = (text: string) => {
-    // Remove any non-digit characters except the plus sign
-    const cleaned = text.replace(/[^\d+]/g, '');
-    
-    // Always keep the country code
-    if (!cleaned.startsWith(COUNTRY_CODE)) {
-      return COUNTRY_CODE;
-    }
-
-    // Format as +40 XXX XXX XXX
-    let formatted = COUNTRY_CODE;
-    const numbers = cleaned.slice(3); // Remove +40
-    
-    if (numbers.length > 0) {
-      formatted += ' ' + numbers.slice(0, 3);
-      if (numbers.length > 3) {
-        formatted += ' ' + numbers.slice(3, 6);
-        if (numbers.length > 6) {
-          formatted += ' ' + numbers.slice(6, 9);
-        }
-      }
-    }
-
-    return formatted;
-  };
-
-  const handlePhoneNumberChange = (text: string) => {
-    const formatted = formatPhoneNumber(text);
-    setPhoneNumber(formatted);
-    if (error) setError('');
+  const isValidPhoneNumber = () => {
+    // Remove spaces and check for + and at least 10 digits
+    const cleaned = phoneNumber.replace(/\s/g, '');
+    return /^\+\d{10,}$/.test(cleaned);
   };
 
   return (
@@ -126,41 +93,56 @@ export const ParentLoginScreen = () => {
             color={COLORS.primary}
           />
           <Text style={styles.title}>Parent Login</Text>
-          <Text style={styles.subtitle}>Enter your Romanian phone number</Text>
+          <Text style={styles.subtitle}>Enter your phone number to continue.</Text>
         </View>
 
         <View style={styles.form}>
+          {/* Phone Number Input with Country Picker */}
           <TextInput
             label="Phone Number"
             value={phoneNumber}
-            onChangeText={handlePhoneNumberChange}
+            onChangeText={text => {
+              let formatted = text;
+              if (formatted.startsWith('0')) {
+                formatted = '+40' + formatted.slice(1);
+              }
+              setPhoneNumber(formatted);
+              if (error) setError('');
+            }}
             mode="flat"
             keyboardType="phone-pad"
             style={styles.input}
-            theme={{ colors: { primary: '#0CC1EC' }}}
+            theme={{ colors: { primary: COLORS.primary }}}
             left={<TextInput.Icon icon="phone" color={COLORS.primary} style={{ marginRight: 30 }} />}
-            error={!!error}
-            maxLength={15} // +40 XXX XXX XXX
-            disabled={isLoading}
+            underlineColor={COLORS.primary}
+            placeholder="e.g. +40 734 108 108"
           />
+          <Text style={styles.helperText}>
+            Please enter your phone number in international format, e.g. +40 734 108 108
+          </Text>
           
           {error ? (
             <Text style={styles.errorText}>{error}</Text>
-          ) : (
-            <Text style={styles.helperText}>Format: +40 XXX XXX XXX</Text>
-          )}
+          ) : null}
 
           <Animated.View 
             entering={FadeInDown.delay(400).duration(1000).springify()}
           >
             <Pressable 
               style={[
-                styles.loginButton, 
+                styles.loginButton,
                 SHADOWS.button,
-                (isLoading || !isValidRomanianPhoneNumber(phoneNumber)) && styles.buttonDisabled
+                isLoading && styles.loginButtonDisabled
               ]}
-              onPress={handleContinue}
-              disabled={isLoading || !isValidRomanianPhoneNumber(phoneNumber)}
+              onPress={() => {
+                const cleaned = phoneNumber.replace(/\s/g, '');
+                if (!/^\+[0-9]{10,}$/.test(cleaned)) {
+                  setError('Please enter your phone number in international format, e.g. +40 734 108 108');
+                  return;
+                }
+                handleContinue();
+              }}
+              disabled={isLoading}
             >
               {isLoading ? (
                 <ActivityIndicator color={COLORS.white} />
@@ -233,8 +215,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: SPACING.md,
   },
-  buttonDisabled: {
-    backgroundColor: COLORS.grey[300],
+  loginButtonDisabled: {
+    opacity: 0.7,
   },
   buttonText: {
     color: COLORS.white,

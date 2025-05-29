@@ -4,6 +4,7 @@ import { PaperProvider, DefaultTheme } from 'react-native-paper';
 import { SplashScreen } from './src/components/SplashScreen';
 import { View, StatusBar, LogBox } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { supabase } from './src/lib/supabase';
 
 const customTheme = {
   ...DefaultTheme,
@@ -15,6 +16,7 @@ const customTheme = {
 
 export default function App() {
   const [isLoading, setIsLoading] = useState(true);
+  const [sessionChecked, setSessionChecked] = useState(false);
 
   // Ignore specific error messages
   useEffect(() => {
@@ -31,6 +33,28 @@ export default function App() {
       'EventEmitter.removeListener',
       'Animated: `useNativeDriver`'
     ]);
+
+    // Restore Supabase session and listen for changes
+    const restoreSession = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        console.log('Supabase session at app start:', session);
+      } catch (e) {
+        console.log('Error restoring Supabase session:', e);
+      } finally {
+        setSessionChecked(true);
+        setIsLoading(false);
+      }
+    };
+    restoreSession();
+
+    // Listen for auth state changes
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      console.log('Supabase auth state changed. New session:', session);
+    });
+    return () => {
+      listener?.subscription?.unsubscribe();
+    };
   }, []);
 
   const handleAnimationFinish = useCallback(() => {
@@ -45,9 +69,9 @@ export default function App() {
         translucent={true}
       />
       <PaperProvider theme={customTheme}>
-        {isLoading ? (
+        {isLoading || !sessionChecked ? (
           <View style={{ flex: 1, backgroundColor: '#ffffff' }}>
-            <SplashScreen onAnimationFinish={handleAnimationFinish} />
+            <SplashScreen onAnimationFinish={() => {}} />
           </View>
         ) : (
           <Navigation />

@@ -22,6 +22,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { ActivityDetailsScreen } from '../screens/ActivityDetailsScreen';
 import { EditActivityScreen } from '../screens/EditActivityScreen';
+import { PostEditorScreen } from '../screens/admin/PostEditorScreen';
 
 // Add global type declaration for reloadRole
 declare global {
@@ -298,6 +299,11 @@ export const ParentNavigator = () => {
               headerTitle: 'Edit Activity',
               headerBackTitle: 'Back',
             }}
+          />
+          <Stack.Screen
+            name="PostEditor"
+            component={PostEditorScreen}
+            options={{ headerShown: false }}
           />
         </Stack.Navigator>
       </View>

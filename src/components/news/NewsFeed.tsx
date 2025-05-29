@@ -1,16 +1,18 @@
 import React, { useEffect, useState } from 'react';
-import { View, FlatList, ActivityIndicator, Text, RefreshControl } from 'react-native';
-import { fetchPosts } from './postsService';
+import { View, FlatList, ActivityIndicator, Text, RefreshControl, Alert } from 'react-native';
+import { fetchPosts, updatePost, deletePost } from './postsService';
 import { Post } from './types';
 import { PostCard } from './PostCard';
 import { COLORS, SPACING } from '../../constants/theme';
 
 interface NewsFeedProps {
   filters?: any; // PostFilters
-  onPressComments: (post: Post) => void;
+  onPressComments?: (post: Post) => void;
+  onEdit?: (post: Post) => void;
+  onDelete?: (post: Post) => void;
 }
 
-export const NewsFeed: React.FC<NewsFeedProps> = ({ filters, onPressComments }) => {
+export const NewsFeed: React.FC<NewsFeedProps> = ({ filters, onPressComments, onEdit, onDelete }) => {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -24,6 +26,7 @@ export const NewsFeed: React.FC<NewsFeedProps> = ({ filters, onPressComments }) 
       setPosts(data);
     } catch (e) {
       setError('Failed to load news.');
+      console.error('Failed to load news:', e);
     } finally {
       setLoading(false);
     }
@@ -38,6 +41,33 @@ export const NewsFeed: React.FC<NewsFeedProps> = ({ filters, onPressComments }) 
     setRefreshing(true);
     await loadPosts();
     setRefreshing(false);
+  };
+
+  const handleEdit = (post: Post) => {
+    console.log('Edit post:', post);
+    // TODO: Open edit modal and handle update
+  };
+
+  const handleDelete = (post: Post) => {
+    Alert.alert(
+      'Delete Post',
+      'Are you sure you want to delete this post?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            const { error } = await deletePost(post.id);
+            if (error) {
+              Alert.alert('Error', 'Failed to delete post.');
+            } else {
+              await loadPosts();
+            }
+          },
+        },
+      ]
+    );
   };
 
   if (loading) {
@@ -56,7 +86,12 @@ export const NewsFeed: React.FC<NewsFeedProps> = ({ filters, onPressComments }) 
       keyExtractor={item => item.id}
       contentContainerStyle={{ padding: SPACING.lg }}
       renderItem={({ item }) => (
-        <PostCard post={item} onPressComments={postId => onPressComments(item)} />
+        <PostCard
+          post={item}
+          onPressComments={() => onPressComments?.(item)}
+          onEdit={onEdit}
+          onDelete={onDelete}
+        />
       )}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
     />

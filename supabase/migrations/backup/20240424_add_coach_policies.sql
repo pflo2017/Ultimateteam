@@ -24,12 +24,6 @@ CREATE POLICY "Teams are viewable by assigned coach"
     USING (
         coach_id IS NOT NULL
         AND is_active = true
-        AND EXISTS (
-            SELECT 1 FROM public.coaches 
-            WHERE coaches.id = teams.coach_id 
-            AND coaches.is_active = true
-            AND coaches.access_code = current_setting('app.coach_access_code', true)
-        )
     );
 
 -- Create policy for coaches to view players in their teams
@@ -42,7 +36,6 @@ CREATE POLICY "Players are viewable by team coach"
             WHERE t.id = players.team_id
             AND t.is_active = true
             AND c.is_active = true
-            AND c.access_code = current_setting('app.coach_access_code', true)
         )
     );
 

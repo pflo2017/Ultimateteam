@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Text, Alert } from 'react-native';
 import { NewsFeed } from '../../components/news/NewsFeed';
 import { Post } from '../../components/news/types';
-import { PostCreationModal } from '../../components/news/PostCreationModal';
 import { CommentModal } from '../../components/news/CommentModal';
 import { COLORS, SPACING } from '../../constants/theme';
 import { supabase } from '../../lib/supabase';
+import { updatePost, deletePost } from '../../components/news/postsService';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { AdminStackParamList } from '../../types/navigation';
 
 // Real createPost function
 const createPost = async (data: { title?: string; content: string; is_general: boolean; team_ids: string[] }) => {
@@ -13,6 +16,7 @@ const createPost = async (data: { title?: string; content: string; is_general: b
   try {
     // Get current user
     const { data: { user } } = await supabase.auth.getUser();
+    console.log('DEBUG: Current user:', user);
     if (!user) throw new Error('Not authenticated');
 
     // Get admin's club
@@ -23,18 +27,28 @@ const createPost = async (data: { title?: string; content: string; is_general: b
       .single();
     if (!club) throw new Error('No club found for admin');
 
+    // Get admin's name
+    const { data: adminProfile } = await supabase
+      .from('admin_profiles')
+      .select('admin_name')
+      .eq('user_id', user.id)
+      .single();
+    if (!adminProfile) throw new Error('No admin profile found');
+
     // Insert post
+    const postPayload = {
+      title: title || null,
+      content,
+      author_id: user.id,
+      author_name: adminProfile.admin_name,
+      author_role: 'admin',
+      is_general,
+      club_id: club.id,
+    };
+    console.log('DEBUG: Post insert payload:', postPayload);
     const { data: post, error: postError } = await supabase
       .from('posts')
-      .insert([
-        {
-          title: title || null,
-          content,
-          author_id: user.id,
-          is_general,
-          club_id: club.id,
-        },
-      ])
+      .insert([postPayload])
       .select()
       .single();
     if (postError) throw postError;
@@ -53,15 +67,40 @@ const createPost = async (data: { title?: string; content: string; is_general: b
   }
 };
 
-// Stubbed onSubmitComment function
+// Real onSubmitComment function
 const onSubmitComment = async (postId: string, content: string): Promise<void> => {
-  // TODO: Replace with real API call
-  console.log('Adding comment to post', postId, ':', content);
-  return new Promise<void>(resolve => setTimeout(resolve, 500));
+  console.log('onSubmitComment called with postId:', postId, 'content:', content);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+  const { data: adminProfile } = await supabase
+    .from('admin_profiles')
+    .select('admin_name')
+    .eq('user_id', user.id)
+    .single();
+  if (!adminProfile) throw new Error('No admin profile found');
+  const payload = {
+    post_id: postId,
+    author_id: user.id,
+    author_name: adminProfile.admin_name,
+    author_role: 'admin',
+    content,
+    is_active: true,
+  };
+  console.log('Inserting comment with payload:', payload);
+  const { data: insertData, error } = await supabase
+    .from('post_comments')
+    .insert([payload])
+    .select('*');
+  console.log('Supabase insert result (data):', insertData);
+  console.log('Supabase insert result (error):', error);
+  if (error) {
+    console.error('Supabase insert error:', error);
+    throw error;
+  }
 };
 
 export const AdminNewsScreen = () => {
-  const [showModal, setShowModal] = useState(false);
+  const navigation = useNavigation<NativeStackNavigationProp<AdminStackParamList>>();
   const [refreshKey, setRefreshKey] = useState(0);
   const [showCommentModal, setShowCommentModal] = useState(false);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
@@ -107,24 +146,35 @@ export const AdminNewsScreen = () => {
     setShowCommentModal(true);
   };
 
-  const handleCreatePost = async (data: any) => {
-    await createPost(data);
-    setRefreshKey(k => k + 1); // trigger NewsFeed refresh
+  const handleCreate = () => {
+    navigation.navigate('PostEditor', {
+      mode: 'create',
+      availableTeams,
+      isAdmin: true,
+      onSave: () => setRefreshKey(k => k + 1),
+    });
+  };
+
+  const handleEdit = (post: Post) => {
+    navigation.navigate('PostEditor', {
+      mode: 'edit',
+      post,
+      availableTeams,
+      isAdmin: true,
+      onSave: () => setRefreshKey(k => k + 1),
+    });
   };
 
   return (
     <View style={styles.container}>
-      <NewsFeed key={refreshKey} onPressComments={handlePressComments} />
-      <TouchableOpacity style={styles.fab} onPress={() => setShowModal(true)}>
+      <NewsFeed
+        key={refreshKey}
+        onPressComments={handlePressComments}
+        onEdit={handleEdit}
+      />
+      <TouchableOpacity style={styles.fab} onPress={handleCreate}>
         <Text style={styles.fabText}>+</Text>
       </TouchableOpacity>
-      <PostCreationModal
-        visible={showModal}
-        onClose={() => setShowModal(false)}
-        onSubmit={handleCreatePost}
-        availableTeams={availableTeams}
-        isAdmin
-      />
       {loadingTeams && (
         <View style={{ position: 'absolute', top: 100, left: 0, right: 0, alignItems: 'center' }}>
           <Text>Loading teams...</Text>
@@ -133,7 +183,10 @@ export const AdminNewsScreen = () => {
       {selectedPost && (
         <CommentModal
           visible={showCommentModal}
-          onClose={() => setShowCommentModal(false)}
+          onClose={() => {
+            setShowCommentModal(false);
+            setRefreshKey(k => k + 1);
+          }}
           post={selectedPost}
           onSubmitComment={onSubmitComment}
         />

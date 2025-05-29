@@ -7,17 +7,40 @@ import { COLORS } from '../../constants/theme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../../lib/supabase';
 
-// Stubbed onSubmitComment function
+// Real onSubmitComment function
 const onSubmitComment = async (postId: string, content: string): Promise<void> => {
-  // TODO: Replace with real API call
-  console.log('Adding comment to post', postId, ':', content);
-  return new Promise<void>(resolve => setTimeout(resolve, 500));
+  console.log('onSubmitComment called with postId:', postId, 'content:', content);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+  const storedParentData = await AsyncStorage.getItem('parent_data');
+  if (!storedParentData) throw new Error('No parent data in storage');
+  const parentData = JSON.parse(storedParentData);
+  const payload = {
+    post_id: postId,
+    author_id: user.id,
+    author_name: parentData.name,
+    author_role: 'parent',
+    content,
+    is_active: true,
+  };
+  console.log('Inserting comment with payload:', payload);
+  const { data, error } = await supabase
+    .from('post_comments')
+    .insert([payload])
+    .select('*');
+  console.log('Supabase insert result (data):', data);
+  console.log('Supabase insert result (error):', error);
+  if (error) {
+    console.error('Supabase insert error:', error);
+    throw error;
+  }
 };
 
 export const ParentNewsScreen = () => {
   const [showCommentModal, setShowCommentModal] = useState(false);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [teamIds, setTeamIds] = useState<string[]>([]);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     const fetchTeamIds = async () => {
@@ -34,6 +57,7 @@ export const ParentNewsScreen = () => {
         if (error) return;
         const ids = Array.from(new Set((children || []).map((c: any) => c.team_id).filter(Boolean)));
         setTeamIds(ids);
+        console.log('Parent teamIds:', ids);
       } catch (err) {
         setTeamIds([]);
       }
@@ -46,13 +70,17 @@ export const ParentNewsScreen = () => {
     setShowCommentModal(true);
   };
 
+  console.log('Rendering NewsFeed with teamIds:', teamIds);
   return (
     <View style={styles.container}>
-      <NewsFeed filters={{ team_ids: teamIds }} onPressComments={handlePressComments} />
+      <NewsFeed key={refreshKey} filters={{ team_ids: teamIds }} onPressComments={handlePressComments} />
       {selectedPost && (
         <CommentModal
           visible={showCommentModal}
-          onClose={() => setShowCommentModal(false)}
+          onClose={() => {
+            setShowCommentModal(false);
+            setRefreshKey(k => k + 1);
+          }}
           post={selectedPost}
           onSubmitComment={onSubmitComment}
         />

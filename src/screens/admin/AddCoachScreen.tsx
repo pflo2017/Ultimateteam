@@ -7,6 +7,7 @@ import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../../lib/supabase';
 import { RootStackParamList } from '../../types/navigation';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import PhoneInput from 'react-native-phone-number-input';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -15,15 +16,7 @@ export const AddCoachScreen = () => {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const navigation = useNavigation<NavigationProp>();
-
-  const generateAccessCode = () => {
-    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let code = 'C-'; // Prefix to distinguish coach codes
-    for (let i = 0; i < 6; i++) {
-      code += characters.charAt(Math.floor(Math.random() * characters.length));
-    }
-    return code;
-  };
+  const phoneInputRef = React.useRef<PhoneInput>(null);
 
   const handleCreateCoach = async () => {
     if (!coachName.trim() || !phoneNumber.trim()) {
@@ -50,18 +43,18 @@ export const AddCoachScreen = () => {
       if (clubError) throw clubError;
       if (!clubData) throw new Error('No club found for this admin');
 
-      const accessCode = generateAccessCode();
-
-      // Check if access code already exists
-      const { data: existingCode } = await supabase
+      // Check if phone number already exists for a coach in this club
+      const { data: existingCoach } = await supabase
         .from('coaches')
         .select('id')
-        .eq('access_code', accessCode)
+        .eq('phone_number', phoneNumber.trim())
+        .eq('club_id', clubData.id)
         .single();
 
-      if (existingCode) {
-        // In the rare case of a collision, generate a new code
-        throw new Error('Access code collision, please try again');
+      if (existingCoach) {
+        Alert.alert('Error', 'A coach with this phone number already exists in this club.');
+        setIsLoading(false);
+        return;
       }
 
       const { error } = await supabase
@@ -72,17 +65,16 @@ export const AddCoachScreen = () => {
             phone_number: phoneNumber.trim(),
             admin_id: user.id,
             club_id: clubData.id,
-            is_active: true,
-            access_code: accessCode
+            is_active: true
           }
         ]);
 
       if (error) throw error;
 
-      // Show success message with the access code
+      // Show success message
       Alert.alert(
         'Coach Created',
-        `Coach has been created successfully!\n\nAccess Code: ${accessCode}\n\nPlease share this code with the coach.`,
+        `Coach has been created successfully!\n\nPhone Number: ${phoneNumber.trim()}\n\nShare this phone number with the coach so they can complete their registration.`,
         [
           { 
             text: 'OK',
@@ -139,19 +131,22 @@ export const AddCoachScreen = () => {
             left={<TextInput.Icon icon="account-tie" color={COLORS.primary} />}
           />
 
-          <TextInput
-            label="Phone Number"
-            value={phoneNumber}
-            onChangeText={setPhoneNumber}
-            mode="outlined"
-            style={styles.input}
-            outlineStyle={styles.inputOutline}
-            contentStyle={styles.inputContent}
-            theme={{ colors: { primary: COLORS.primary }}}
-            placeholder="Enter phone number"
-            keyboardType="phone-pad"
-            left={<TextInput.Icon icon="phone" color={COLORS.primary} />}
-          />
+          {/* Phone Number Input with Country Picker */}
+          {React.createElement(PhoneInput as any, {
+            ref: phoneInputRef,
+            defaultValue: phoneNumber,
+            defaultCode: "RO",
+            layout: "first",
+            onChangeFormattedText: setPhoneNumber,
+            containerStyle: { marginBottom: 16 },
+            textInputProps: {
+              placeholder: 'Enter phone number',
+              keyboardType: 'phone-pad',
+            },
+            textContainerStyle: { backgroundColor: COLORS.background },
+            codeTextStyle: { color: COLORS.text },
+            countryPickerButtonStyle: { borderRadius: 8 },
+          })}
 
           <Pressable 
             onPress={handleCreateCoach}

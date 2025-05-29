@@ -10,6 +10,7 @@ export interface Post {
   author_id?: string;
   author_name?: string;
   author_avatar?: string;
+  author_role?: string;
   created_at: string;
   teams?: TeamInfo[];
   comment_count?: number;

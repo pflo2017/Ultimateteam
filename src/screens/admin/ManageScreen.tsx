@@ -33,7 +33,6 @@ interface Coach {
   id: string;
   name: string;
   phone_number: string;
-  access_code: string;
   created_at: string;
   is_active: boolean;
   teams: {
@@ -211,33 +210,42 @@ export const AdminManageScreen = () => {
 
   const fetchCoaches = async () => {
     try {
-      const { data, error } = await supabase
+      // Get the current user's club ID first
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.error('No user found');
+        return;
+      }
+
+      const { data: club } = await supabase
+        .from('clubs')
+        .select('id')
+        .eq('admin_id', user.id)
+        .single();
+
+      if (!club) {
+        console.error('No club found for user');
+        return;
+      }
+
+      const { data: coachesData, error: coachesError } = await supabase
         .from('coaches')
         .select(`
           id,
           name,
           phone_number,
-          access_code,
           created_at,
           is_active,
-          teams:teams(id, name)
+          teams (
+            id,
+            name
+          )
         `)
-        .eq('is_active', true)
-        .order('name');
+        .eq('club_id', club.id)
+        .eq('is_active', true);
 
-      if (error) throw error;
-
-      const transformedCoaches: Coach[] = data.map(coach => ({
-        id: coach.id,
-        name: coach.name,
-        phone_number: coach.phone_number,
-        access_code: coach.access_code,
-        created_at: coach.created_at,
-        is_active: coach.is_active,
-        teams: coach.teams || []
-      }));
-
-      setCoaches(transformedCoaches);
+      if (coachesError) throw coachesError;
+      setCoaches(coachesData || []);
     } catch (error) {
       console.error('Error fetching coaches:', error);
     }

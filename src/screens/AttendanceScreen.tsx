@@ -406,44 +406,11 @@ export const AttendanceScreen = () => {
       if (storedCoachData) {
         const parsedCoachData = JSON.parse(storedCoachData);
         console.log('Parsed coach data:', JSON.stringify(parsedCoachData, null, 2));
-        
-        if (parsedCoachData.access_code) {
-          // Verify coach access and set the access code in the session
-          const { data: verifyData, error: verifyError } = await supabase
-            .rpc('verify_coach_access', { p_access_code: parsedCoachData.access_code });
-            
-          if (verifyError) {
-            console.error('Error verifying coach access:', verifyError);
-            throw verifyError;
-          }
-          
-          if (!verifyData?.is_valid) {
-            throw new Error('Invalid coach access code');
-          }
-          
-          console.log('Coach verification successful:', verifyData);
-          
-          // Use the get_coach_admin_id RPC function instead of direct query
-          const { data: adminIdData, error: adminIdError } = await supabase
-            .rpc('get_coach_admin_id', { p_access_code: parsedCoachData.access_code });
-            
-          if (adminIdError) {
-            console.error('Error getting admin ID:', adminIdError);
-            throw adminIdError;
-          }
-          
-          if (!adminIdData) {
-            throw new Error('No admin ID found for coach');
-          }
-          
-          // Use the admin's user ID for recording attendance
-          attendanceRecorderId = adminIdData;
-          console.log('Using admin ID for recording:', attendanceRecorderId);
-        } else {
-          console.error('No access_code found in coach data');
-        }
+        // Use coachData.user_id (or current auth user) for attendance recording
+        attendanceRecorderId = parsedCoachData.user_id;
+        console.log('Using coach user_id for recording:', attendanceRecorderId);
       } else if (userRole === 'admin') {
-        // For admins, the userId should be the auth user ID
+        // For admins, the userId is the auth user ID
         attendanceRecorderId = userId;
       }
       

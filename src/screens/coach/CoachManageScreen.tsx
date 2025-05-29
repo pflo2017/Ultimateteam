@@ -72,26 +72,8 @@ export const CoachManageScreen = () => {
       const coachData = JSON.parse(storedCoachData);
       console.log('Loading data for coach:', coachData);
 
-      // Verify coach access
-      const { data: verifyData, error: verifyError } = await supabase
-        .rpc('verify_coach_access', { p_access_code: coachData.access_code });
-
-      if (verifyError) {
-        console.error('Error verifying coach access:', verifyError);
-        Alert.alert('Error', 'Failed to verify coach access. Please try logging in again.');
-        setIsLoading(false);
-        return;
-      }
-
-      if (!verifyData?.is_valid) {
-        console.error('Invalid coach access');
-        Alert.alert('Error', 'Invalid coach access. Please try logging in again.');
-        setIsLoading(false);
-        return;
-      }
-
       // Load teams using the get_coach_teams function
-      console.log('Fetching teams for coach ID:', coachData.id);
+      console.log('Fetching teams for coach (using coach.id):', coachData.id);
       const { data: teamsData, error: teamsError } = await supabase
         .rpc('get_coach_teams', { p_coach_id: coachData.id });
 
@@ -109,8 +91,8 @@ export const CoachManageScreen = () => {
         setTeams(transformedTeams);
       }
 
-      // Load players using the new get_coach_players function
-      console.log('Fetching players for coach ID:', coachData.id);
+      // Load players using the get_coach_players function
+      console.log('Fetching players for coach (using coach.id):', coachData.id);
       const { data: playersData, error: playersError } = await supabase
         .rpc('get_coach_players', { p_coach_id: coachData.id });
 

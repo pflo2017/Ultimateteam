@@ -1,25 +1,49 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { COLORS, SPACING, FONT_SIZES, SHADOWS } from '../../constants/theme';
+import { supabase } from '../../lib/supabase';
+import { useEffect, useState } from 'react';
+import { MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
 
 export interface PostCardProps {
   post: {
     id: string;
     title?: string;
     content: string;
+    author_id?: string;
     author_name?: string;
     author_avatar?: string;
     created_at: string;
     teams?: { id: string; name: string }[];
     comment_count?: number;
     reaction_count?: number;
+    author_role?: string;
   };
   onPressComments: (postId: string) => void;
+  onEdit?: (post: any) => void;
+  onDelete?: (post: any) => void;
 }
 
-export const PostCard: React.FC<PostCardProps> = ({ post, onPressComments }) => {
+export const PostCard: React.FC<PostCardProps> = ({ post, onPressComments, onEdit, onDelete }) => {
+  const [isCreator, setIsCreator] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setIsCreator(Boolean(user && post.author_id && user.id === post.author_id));
+    })();
+  }, [post.author_id]);
+
   return (
     <View style={styles.card}>
+      {isCreator && onEdit && (
+        <TouchableOpacity
+          style={styles.editIconBtn}
+          onPress={() => onEdit(post)}
+        >
+          <MaterialIcons name="edit" size={20} color={COLORS.primary} />
+        </TouchableOpacity>
+      )}
       <View style={styles.header}>
         {post.author_avatar ? (
           <Image source={{ uri: post.author_avatar }} style={styles.avatar} />
@@ -27,7 +51,12 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPressComments }) => 
           <View style={styles.avatarPlaceholder} />
         )}
         <View style={{ flex: 1 }}>
-          <Text style={styles.author}>{post.author_name || 'Unknown'}</Text>
+          <View style={styles.headerRow}>
+            <Text style={styles.author}>{post.author_name || 'Unknown'}</Text>
+          </View>
+          {post.author_role && (
+            <Text style={styles.role}>{post.author_role === 'admin' ? 'admin' : post.author_role}</Text>
+          )}
           <Text style={styles.date}>{new Date(post.created_at).toLocaleString()}</Text>
         </View>
       </View>
@@ -88,6 +117,12 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.md,
     color: COLORS.text,
   },
+  role: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.grey[600],
+    fontWeight: '500',
+    marginBottom: 2,
+  },
   date: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.grey[600],
@@ -140,5 +175,21 @@ const styles = StyleSheet.create({
   reactionText: {
     color: COLORS.grey[600],
     fontSize: FONT_SIZES.sm,
+  },
+  editIconBtn: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: COLORS.primary + '15',
+    borderRadius: 20,
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
 }); 

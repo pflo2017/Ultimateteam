@@ -20,12 +20,20 @@ import { useNavigation, CommonActions } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { PostEditorScreen } from '../screens/admin/PostEditorScreen';
 
 export type CoachStackParamList = {
   CoachTabs: undefined;
   Settings: undefined;
   CreateActivity: { type: 'practice' | 'match' | 'event' };
   ActivityDetails: { activityId: string };
+  PostEditor: {
+    mode: 'create' | 'edit';
+    post?: any;
+    availableTeams?: any[];
+    isAdmin?: boolean;
+    onSave?: () => void;
+  };
 };
 
 export type CoachTabParamList = {
@@ -315,6 +323,11 @@ export const CoachNavigator = () => {
             options={{
               headerShown: false,
             }}
+          />
+          <Stack.Screen
+            name="PostEditor"
+            component={PostEditorScreen}
+            options={{ headerShown: false }}
           />
         </Stack.Navigator>
       </View>

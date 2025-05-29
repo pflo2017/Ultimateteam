@@ -28,6 +28,12 @@ interface PostCreationModalProps {
   availableTeams: TeamInfo[];
   isAdmin?: boolean;
   isCoach?: boolean;
+  initialTitle?: string;
+  initialContent?: string;
+  initialIsGeneral?: boolean;
+  initialTeamIds?: string[];
+  editMode?: boolean;
+  onDelete?: () => void;
 }
 
 export const PostCreationModal: React.FC<PostCreationModalProps> = ({
@@ -37,13 +43,29 @@ export const PostCreationModal: React.FC<PostCreationModalProps> = ({
   availableTeams,
   isAdmin,
   isCoach,
+  initialTitle = '',
+  initialContent = '',
+  initialIsGeneral = false,
+  initialTeamIds = [],
+  editMode = false,
+  onDelete,
 }) => {
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
-  const [isGeneral, setIsGeneral] = useState(false);
-  const [selectedTeams, setSelectedTeams] = useState<string[]>([]);
+  const [title, setTitle] = useState(initialTitle);
+  const [content, setContent] = useState(initialContent);
+  const [isGeneral, setIsGeneral] = useState(initialIsGeneral);
+  const [selectedTeams, setSelectedTeams] = useState<string[]>(initialTeamIds);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (visible) {
+      setTitle(initialTitle);
+      setContent(initialContent);
+      setIsGeneral(initialIsGeneral);
+      setSelectedTeams(initialTeamIds);
+      setError(null);
+    }
+  }, [visible, initialTitle, initialContent, initialIsGeneral, initialTeamIds]);
 
   const handleTeamToggle = (teamId: string) => {
     setSelectedTeams(prev =>
@@ -102,7 +124,7 @@ export const PostCreationModal: React.FC<PostCreationModalProps> = ({
               <TouchableOpacity style={styles.closeBtn} onPress={handleClose} disabled={loading}>
                 <Text style={styles.closeText}>×</Text>
               </TouchableOpacity>
-              <Text style={styles.header}>New Post</Text>
+              <Text style={styles.header}>{editMode ? 'Edit Post' : 'New Post'}</Text>
               <ScrollView keyboardShouldPersistTaps="handled">
                 <TextInput
                   style={styles.input}
@@ -166,10 +188,15 @@ export const PostCreationModal: React.FC<PostCreationModalProps> = ({
                   {loading ? (
                     <ActivityIndicator color={COLORS.white} />
                   ) : (
-                    <Text style={styles.submitText}>Post</Text>
+                    <Text style={styles.submitText}>{editMode ? 'Save' : 'Post'}</Text>
                   )}
                 </TouchableOpacity>
               </View>
+              {editMode && onDelete && (
+                <TouchableOpacity style={styles.deleteBtn} onPress={onDelete} disabled={loading}>
+                  <Text style={styles.deleteBtnText}>Delete Post</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </KeyboardAvoidingView>
         </View>
@@ -294,5 +321,17 @@ const styles = StyleSheet.create({
   submitText: {
     color: COLORS.white,
     fontWeight: 'bold',
+  },
+  deleteBtn: {
+    marginTop: SPACING.md,
+    backgroundColor: COLORS.error,
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  deleteBtnText: {
+    color: COLORS.white,
+    fontWeight: 'bold',
+    fontSize: FONT_SIZES.md,
   },
 }); 

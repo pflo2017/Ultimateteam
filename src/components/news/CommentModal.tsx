@@ -1,13 +1,18 @@
-import React, { useState } from 'react';
-import { Modal, View, Text, TextInput, TouchableOpacity, FlatList, ActivityIndicator, StyleSheet } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { Modal, View, Text, TextInput, TouchableOpacity, FlatList, ActivityIndicator, StyleSheet, Alert } from 'react-native';
 import { COLORS, SPACING, FONT_SIZES } from '../../constants/theme';
 import { Post } from './types';
+import { supabase } from '../../lib/supabase';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
-// Mocked comments for now
-const MOCK_COMMENTS = [
-  { id: 'c1', author: 'Parent Alice', content: 'Great news!', created_at: new Date().toISOString() },
-  { id: 'c2', author: 'Coach John', content: 'Looking forward to it.', created_at: new Date().toISOString() },
-];
+interface Comment {
+  id: string;
+  author_id: string;
+  author_name: string;
+  author_role: string;
+  content: string;
+  created_at: string;
+}
 
 interface CommentModalProps {
   visible: boolean;
@@ -20,7 +25,40 @@ export const CommentModal: React.FC<CommentModalProps> = ({ visible, onClose, po
   const [comment, setComment] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [comments, setComments] = useState(MOCK_COMMENTS);
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [fetching, setFetching] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+  const fetchComments = async () => {
+    setFetching(true);
+    setError(null);
+    try {
+      const { data, error } = await supabase
+        .from('post_comments')
+        .select('id, author_id, author_name, author_role, content, created_at')
+        .eq('post_id', post.id)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setComments(data || []);
+      console.log('fetchComments result:', data);
+    } catch (e) {
+      setError('Failed to load comments.');
+      setComments([]);
+      console.error('Fetch comments error:', e);
+    } finally {
+      setFetching(false);
+    }
+  };
+
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setCurrentUserId(user?.id || null);
+    })();
+    if (visible) fetchComments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, post.id]);
 
   const handleSubmit = async () => {
     setError(null);
@@ -29,18 +67,37 @@ export const CommentModal: React.FC<CommentModalProps> = ({ visible, onClose, po
       return;
     }
     setLoading(true);
+    console.log('handleSubmit called, comment:', comment);
     try {
       await onSubmitComment(post.id, comment.trim());
-      setComments(prev => [
-        { id: Math.random().toString(), author: 'You', content: comment.trim(), created_at: new Date().toISOString() },
-        ...prev,
-      ]);
+      console.log('onSubmitComment finished');
       setComment('');
+      await fetchComments();
+      console.log('fetchComments finished after add');
     } catch (e) {
       setError('Failed to add comment.');
+      console.error('Add comment error:', e);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    Alert.alert(
+      'Delete Comment',
+      'Are you sure you want to delete this comment?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            await supabase.from('post_comments').delete().eq('id', commentId);
+            await fetchComments();
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -48,19 +105,33 @@ export const CommentModal: React.FC<CommentModalProps> = ({ visible, onClose, po
       <View style={styles.overlay}>
         <View style={styles.modal}>
           <Text style={styles.header}>Comments</Text>
-          <FlatList
-            data={comments}
-            keyExtractor={item => item.id}
-            renderItem={({ item }) => (
-              <View style={styles.commentItem}>
-                <Text style={styles.commentAuthor}>{item.author}</Text>
-                <Text style={styles.commentContent}>{item.content}</Text>
-                <Text style={styles.commentDate}>{new Date(item.created_at).toLocaleString()}</Text>
-              </View>
-            )}
-            ListEmptyComponent={<Text style={styles.empty}>No comments yet.</Text>}
-            style={{ flex: 1 }}
-          />
+          {fetching ? (
+            <ActivityIndicator size="large" color={COLORS.primary} style={{ marginVertical: 24 }} />
+          ) : (
+            <FlatList
+              data={comments}
+              keyExtractor={item => item.id}
+              renderItem={({ item }) => (
+                <View style={styles.commentItem}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <View>
+                      <Text style={styles.commentAuthor}>{item.author_name}</Text>
+                      <Text style={styles.commentRole}>{capitalize(item.author_role)}</Text>
+                    </View>
+                    {currentUserId === item.author_id && (
+                      <TouchableOpacity onPress={() => handleDeleteComment(item.id)} style={styles.trashBtn}>
+                        <MaterialCommunityIcons name="trash-can" size={20} color={COLORS.error} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  <Text style={styles.commentContent}>{item.content}</Text>
+                  <Text style={styles.commentDate}>{new Date(item.created_at).toLocaleString()}</Text>
+                </View>
+              )}
+              ListEmptyComponent={<Text style={styles.empty}>No comments yet.</Text>}
+              style={{ flex: 1 }}
+            />
+          )}
           <View style={styles.inputRow}>
             <TextInput
               style={styles.input}
@@ -82,6 +153,10 @@ export const CommentModal: React.FC<CommentModalProps> = ({ visible, onClose, po
     </Modal>
   );
 };
+
+function capitalize(str: string) {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
 
 const styles = StyleSheet.create({
   overlay: {
@@ -114,6 +189,12 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: COLORS.primary,
     fontSize: FONT_SIZES.sm,
+  },
+  commentRole: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.grey[500],
+    fontWeight: 'normal',
+    marginBottom: 2,
   },
   commentContent: {
     color: COLORS.text,
@@ -171,5 +252,9 @@ const styles = StyleSheet.create({
   cancelText: {
     color: COLORS.text,
     fontWeight: 'bold',
+  },
+  trashBtn: {
+    marginLeft: 8,
+    padding: 4,
   },
 }); 

@@ -28,6 +28,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { PostEditorScreen } from '../screens/admin/PostEditorScreen';
 
 const Tab = createBottomTabNavigator<AdminTabParamList>();
 const Stack = createNativeStackNavigator<AdminStackParamList>();
@@ -417,6 +418,11 @@ export const AdminNavigator = () => {
             options={{
               headerShown: false,
             }}
+          />
+          <Stack.Screen
+            name="PostEditor"
+            component={PostEditorScreen}
+            options={{ headerShown: false }}
           />
         </Stack.Navigator>
       </View>

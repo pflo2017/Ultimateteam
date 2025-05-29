@@ -8,10 +8,12 @@ import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import PhoneInput from 'react-native-phone-number-input';
 
 type RootStackParamList = {
   Home: undefined;
   Coach: undefined;
+  CoachResetPassword: { phone: string };
 };
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -22,46 +24,212 @@ interface CoachData {
   club_id: string;
   is_active: boolean;
   phone_number: string;
-  access_code: string;
 }
 
 export const CoachLoginScreen = () => {
-  const [accessCode, setAccessCode] = useState('');
+  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [step, setStep] = useState<'phone' | 'register' | 'login'>('phone');
+  const [coach, setCoach] = useState<any>(null);
   const navigation = useNavigation<NavigationProp>();
+  const phoneInputRef = React.useRef<PhoneInput>(null);
 
-  const handleLogin = async () => {
+  const isValidPhoneNumber = () => {
+    // Remove spaces and check for + and at least 10 digits
+    const cleaned = phone.replace(/\s/g, '');
+    return /^\+\d{10,}$/.test(cleaned);
+  };
+
+  const handlePhoneSubmit = async () => {
+    setIsLoading(true);
+    setError('');
     try {
-      setIsLoading(true);
-      const cleanAccessCode = accessCode.trim().toUpperCase();
+      // Format phone number to E.164 format (e.g., +40712345678)
+      const formattedPhone = phone.trim();
+      console.log('Attempting to login with phone number:', formattedPhone);
+      
+      // First, let's check what coaches exist in the database
+      // (Removed comment and unused query for access_code)
+      
+      const { data: coachData, error: coachError } = await supabase
+        .from('coaches')
+        .select('*')
+        .eq('phone_number', formattedPhone)
+        .single();
 
-      // Verify the coach and get complete data
-      const { data: verifyData, error: verifyError } = await supabase
-        .rpc('verify_coach_access', { p_access_code: cleanAccessCode });
-
-      if (verifyError || !verifyData?.is_valid || !verifyData.coach) {
-        console.error('Error verifying coach:', verifyError);
-        Alert.alert('Error', 'Invalid access code. Please try again.');
+      if (coachError) {
+        console.log('Coach lookup error:', coachError);
+      }
+      
+      if (coachError || !coachData) {
+        setError('No coach found with this phone number. Please contact your administrator.');
+        setIsLoading(false);
         return;
       }
 
-      // Store coach data with access code
-      const coachData = {
-        ...verifyData.coach,
-        access_code: cleanAccessCode // Add the access code to the stored data
-      };
-      
-      await AsyncStorage.setItem('coach_data', JSON.stringify(coachData));
-      console.log('Coach data stored:', coachData);
-
-      // Call global.reloadRole to update navigation
-      if (global.reloadRole) {
-        global.reloadRole();
+      console.log('Found coach:', coachData);
+      setCoach(coachData);
+      if (!coachData.user_id) {
+        setStep('login');
+      } else {
+        setStep('login');
       }
-    } catch (error) {
-      console.error('Login error:', error);
-      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
+    } catch (err) {
+      console.error('Login error:', err);
+      setError('Unexpected error. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRegister = async () => {
+    setIsLoading(true);
+    setError('');
+    if (password.trim() !== confirmPassword.trim()) {
+      setError('Passwords do not match.');
+      setIsLoading(false);
+      return;
+    }
+    try {
+      // Format phone number to E.164 format
+      const formattedPhone = phone.trim();
+      // Register with Supabase Auth (phone+password)
+      const { data, error } = await supabase.auth.signUp({
+        phone: formattedPhone,
+        password: password.trim(),
+        options: email ? { data: { email } } : undefined
+      });
+
+      if (error) {
+        // If user already registered, try to fetch user and update coach row
+        if (error.message && error.message.toLowerCase().includes('user already registered')) {
+          // Try to sign in to get the user id
+          const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
+            phone: formattedPhone,
+            password: password.trim()
+          });
+          if (loginError) {
+            setError('User already registered. Please log in with your password.');
+            setIsLoading(false);
+            return;
+          }
+          const userId = loginData.user?.id;
+          if (userId) {
+            // Update coaches.user_id
+            const { error: updateError } = await supabase
+              .from('coaches')
+              .update({ user_id: userId })
+              .eq('id', coach.id);
+            if (updateError) {
+              setError('User already registered, but failed to link your account. Please contact admin.');
+              setIsLoading(false);
+              return;
+            }
+            // Re-fetch coach data to confirm user_id is set
+            const { data: updatedCoach, error: fetchError } = await supabase
+              .from('coaches')
+              .select('*')
+              .eq('id', coach.id)
+              .single();
+            if (!fetchError && updatedCoach) {
+              setCoach(updatedCoach);
+              setStep('login');
+              setError('');
+              setIsLoading(false);
+              return;
+            }
+          }
+        }
+        setError(error.message);
+        setIsLoading(false);
+        return;
+      }
+
+      // Update coaches.user_id
+      const userId = data.user?.id;
+      if (userId) {
+        const { error: updateError } = await supabase
+          .from('coaches')
+          .update({ user_id: userId })
+          .eq('id', coach.id);
+
+        if (updateError) {
+          console.error('Error updating coach user_id:', updateError);
+          setError('Failed to complete registration. Please try again.');
+          setIsLoading(false);
+          return;
+        } else {
+          console.log('Successfully updated coach user_id:', userId);
+        }
+      } else {
+        console.error('No userId returned from signUp.');
+      }
+
+      // Re-fetch coach data to confirm user_id is set
+      const { data: updatedCoach, error: fetchError } = await supabase
+        .from('coaches')
+        .select('*')
+        .eq('id', coach.id)
+        .single();
+      if (fetchError) {
+        console.error('Error fetching updated coach:', fetchError);
+      } else {
+        setCoach(updatedCoach);
+        console.log('Updated coach after registration:', updatedCoach);
+      }
+
+      // Store coach data in AsyncStorage
+      await AsyncStorage.setItem('coach_data', JSON.stringify({ id: coach.id, name: coach.name, club_id: coach.club_id, is_active: coach.is_active, phone_number: coach.phone_number, user_id: userId }));
+      if (global.reloadRole) global.reloadRole();
+    } catch (err: any) {
+      setError(err.message || 'Registration failed.');
+      console.error('Registration error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleLogin = async () => {
+    setIsLoading(true);
+    setError('');
+    try {
+      // Format phone number to E.164 format
+      const formattedPhone = phone.trim();
+      
+      const { data, error } = await supabase.auth.signInWithPassword({
+        phone: formattedPhone,
+        password: password.trim()
+      });
+
+      if (error) {
+        setError(error.message);
+        setIsLoading(false);
+        return;
+      }
+
+      // If coach.user_id is null, update it now
+      if (coach && !coach.user_id && data.user?.id) {
+        const { error: updateError } = await supabase
+          .from('coaches')
+          .update({ user_id: data.user.id })
+          .eq('id', coach.id);
+        if (updateError) {
+          console.error('Error updating coach user_id after login:', updateError);
+        } else {
+          console.log('Successfully updated coach user_id after login:', data.user.id);
+        }
+      }
+
+      // Store coach data in AsyncStorage
+      await AsyncStorage.setItem('coach_data', JSON.stringify({ id: coach.id, name: coach.name, club_id: coach.club_id, is_active: coach.is_active, phone_number: coach.phone_number, user_id: data.user?.id }));
+      if (global.reloadRole) global.reloadRole();
+    } catch (err: any) {
+      setError(err.message || 'Login failed.');
+      console.error('Login error:', err);
     } finally {
       setIsLoading(false);
     }
@@ -94,34 +262,129 @@ export const CoachLoginScreen = () => {
             color={COLORS.primary}
           />
           <Text style={styles.title}>Coach Login</Text>
-          <Text style={styles.subtitle}>Enter your access code provided by the administrator</Text>
+          <Text style={styles.subtitle}>
+            {step === 'phone' && 'Enter your phone number to continue.'}
+            {step === 'register' && 'Complete your profile to finish registration'}
+            {step === 'login' && 'Enter your password to log in'}
+          </Text>
         </View>
 
         <View style={styles.form}>
-          <TextInput
-            label="Access Code"
-            value={accessCode}
-            onChangeText={setAccessCode}
-            mode="flat"
-            autoCapitalize="characters"
-            style={styles.input}
-            theme={{ colors: { primary: '#0CC1EC' }}}
-            left={<TextInput.Icon icon="key" color={COLORS.primary} style={{ marginRight: 30 }} />}
-          />
-
-          <Animated.View 
-            entering={FadeInDown.delay(400).duration(1000).springify()}
-          >
-            <Pressable 
-              onPress={handleLogin}
-              disabled={isLoading}
-              style={[styles.loginButton, SHADOWS.button, isLoading && styles.loginButtonDisabled]}
-            >
-              <Text style={styles.buttonText}>
-                {isLoading ? 'Logging in...' : 'Login'}
+          {step === 'phone' && (
+            <>
+              <TextInput
+                label="Phone Number"
+                value={phone}
+                onChangeText={text => {
+                  let formatted = text;
+                  if (formatted.startsWith('0')) {
+                    formatted = '+40' + formatted.slice(1);
+                  }
+                  setPhone(formatted);
+                  if (error) setError('');
+                }}
+                mode="flat"
+                keyboardType="phone-pad"
+                style={styles.input}
+                theme={{ colors: { primary: COLORS.primary }}}
+                left={<TextInput.Icon icon="phone" color={COLORS.primary} style={{ marginRight: 30 }} />}
+                underlineColor={COLORS.primary}
+                placeholder="e.g. +40 734 108 108"
+              />
+              <Text style={styles.helperText}>
+                Please enter your phone number in international format, e.g. +40 734 108 108
               </Text>
-            </Pressable>
-          </Animated.View>
+              <Pressable 
+                onPress={() => {
+                  const cleaned = phone.replace(/\s/g, '');
+                  if (!/^\+[0-9]{10,}$/.test(cleaned)) {
+                    setError('Please enter your phone number in international format, e.g. +40 734 108 108');
+                    return;
+                  }
+                  handlePhoneSubmit();
+                }}
+                disabled={isLoading}
+                style={[styles.loginButton, SHADOWS.button, isLoading && styles.loginButtonDisabled]}
+              >
+                <Text style={styles.buttonText}>
+                  {isLoading ? 'Checking...' : 'Continue'}
+                </Text>
+              </Pressable>
+            </>
+          )}
+          {step === 'register' && (
+            <>
+              <TextInput
+                label="Password"
+                value={password}
+                onChangeText={setPassword}
+                mode="flat"
+                secureTextEntry
+                style={styles.input}
+                theme={{ colors: { primary: '#0CC1EC' }}}
+                left={<TextInput.Icon icon="lock" color={COLORS.primary} style={{ marginRight: 30 }} />}
+              />
+              <TextInput
+                label="Confirm Password"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                mode="flat"
+                secureTextEntry
+                style={styles.input}
+                theme={{ colors: { primary: '#0CC1EC' }}}
+                left={<TextInput.Icon icon="lock-check" color={COLORS.primary} style={{ marginRight: 30 }} />}
+              />
+              <TextInput
+                label="Email (optional)"
+                value={email}
+                onChangeText={setEmail}
+                mode="flat"
+                keyboardType="email-address"
+                style={styles.input}
+                theme={{ colors: { primary: '#0CC1EC' }}}
+                left={<TextInput.Icon icon="email" color={COLORS.primary} style={{ marginRight: 30 }} />}
+              />
+              <Pressable 
+                onPress={handleRegister}
+                disabled={isLoading}
+                style={[styles.loginButton, SHADOWS.button, isLoading && styles.loginButtonDisabled]}
+              >
+                <Text style={styles.buttonText}>
+                  {isLoading ? 'Registering...' : 'Register'}
+                </Text>
+              </Pressable>
+            </>
+          )}
+          {step === 'login' && (
+            <>
+              <TextInput
+                label="Password"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                style={styles.input}
+                editable={!isLoading}
+                placeholder="Password"
+                returnKeyType="done"
+              />
+              <Pressable
+                style={{ alignSelf: 'flex-end', marginTop: 8, marginBottom: 16 }}
+                onPress={() => navigation.navigate('CoachResetPassword', { phone: phone.trim() })}
+              >
+                <Text style={{ color: COLORS.primary, fontWeight: 'bold' }}>Forgot Password?</Text>
+              </Pressable>
+              <Pressable 
+                onPress={handleLogin}
+                disabled={isLoading}
+                style={[styles.loginButton, SHADOWS.button, isLoading && styles.loginButtonDisabled]}
+              >
+                <Text style={styles.buttonText}>
+                  {isLoading ? 'Logging in...' : 'Login'}
+                </Text>
+              </Pressable>
+            </>
+          )}
+          {error ? <Text style={{ color: COLORS.error, marginTop: 12 }}>{error}</Text> : null}
         </View>
       </Animated.View>
     </KeyboardAvoidingView>
@@ -195,5 +458,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontFamily: 'Urbanist',
     letterSpacing: 0.2,
+  },
+  helperText: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.grey[600],
+    fontFamily: 'Urbanist',
+    textAlign: 'center',
   },
 }); 

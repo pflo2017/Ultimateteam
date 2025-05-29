@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Text, Alert } from 'react-native';
 import { NewsFeed } from '../../components/news/NewsFeed';
 import { Post } from '../../components/news/types';
 import { PostCreationModal } from '../../components/news/PostCreationModal';
@@ -7,6 +7,9 @@ import { CommentModal } from '../../components/news/CommentModal';
 import { COLORS, SPACING } from '../../constants/theme';
 import { supabase } from '../../lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useNavigation, CommonActions } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { CoachStackParamList } from '../../navigation/CoachNavigator';
 
 // Mocked available teams for coach
 const MOCK_TEAMS = [
@@ -15,34 +18,42 @@ const MOCK_TEAMS = [
 ];
 
 // Real createPost function
-const createPost = async (data: { title?: string; content: string; is_general: boolean; team_ids: string[] }) => {
+export const createPost = async (data: { title?: string; content: string; is_general: boolean; team_ids: string[] }) => {
   const { title, content, is_general, team_ids } = data;
   try {
-    // Get current user
+    // Always get the current authenticated user
     const { data: { user } } = await supabase.auth.getUser();
-    console.log('DEBUG: Current user in createPost:', user);
     if (!user) throw new Error('Not authenticated');
 
-    // Fetch coach id and club id
+    // Fetch coach data from AsyncStorage
     const storedCoachData = await AsyncStorage.getItem('coach_data');
     if (!storedCoachData) throw new Error('No coach data in storage');
     const coachData = JSON.parse(storedCoachData);
+    if (!coachData.club_id) throw new Error('Coach club_id is missing');
 
-    // Insert post
+    // Insert post using the authenticated user's id
     const { data: post, error: postError } = await supabase
       .from('posts')
       .insert([
         {
           title: title || null,
           content,
-          author_id: user.id,
+          author_id: user.id, // Use the authenticated user's id
+          author_name: coachData.name,
+          author_role: 'coach',
           is_general,
           club_id: coachData.club_id,
         },
       ])
       .select()
       .single();
-    if (postError) throw postError;
+
+    if (postError) {
+      console.error('Post insert error:', postError);
+      throw postError;
+    }
+
+    console.log('Post created successfully:', post);
 
     // If not general, insert into post_teams
     if (!is_general && team_ids.length > 0) {
@@ -50,19 +61,46 @@ const createPost = async (data: { title?: string; content: string; is_general: b
       const { error: ptError } = await supabase
         .from('post_teams')
         .insert(postTeams);
-      if (ptError) throw ptError;
+      if (ptError) {
+        console.error('Error inserting post_teams:', ptError);
+        throw ptError;
+      }
     }
+
+    return post;
   } catch (err) {
     console.error('Error creating post:', err);
     throw err;
   }
 };
 
-// Stubbed onSubmitComment function
+// Real onSubmitComment function
 const onSubmitComment = async (postId: string, content: string): Promise<void> => {
-  // TODO: Replace with real API call
-  console.log('Adding comment to post', postId, ':', content);
-  return new Promise<void>(resolve => setTimeout(resolve, 500));
+  console.log('onSubmitComment called with postId:', postId, 'content:', content);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+  const storedCoachData = await AsyncStorage.getItem('coach_data');
+  if (!storedCoachData) throw new Error('No coach data in storage');
+  const coachData = JSON.parse(storedCoachData);
+  const payload = {
+    post_id: postId,
+    author_id: user.id,
+    author_name: coachData.name,
+    author_role: 'coach',
+    content,
+    is_active: true,
+  };
+  console.log('Inserting comment with payload:', payload);
+  const { data: insertData, error } = await supabase
+    .from('post_comments')
+    .insert([payload])
+    .select('*');
+  console.log('Supabase insert result (data):', insertData);
+  console.log('Supabase insert result (error):', error);
+  if (error) {
+    console.error('Supabase insert error:', error);
+    throw error;
+  }
 };
 
 export const CoachNewsScreen = () => {
@@ -72,6 +110,7 @@ export const CoachNewsScreen = () => {
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [availableTeams, setAvailableTeams] = useState<{ id: string; name: string }[]>([]);
   const [loadingTeams, setLoadingTeams] = useState(true);
+  const navigation = useNavigation<NativeStackNavigationProp<CoachStackParamList>>();
 
   useEffect(() => {
     const fetchTeams = async () => {
@@ -113,24 +152,36 @@ export const CoachNewsScreen = () => {
     setShowCommentModal(true);
   };
 
-  const handleCreatePost = async (data: any) => {
-    await createPost(data);
-    setRefreshKey(k => k + 1); // trigger NewsFeed refresh
+  const handleCreate = () => {
+    navigation.navigate('PostEditor', {
+      mode: 'create',
+      availableTeams,
+      isAdmin: false,
+      onSave: () => setRefreshKey(k => k + 1),
+    });
+  };
+
+  const handleEdit = (post: Post) => {
+    navigation.navigate('PostEditor', {
+      mode: 'edit',
+      post,
+      availableTeams,
+      isAdmin: false,
+      onSave: () => setRefreshKey(k => k + 1),
+    });
   };
 
   return (
     <View style={styles.container}>
-      <NewsFeed key={refreshKey} onPressComments={handlePressComments} />
-      <TouchableOpacity style={styles.fab} onPress={() => setShowModal(true)}>
+      <NewsFeed
+        key={refreshKey}
+        filters={{ team_ids: availableTeams.map(t => t.id) }}
+        onPressComments={handlePressComments}
+        onEdit={handleEdit}
+      />
+      <TouchableOpacity style={styles.fab} onPress={handleCreate}>
         <Text style={styles.fabText}>+</Text>
       </TouchableOpacity>
-      <PostCreationModal
-        visible={showModal}
-        onClose={() => setShowModal(false)}
-        onSubmit={handleCreatePost}
-        availableTeams={availableTeams}
-        isCoach
-      />
       {loadingTeams && (
         <View style={{ position: 'absolute', top: 100, left: 0, right: 0, alignItems: 'center' }}>
           <Text>Loading teams...</Text>
@@ -139,7 +190,10 @@ export const CoachNewsScreen = () => {
       {selectedPost && (
         <CommentModal
           visible={showCommentModal}
-          onClose={() => setShowCommentModal(false)}
+          onClose={() => {
+            setShowCommentModal(false);
+            setRefreshKey(k => k + 1);
+          }}
           post={selectedPost}
           onSubmitComment={onSubmitComment}
         />

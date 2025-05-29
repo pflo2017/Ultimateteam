@@ -12,7 +12,6 @@ interface Coach {
   id: string;
   name: string;
   phone_number: string;
-  access_code: string;
   created_at: string;
   is_active: boolean;
   teams: {
@@ -150,41 +149,6 @@ export const ManageCoachesScreen: React.FC<ManageCoachesScreenProps> = ({
                 color: COLORS.text
               }}>{coach.phone_number}</Text>
             </Text>
-          </View>
-          
-          <View style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: SPACING.sm,
-            justifyContent: 'space-between'
-          }}>
-            <View style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: SPACING.sm,
-              flex: 1
-            }}>
-              <MaterialCommunityIcons name="key" size={20} color={COLORS.primary} />
-              <Text style={{
-                fontSize: FONT_SIZES.sm,
-                color: COLORS.grey[600],
-              }}>
-                Access: <Text style={{
-                  fontWeight: '600',
-                  color: COLORS.text
-                }}>{coach.access_code}</Text>
-              </Text>
-            </View>
-            <TouchableOpacity
-              onPress={() => onCopyAccessCode(coach.access_code)}
-              style={{
-                padding: SPACING.xs,
-                backgroundColor: COLORS.primary + '15',
-                borderRadius: 8
-              }}
-            >
-              <MaterialCommunityIcons name="content-copy" size={18} color={COLORS.primary} />
-            </TouchableOpacity>
           </View>
         </View>
         

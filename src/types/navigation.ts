@@ -14,6 +14,13 @@ export type AdminStackParamList = {
   Manage: { activeTab?: CardType; refresh?: boolean };
   CreateActivity: { type: 'practice' | 'match' | 'event' };
   ActivityDetails: { activityId: string };
+  PostEditor: {
+    mode: 'create' | 'edit';
+    post?: any;
+    availableTeams?: any[];
+    isAdmin?: boolean;
+    onSave?: () => void;
+  };
 };
 
 export type AdminTabParamList = {
@@ -99,4 +106,5 @@ export type ParentStackParamList = {
   AddChild: undefined;
   ActivityDetails: { activityId: string };
   EditActivity: { activityId: string };
+  PostEditor: undefined;
 }; 
