@@ -53,8 +53,6 @@ export const CoachLoginScreen = () => {
       console.log('Attempting to login with phone number:', formattedPhone);
       
       // First, let's check what coaches exist in the database
-      // (Removed comment and unused query for access_code)
-      
       const { data: coachData, error: coachError } = await supabase
         .from('coaches')
         .select('*')
@@ -73,9 +71,31 @@ export const CoachLoginScreen = () => {
 
       console.log('Found coach:', coachData);
       setCoach(coachData);
+      
+      // If coach has no user_id, check if there's an auth user with this phone
       if (!coachData.user_id) {
-        setStep('login');
+        console.log('Coach has no user_id. Checking for existing auth user...');
+        
+        // Try to sign in with a dummy password to check if user exists
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          phone: formattedPhone,
+          password: 'this-is-a-dummy-password-that-will-fail'
+        });
+        
+        // If error contains "Invalid login credentials", user exists but password is wrong
+        if (signInError && signInError.message && 
+            (signInError.message.includes('Invalid login credentials') || 
+             signInError.message.includes('Invalid login'))) {
+          console.log('Auth user exists but not linked to coach. Showing login screen.');
+          setStep('login');
+          setIsLoading(false);
+          return;
+        }
+        
+        // Otherwise, this is a new registration
+        setStep('register');
       } else {
+        // Coach already has user_id, proceed to login
         setStep('login');
       }
     } catch (err) {
@@ -95,8 +115,14 @@ export const CoachLoginScreen = () => {
       return;
     }
     try {
-      // Format phone number to E.164 format
-      const formattedPhone = phone.trim();
+      // Ensure phone is in E.164 format
+      let formattedPhone = phone.trim();
+      if (!formattedPhone.startsWith('+')) {
+        setError('Phone number must start with + and country code.');
+        setIsLoading(false);
+        return;
+      }
+      
       // Register with Supabase Auth (phone+password)
       const { data, error } = await supabase.auth.signUp({
         phone: formattedPhone,
@@ -105,89 +131,157 @@ export const CoachLoginScreen = () => {
       });
 
       if (error) {
-        // If user already registered, try to fetch user and update coach row
+        console.error('Supabase signUp error:', error);
+        
+        // Handle the case where user is already registered in Auth but not linked in coaches table
         if (error.message && error.message.toLowerCase().includes('user already registered')) {
-          // Try to sign in to get the user id
-          const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
-            phone: formattedPhone,
-            password: password.trim()
-          });
-          if (loginError) {
-            setError('User already registered. Please log in with your password.');
-            setIsLoading(false);
-            return;
-          }
-          const userId = loginData.user?.id;
-          if (userId) {
-            // Update coaches.user_id
+          console.log('User already exists in Auth. Attempting to sign in and link coach record...');
+          
+          try {
+            // Try to sign in with the provided credentials
+            const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+              phone: formattedPhone,
+              password: password.trim()
+            });
+            
+            if (signInError) {
+              console.error('Error signing in after "already registered" error:', signInError);
+              Alert.alert(
+                'Already Registered', 
+                'This phone number is already registered. Please use your existing password to log in.',
+                [{ text: 'OK', onPress: () => setStep('login') }]
+              );
+              setIsLoading(false);
+              return;
+            }
+            
+            if (!signInData.user) {
+              setError('Failed to retrieve user data after sign-in');
+              setIsLoading(false);
+              return;
+            }
+            
+            // Got the user ID, now update the coach record
+            const userId = signInData.user.id;
+            console.log('Successfully signed in. Linking coach record with Auth user ID:', userId);
+            
             const { error: updateError } = await supabase
               .from('coaches')
               .update({ user_id: userId })
               .eq('id', coach.id);
+              
             if (updateError) {
-              setError('User already registered, but failed to link your account. Please contact admin.');
+              console.error('Error linking coach record to Auth user:', updateError);
+              Alert.alert(
+                'Warning',
+                'Login successful, but failed to link your coach profile. Please contact support.'
+              );
               setIsLoading(false);
               return;
             }
-            // Re-fetch coach data to confirm user_id is set
-            const { data: updatedCoach, error: fetchError } = await supabase
-              .from('coaches')
-              .select('*')
-              .eq('id', coach.id)
-              .single();
-            if (!fetchError && updatedCoach) {
-              setCoach(updatedCoach);
-              setStep('login');
-              setError('');
-              setIsLoading(false);
-              return;
-            }
+            
+            // Store coach data and reload
+            await AsyncStorage.setItem('coach_data', JSON.stringify({ 
+              id: coach.id, 
+              name: coach.name, 
+              club_id: coach.club_id, 
+              is_active: coach.is_active, 
+              phone_number: coach.phone_number, 
+              user_id: userId 
+            }));
+            
+            console.log('Successfully linked coach record to existing Auth user!');
+            if (global.reloadRole) global.reloadRole();
+            return;
+          } catch (err) {
+            console.error('Error during linking process:', err);
+            setError('An error occurred while trying to link your account.');
+            setIsLoading(false);
+            return;
           }
         }
-        setError(error.message);
+        
+        // If not a "user already registered" error, show the general error
+        Alert.alert('Registration Error', error.message);
         setIsLoading(false);
         return;
       }
-
-      // Update coaches.user_id
-      const userId = data.user?.id;
-      if (userId) {
-        const { error: updateError } = await supabase
-          .from('coaches')
-          .update({ user_id: userId })
-          .eq('id', coach.id);
-
-        if (updateError) {
-          console.error('Error updating coach user_id:', updateError);
-          setError('Failed to complete registration. Please try again.');
-          setIsLoading(false);
-          return;
-        } else {
-          console.log('Successfully updated coach user_id:', userId);
-        }
-      } else {
-        console.error('No userId returned from signUp.');
+      
+      if (!data || !data.user) {
+        setError('No user returned from Supabase signUp.');
+        setIsLoading(false);
+        return;
       }
-
+      
+      const userId = data.user.id;
+      console.log('User created with ID:', userId);
+      
+      // Important: Sign in after signup to get a valid session with the right JWT
+      console.log('Signing in to refresh session...');
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        phone: formattedPhone,
+        password: password.trim()
+      });
+      
+      if (signInError) {
+        console.error('Error signing in after registration:', signInError);
+        Alert.alert('Warning', 'Registration succeeded but automatic login failed. Please log out and log in again.');
+      }
+      
+      // Short delay to ensure the session is fully updated
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Update coaches.user_id
+      console.log('Attempting to update coach user_id:', userId, 'for coach:', coach.id);
+      const { error: updateError } = await supabase
+        .from('coaches')
+        .update({ user_id: userId })
+        .eq('id', coach.id);
+        
+      if (updateError) {
+        console.error('Error updating coach user_id:', updateError);
+        Alert.alert('Warning', 
+          'Account created but could not link to your coach profile. Please contact support or try logging in again later.\n\nError: ' + updateError.message
+        );
+        setIsLoading(false);
+        return;
+      } else {
+        console.log('Successfully updated coach user_id:', userId);
+      }
+      
       // Re-fetch coach data to confirm user_id is set
       const { data: updatedCoach, error: fetchError } = await supabase
         .from('coaches')
         .select('*')
         .eq('id', coach.id)
         .single();
+        
       if (fetchError) {
         console.error('Error fetching updated coach:', fetchError);
       } else {
         setCoach(updatedCoach);
         console.log('Updated coach after registration:', updatedCoach);
       }
-
+      
       // Store coach data in AsyncStorage
-      await AsyncStorage.setItem('coach_data', JSON.stringify({ id: coach.id, name: coach.name, club_id: coach.club_id, is_active: coach.is_active, phone_number: coach.phone_number, user_id: userId }));
+      await AsyncStorage.setItem('coach_data', JSON.stringify({ 
+        id: coach.id, 
+        name: coach.name, 
+        club_id: coach.club_id, 
+        is_active: coach.is_active, 
+        phone_number: coach.phone_number, 
+        user_id: userId 
+      }));
+      
+      // Notify the user of success
+      Alert.alert('Registration Successful', 'Your account has been created successfully!');
+      
+      // Reload the app role to go to the coach dashboard
       if (global.reloadRole) global.reloadRole();
     } catch (err: any) {
       setError(err.message || 'Registration failed.');
       console.error('Registration error:', err);
+      Alert.alert('Registration Error', err.message || 'Registration failed.');
     } finally {
       setIsLoading(false);
     }
@@ -211,22 +305,42 @@ export const CoachLoginScreen = () => {
         return;
       }
 
-      // If coach.user_id is null, update it now
-      if (coach && !coach.user_id && data.user?.id) {
-        const { error: updateError } = await supabase
-          .from('coaches')
-          .update({ user_id: data.user.id })
-          .eq('id', coach.id);
-        if (updateError) {
-          console.error('Error updating coach user_id after login:', updateError);
-        } else {
-          console.log('Successfully updated coach user_id after login:', data.user.id);
+      // Always update coach.user_id if it's null and login succeeded
+      if (coach && data.user?.id) {
+        if (!coach.user_id) {
+          console.log('Linking coach record to authenticated user after successful login...');
+          
+          const { error: updateError } = await supabase
+            .from('coaches')
+            .update({ user_id: data.user.id })
+            .eq('id', coach.id);
+            
+          if (updateError) {
+            console.error('Error updating coach user_id after login:', updateError);
+            Alert.alert(
+              'Warning',
+              'Login successful, but could not fully link your coach profile. Some features may be limited.',
+              [{ text: 'OK' }]
+            );
+          } else {
+            console.log('Successfully updated coach user_id after login:', data.user.id);
+            // Update local coach object as well
+            coach.user_id = data.user.id;
+          }
         }
-      }
 
-      // Store coach data in AsyncStorage
-      await AsyncStorage.setItem('coach_data', JSON.stringify({ id: coach.id, name: coach.name, club_id: coach.club_id, is_active: coach.is_active, phone_number: coach.phone_number, user_id: data.user?.id }));
-      if (global.reloadRole) global.reloadRole();
+        // Store coach data in AsyncStorage with the updated user_id
+        await AsyncStorage.setItem('coach_data', JSON.stringify({ 
+          id: coach.id, 
+          name: coach.name, 
+          club_id: coach.club_id, 
+          is_active: coach.is_active, 
+          phone_number: coach.phone_number, 
+          user_id: data.user.id 
+        }));
+        
+        if (global.reloadRole) global.reloadRole();
+      }
     } catch (err: any) {
       setError(err.message || 'Login failed.');
       console.error('Login error:', err);

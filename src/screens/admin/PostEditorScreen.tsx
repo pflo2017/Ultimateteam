@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView, KeyboardAvoidingView, Platform, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView, KeyboardAvoidingView, Platform, TextInput, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, SPACING, FONT_SIZES } from '../../constants/theme';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -9,6 +9,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createPost as createCoachPost } from '../../screens/coach/NewsScreen';
 import { ScrollView as RNScrollView } from 'react-native';
 import { Chip } from 'react-native-paper';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
+import { decode } from 'base64-arraybuffer';
 
 type PostEditorParams = {
   mode: 'create' | 'edit';
@@ -28,6 +31,9 @@ export const PostEditorScreen = () => {
   const [selectedTeams, setSelectedTeams] = useState<string[]>(post?.teams?.map((t: any) => t.id) || (isAdmin ? [] : (availableTeams.length === 1 ? [availableTeams[0].id] : [])));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mediaUrls, setMediaUrls] = useState<string[]>(post?.media_urls || []);
+  const [isUploading, setIsUploading] = useState(false);
+  const [pickedMedia, setPickedMedia] = useState<{ uri: string; type: string }[]>([]);
 
   useEffect(() => {
     setTitle(post?.title || '');
@@ -35,82 +41,79 @@ export const PostEditorScreen = () => {
     setSelectedTeams(post?.teams?.map((t: any) => t.id) || (isAdmin ? [] : (availableTeams.length === 1 ? [availableTeams[0].id] : [])));
   }, [post?.id, availableTeams, isAdmin]);
 
+  const uploadMedia = async (uri: string, type: string) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+    const bucketName = "post-media";
+    const ext = uri.split(".").pop();
+    const fileName = `${user.id}-${Date.now()}.${ext}`;
+    const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+    const { data, error } = await supabase.storage.from(bucketName).upload(fileName, decode(base64), { contentType: type });
+    if (error) throw error;
+    const { data: { publicUrl } } = supabase.storage.from(bucketName).getPublicUrl(fileName);
+    return publicUrl;
+  };
+
+  const pickMedia = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.All, allowsEditing: true, quality: 1 });
+    if (!result.canceled && result.assets[0]) {
+      const { uri, mimeType } = result.assets[0];
+      setPickedMedia(prev => [...prev, { uri, type: mimeType || "image/jpeg" }]);
+    }
+  };
+
   const handleSave = async () => {
     setError(null);
     if (!content.trim()) {
-      setError('Content is required.');
+      setError("Content is required.");
       return;
     }
     if (!isAdmin && selectedTeams.length === 0) {
-      setError('Please select at least one team.');
+      setError("Please select at least one team.");
       return;
     }
     setLoading(true);
     try {
-      if (mode === 'edit') {
-        const { error } = await updatePost(post.id, { title, content });
+      if (mode === "edit") {
+        const { error } = await updatePost(post.id, { title, content, media_urls: mediaUrls } as any);
         if (error) throw error;
       } else {
+        let uploadedUrls: string[] = [];
+        if (pickedMedia.length > 0) {
+          setIsUploading(true);
+          uploadedUrls = await Promise.all(pickedMedia.map(m => uploadMedia(m.uri, m.type)));
+          setIsUploading(false);
+        }
         if (isAdmin) {
-          // Admin create logic
           const { data: { user } } = await supabase.auth.getUser();
-          if (!user) throw new Error('Not authenticated');
-          // Get admin name and club_id
-          const { data: profile, error: profileError } = await supabase
-            .from('admin_profiles')
-            .select('admin_name')
-            .eq('user_id', user.id)
-            .single();
-          if (profileError || !profile) throw new Error('Admin profile not found');
-          const { data: club, error: clubError } = await supabase
-            .from('clubs')
-            .select('id')
-            .eq('admin_id', user.id)
-            .single();
-          if (clubError || !club) throw new Error('Club not found');
-          // Insert post
-          const { data: postData, error: postError } = await supabase
-            .from('posts')
-            .insert([
-              {
-                title: title || null,
-                content,
-                author_id: user.id,
-                author_name: profile.admin_name,
-                author_role: 'admin',
-                is_general: selectedTeams.length === 0,
-                club_id: club.id,
-              },
-            ])
-            .select()
-            .single();
+          if (!user) throw new Error("Not authenticated");
+          const { data: profile, error: profileError } = await supabase.from("admin_profiles").select("admin_name").eq("user_id", user.id).single();
+          if (profileError || !profile) throw new Error("Admin profile not found");
+          const { data: club, error: clubError } = await supabase.from("clubs").select("id").eq("admin_id", user.id).single();
+          if (clubError || !club) throw new Error("Club not found");
+          const { data: postData, error: postError } = await supabase.from("posts").insert([{ title: title || null, content, author_id: user.id, author_name: profile.admin_name, author_role: "admin", is_general: selectedTeams.length === 0, club_id: club.id, media_urls: uploadedUrls }]).select().single();
           if (postError) throw postError;
-          // If teams are selected, insert into post_teams
+        } else {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) throw new Error("Not authenticated");
+          const storedCoachData = await AsyncStorage.getItem("coach_data");
+          if (!storedCoachData) throw new Error("No coach data in storage");
+          const coachData = JSON.parse(storedCoachData);
+          if (!coachData.club_id) throw new Error("Coach club_id is missing");
+          const { data: post, error: postError } = await supabase.from("posts").insert([{ title: title || null, content, author_id: user.id, author_name: coachData.name, author_role: "coach", is_general: false, club_id: coachData.club_id, media_urls: uploadedUrls }]).select().single();
+          if (postError) throw postError;
           if (selectedTeams.length > 0) {
-            const postTeams = selectedTeams.map(team_id => ({ post_id: postData.id, team_id }));
-            const { error: ptError } = await supabase
-              .from('post_teams')
-              .insert(postTeams);
+            const postTeams = selectedTeams.map(team_id => ({ post_id: post.id, team_id }));
+            const { error: ptError } = await supabase.from("post_teams").insert(postTeams);
             if (ptError) throw ptError;
           }
-        } else {
-          // Coach create logic
-          const { data: { user } } = await supabase.auth.getUser();
-          if (!user) throw new Error('Not authenticated');
-          // Only allow posting to coach's teams
-          const { error } = await createCoachPost({
-            title,
-            content,
-            is_general: false,
-            team_ids: selectedTeams,
-          });
-          if (error) throw error;
         }
+        if (route.params?.onSave) route.params.onSave();
+        navigation.goBack();
       }
-      if (route.params && route.params.onSave) route.params.onSave();
-      navigation.goBack();
-    } catch (e: any) {
-      setError(e.message || 'Failed to save post');
+    } catch (err) {
+      console.error("Error saving post:", err);
+      setError("Failed to save post.");
     } finally {
       setLoading(false);
     }
@@ -229,10 +232,43 @@ export const PostEditorScreen = () => {
             returnKeyType="default"
           />
           {error && <Text style={styles.error}>{error}</Text>}
-          <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={loading}>
-            <Text style={styles.saveText}>{mode === 'edit' ? 'Save' : 'Post'}</Text>
+          <TouchableOpacity onPress={pickMedia} disabled={loading || isUploading} style={{ marginVertical: SPACING.md, paddingVertical: SPACING.sm, backgroundColor: COLORS.primary, borderRadius: 8, alignItems: "center" }}>
+            <Text style={{ color: COLORS.white, fontWeight: "bold" }}>Attach Photo/Video</Text>
           </TouchableOpacity>
-          {mode === 'edit' && (
+          {pickedMedia.length > 0 && (
+            <View style={{ flexDirection: "row", flexWrap: "wrap", marginBottom: SPACING.md }}>
+              {pickedMedia.map((m, idx) => (
+                <View key={idx} style={{ margin: 4, position: "relative" }}>
+                  <Image source={{ uri: m.uri }} style={{ width: 80, height: 80, borderRadius: 4 }} />
+                  <TouchableOpacity
+                    onPress={() => { setPickedMedia(prev => prev.filter((_, i) => i !== idx)); }}
+                    style={{ position: "absolute", top: 0, right: 0, backgroundColor: "rgba(0,0,0,0.5)", borderRadius: 12, width: 24, height: 24, alignItems: "center", justifyContent: "center" }}
+                  >
+                    <Text style={{ color: "white", fontSize: 16 }}>×</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+          {mode === "edit" && mediaUrls.length > 0 && (
+            <View style={{ flexDirection: "row", flexWrap: "wrap", marginBottom: SPACING.md }}>
+              {mediaUrls.map((url, idx) => (
+                <View key={idx} style={{ margin: 4, position: "relative" }}>
+                  <Image source={{ uri: url }} style={{ width: 80, height: 80, borderRadius: 4 }} />
+                  <TouchableOpacity
+                    onPress={() => { setMediaUrls(prev => prev.filter((_, i) => i !== idx)); }}
+                    style={{ position: "absolute", top: 0, right: 0, backgroundColor: "rgba(0,0,0,0.5)", borderRadius: 12, width: 24, height: 24, alignItems: "center", justifyContent: "center" }}
+                  >
+                    <Text style={{ color: "white", fontSize: 16 }}>×</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+          <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={loading || isUploading}>
+            <Text style={styles.saveText}>{mode === "edit" ? "Save" : "Post"}</Text>
+          </TouchableOpacity>
+          {mode === "edit" && (
             <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete} disabled={loading}>
               <Text style={styles.deleteBtnText}>Delete Post</Text>
             </TouchableOpacity>

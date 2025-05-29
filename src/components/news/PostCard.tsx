@@ -4,6 +4,8 @@ import { COLORS, SPACING, FONT_SIZES, SHADOWS } from '../../constants/theme';
 import { supabase } from '../../lib/supabase';
 import { useEffect, useState } from 'react';
 import { MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
+import ParsedText from 'react-native-parsed-text';
+import { Linking } from 'react-native';
 
 export interface PostCardProps {
   post: {
@@ -61,7 +63,16 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPressComments, onEdi
         </View>
       </View>
       {post.title ? <Text style={styles.title}>{post.title}</Text> : null}
-      <Text style={styles.content}>{post.content}</Text>
+      {/* Post Content with link support */}
+      <ParsedText
+        style={styles.content}
+        parse={[
+          { type: 'url', style: { color: COLORS.primary, textDecorationLine: 'underline' }, onPress: (url: string) => Linking.openURL(url) },
+        ]}
+        childrenProps={{ allowFontScaling: false }}
+      >
+        {post.content}
+      </ParsedText>
       {post.teams && post.teams.length > 0 && (
         <View style={styles.teamsRow}>
           {post.teams.map(team => (

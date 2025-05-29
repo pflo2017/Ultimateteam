@@ -5,6 +5,7 @@ import { HomeScreen } from '../screens/HomeScreen';
 import { AdminLoginScreen } from '../screens/AdminLoginScreen';
 import { AdminRegisterScreen } from '../screens/AdminRegisterScreen';
 import { CoachLoginScreen } from '../screens/CoachLoginScreen';
+import { CoachResetPasswordScreen } from '../screens/CoachResetPasswordScreen';
 import { ParentLoginScreen } from '../screens/ParentLoginScreen';
 import { ParentTeamCodeScreen } from '../screens/ParentTeamCode';
 import { ParentRegistrationScreen } from '../screens/ParentRegistration';
@@ -199,6 +200,13 @@ export const Navigation = () => {
                   headerShown: false,
                 }}
               />
+              <Stack.Screen
+                name="CoachResetPassword"
+                component={CoachResetPasswordScreen}
+                options={{
+                  headerShown: false,
+                }}
+              />
             </>
           ) : (
             <>
@@ -206,6 +214,7 @@ export const Navigation = () => {
               <Stack.Screen name="AdminLogin" component={AdminLoginScreen} />
               <Stack.Screen name="AdminRegister" component={AdminRegisterScreen} />
               <Stack.Screen name="CoachLogin" component={CoachLoginScreen} />
+              <Stack.Screen name="CoachResetPassword" component={CoachResetPasswordScreen} />
               <Stack.Screen name="ParentLogin" component={ParentLoginScreen} />
               <Stack.Screen name="ParentPasswordLogin" component={ParentPasswordLoginScreen} />
               <Stack.Screen name="ParentResetPassword" component={ParentResetPasswordScreen} />

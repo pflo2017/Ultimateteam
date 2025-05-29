@@ -94,6 +94,7 @@ export const CommentModal: React.FC<CommentModalProps> = ({ visible, onClose, po
           onPress: async () => {
             await supabase.from('post_comments').delete().eq('id', commentId);
             await fetchComments();
+            onClose();
           },
         },
       ]

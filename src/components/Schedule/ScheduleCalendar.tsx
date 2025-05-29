@@ -419,12 +419,9 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
       </ScrollView>
       
       {userRole !== 'parent' && (
-        <FAB
-          icon="plus"
-          style={styles.fab}
-          onPress={onCreateActivity}
-          color={COLORS.white}
-        />
+        <TouchableOpacity style={styles.fab} onPress={onCreateActivity} activeOpacity={0.85}>
+          <Text style={styles.fabText}>+</Text>
+        </TouchableOpacity>
       )}
       
       {/* Activity Type Filter Modal */}
@@ -747,10 +744,19 @@ const styles = StyleSheet.create({
   },
   fab: {
     position: 'absolute',
-    margin: 16,
-    right: 0,
-    bottom: 0,
+    right: 24,
+    bottom: 32,
     backgroundColor: COLORS.primary,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 6,
   },
   repeatIcon: {
     marginLeft: 6,
@@ -828,5 +834,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.grey[600],
     marginBottom: 2,
+  },
+  fabText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: COLORS.white,
   },
 }); 

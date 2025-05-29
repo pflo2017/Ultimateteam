@@ -78,7 +78,7 @@ export const AddCoachScreen = () => {
         [
           { 
             text: 'OK',
-            onPress: () => navigation.navigate('AdminManage', { refresh: true })
+            onPress: () => navigation.navigate('AdminRoot', { screen: 'Manage', params: { activeTab: 'coaches', refresh: true } })
           }
         ]
       );

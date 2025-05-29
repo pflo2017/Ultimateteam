@@ -25,7 +25,7 @@ export type AdminStackParamList = {
 
 export type AdminTabParamList = {
   Home: undefined;
-  Manage: { activeTab?: CardType };
+  Manage: { activeTab?: CardType; refresh?: boolean };
   Schedule: undefined;
   Payments: undefined;
   Chat: undefined;
@@ -58,7 +58,8 @@ export type RootStackParamList = {
   AdminLogin: undefined;
   AdminRegister: undefined;
   CoachLogin: undefined;
-  AdminRoot: { screen?: keyof AdminTabParamList } | undefined;
+  CoachResetPassword: { phone: string };
+  AdminRoot: { screen?: keyof AdminTabParamList; params?: any } | undefined;
   ClubSettings: undefined;
   AddTeam: undefined;
   AddCoach: undefined;

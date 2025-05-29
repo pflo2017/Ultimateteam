@@ -150,45 +150,51 @@ export const AttendanceScreen = () => {
       setIsLoadingTeams(true);
       
       if (userRole === 'admin') {
-        // For admin, fetch all teams from their club
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-        
-        const { data: club } = await supabase
-          .from('clubs')
-          .select('id')
-          .eq('admin_id', user.id)
-          .single();
-          
-        if (!club) return;
-        
-        const { data } = await supabase
+        // For admins, get all active teams
+        const { data, error } = await supabase
           .from('teams')
           .select('id, name')
-          .eq('club_id', club.id)
           .eq('is_active', true)
           .order('name');
           
-        if (data) {
-          setTeams(data);
-        }
-      } else if (userRole === 'coach' && userId) {
-        // For coach, fetch teams using the get_coach_teams function
-        const { data, error } = await supabase
-          .rpc('get_coach_teams', { p_coach_id: userId });
-          
-        if (error) {
-          console.error('Error fetching teams:', error);
-          return;
-        }
+        if (error) throw error;
         
         if (data) {
-          // Transform the data to match the expected format
-          const transformedTeams = data.map((team: { team_id: string; team_name: string }) => ({
+          setTeams(data);
+          // If there's only one team, select it automatically
+          if (data.length === 1) {
+            setSelectedTeam(data[0]);
+          }
+        }
+      } else if (userRole === 'coach') {
+        // Get coach data from storage
+        const coachDataRaw = await AsyncStorage.getItem('coach_data');
+        const coachData = coachDataRaw ? JSON.parse(coachDataRaw) : null;
+        const coachId = coachData?.id;
+
+        if (!coachId) {
+          console.error('No coach ID found in storage');
+          setTeams([]);
+          return;
+        }
+
+        const { data, error } = await supabase
+          .rpc('get_coach_teams', {
+            p_coach_id: coachId
+          });
+          
+        if (error) throw error;
+        
+        if (data) {
+          const formattedTeams = data.map((team: any) => ({
             id: team.team_id,
             name: team.team_name
           }));
-          setTeams(transformedTeams);
+          setTeams(formattedTeams);
+          console.log('Teams for coach:', formattedTeams); // Debug log
+          if (formattedTeams.length === 1) {
+            setSelectedTeam(formattedTeams[0]);
+          }
         }
       }
     } catch (error) {
@@ -351,26 +357,33 @@ export const AttendanceScreen = () => {
 
   // Load attendance records for the selected activity
   const loadAttendance = async () => {
-    if (!selectedActivity?.id) return;
+    if (!selectedActivity) return;
     
     try {
+      setIsLoadingPlayers(true);
+      
+      // Extract the base UUID from the activity ID (remove date suffix if present)
+      const baseActivityId = selectedActivity.id.split('-').slice(0, 5).join('-');
+      
       const { data, error } = await supabase
         .from('activity_attendance')
-        .select('player_id, status')
-        .eq('activity_id', selectedActivity.id);
+        .select('*')
+        .eq('activity_id', baseActivityId);
         
       if (error) throw error;
       
       if (data) {
-        const attendanceRecord: AttendanceRecord = {};
-        data.forEach(record => {
-          attendanceRecord[record.player_id] = record.status;
-        });
-        
-        setAttendance(attendanceRecord);
+        // Convert the array of attendance records to an object keyed by player_id
+        const attendanceMap = data.reduce((acc: AttendanceRecord, record) => {
+          acc[record.player_id] = record.status;
+          return acc;
+        }, {});
+        setAttendance(attendanceMap);
       }
     } catch (error) {
       console.error('Error loading attendance:', error);
+    } finally {
+      setIsLoadingPlayers(false);
     }
   };
 
