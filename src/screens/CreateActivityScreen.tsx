@@ -12,6 +12,7 @@ import { format, addMonths } from 'date-fns';
 import { ActivityType, createActivity, getPlayersByTeamId } from '../services/activitiesService';
 import { RepeatSchedule, RepeatType, DayOfWeek } from '../components/Schedule/RepeatSchedule';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getCoachInternalId, getCoachAuthId } from '../utils/coachUtils';
 
 type CreateActivityScreenRouteProp = RouteProp<RootStackParamList, 'CreateActivity'>;
 
@@ -269,24 +270,13 @@ export const CreateActivityScreen = () => {
     try {
       setIsLoading(true);
       
-      // Get coach data to use directly for created_by
-      const coachData = await AsyncStorage.getItem('coach_data');
-      let coachId = userId; // Default to userId
-      
-      if (coachData) {
-        try {
-          const coach = JSON.parse(coachData);
-          if (coach && coach.id) {
-            coachId = coach.id; // Use coach ID directly
-          }
-        } catch (e) {
-          console.error('Error parsing coach data:', e);
-        }
-      }
+      // Get auth user ID for created_by (activities require auth.users ID)
+      const { data: { user } } = await supabase.auth.getUser();
+      const authUserId = user?.id;
       
       // Basic validation - we need at least a user ID
-      if (!coachId) {
-        throw new Error('Coach ID not available. Please log in again.');
+      if (!authUserId) {
+        throw new Error('User ID not available. Please log in again.');
       }
       
       if (availableTeams.length > 0 && !selectedTeam) {
@@ -304,7 +294,7 @@ export const CreateActivityScreen = () => {
         end_time: endTimeDate.toISOString(),
         duration,
         type: activityType,
-        created_by: coachId,
+        created_by: authUserId, // Use auth user ID as required by the DB schema
         team_id: selectedTeam ? selectedTeam.id : teamId,
         is_public: true,
         additional_info: additionalInfo || undefined,

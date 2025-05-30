@@ -18,6 +18,7 @@ import { format, addWeeks, subWeeks, startOfWeek, endOfWeek, isSameDay } from 'd
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { getCoachInternalId } from '../utils/coachUtils';
 
 type Player = {
   id: string;
@@ -295,16 +296,27 @@ export const AttendanceScreen = () => {
         if (data) {
           setPlayers(data);
         }
-      } else if (userRole === 'coach' && userId) {
-        // For coach, use the get_coach_players function
-        const { data, error } = await supabase
-          .rpc('get_coach_players', { p_coach_id: userId });
-          
-        if (error) {
-          console.error('Error fetching players:', error);
+      } else if (userRole === 'coach') {
+        // Get the internal coach ID using the utility function
+        const coachId = await getCoachInternalId();
+
+        if (!coachId) {
+          console.error('[AttendanceScreen] No coach ID found');
+          setPlayers([]);
           return;
         }
-        
+
+        // For coach, use the get_coach_players function with the internal coach ID
+        const { data, error } = await supabase
+          .rpc('get_coach_players', { p_coach_id: coachId });
+
+        console.log('[AttendanceScreen] get_coach_players data:', data, 'for coach ID:', coachId, 'and teamId:', teamId);
+
+        if (error) {
+          console.error('[AttendanceScreen] Error fetching players:', error);
+          return;
+        }
+
         if (data) {
           // Filter players for the selected team and transform to expected format
           const teamPlayers = data
@@ -315,10 +327,11 @@ export const AttendanceScreen = () => {
               team_id: player.team_id
             }));
           setPlayers(teamPlayers);
+          console.log('[AttendanceScreen] Filtered teamPlayers:', teamPlayers);
         }
       }
     } catch (error) {
-      console.error('Error loading players:', error);
+      console.error('[AttendanceScreen] Error loading players:', error);
     } finally {
       setIsLoadingPlayers(false);
     }
@@ -405,55 +418,82 @@ export const AttendanceScreen = () => {
     }
     try {
       setIsSaving(true);
-      console.log('Activity ID:', selectedActivity.id);
-      console.log('User ID:', userId);
-      console.log('User Role:', userRole);
-
-      // Initialize a variable to hold the user ID that will record attendance
-      let attendanceRecorderId = null;
-
-      // Get coach data to set access code and get admin_id
+      
+      // Extract the base UUID from the activity ID (remove date suffix if present)
+      const baseActivityId = selectedActivity.id.split('-').slice(0, 5).join('-');
+      console.log('[AttendanceScreen] Using base activity ID:', baseActivityId);
+      console.log('[AttendanceScreen] Base activity ID type:', typeof baseActivityId);
+      console.log('[AttendanceScreen] Base activity ID length:', baseActivityId.length);
+      
+      // Get coach data
       const storedCoachData = await AsyncStorage.getItem('coach_data');
-      console.log('Raw stored coach data:', storedCoachData);
+      console.log('[AttendanceScreen] Raw stored coach data:', storedCoachData);
 
-      if (storedCoachData) {
-        const parsedCoachData = JSON.parse(storedCoachData);
-        console.log('Parsed coach data:', JSON.stringify(parsedCoachData, null, 2));
-        // Use coachData.user_id (or current auth user) for attendance recording
-        attendanceRecorderId = parsedCoachData.user_id;
-        console.log('Using coach user_id for recording:', attendanceRecorderId);
-      } else if (userRole === 'admin') {
-        // For admins, the userId is the auth user ID
-        attendanceRecorderId = userId;
+      if (!storedCoachData) {
+        throw new Error('No coach data found');
       }
-      
-      if (!attendanceRecorderId) {
-        throw new Error('No valid user ID available for recording attendance');
-      }
-      
-      console.log('Using attendance recorder ID:', attendanceRecorderId);
-      
-      // Check if the coach has permission to record attendance for this activity
-      console.log('Checking coach permission for activity...');
+
+      const parsedCoachData = JSON.parse(storedCoachData);
+      console.log('[AttendanceScreen] Parsed coach data:', JSON.stringify(parsedCoachData, null, 2));
+
+      // Get the auth user's ID
+      const { data: { user } } = await supabase.auth.getUser();
+      console.log('[AttendanceScreen] Auth user:', user);
+      console.log('[AttendanceScreen] Auth user ID:', user?.id);
+      console.log('[AttendanceScreen] Auth user ID type:', typeof user?.id);
+      console.log('[AttendanceScreen] Auth user ID length:', user?.id?.length);
+
+      // Use auth user's ID for recorded_by as required by the database schema
+      // There's a mismatch between the DB schema (requires auth.users(id)) and the RLS policy (checks for coaches.id)
+      const attendanceRecorderId = user?.id;
+      console.log('[AttendanceScreen] Using auth user ID for recording:', attendanceRecorderId);
+      console.log('[AttendanceScreen] Auth user ID type:', typeof attendanceRecorderId);
+      console.log('[AttendanceScreen] Auth user ID length:', attendanceRecorderId?.length);
+      console.log('[AttendanceScreen] Coach ID from data:', parsedCoachData.id);
+
+      // Debug: Check if the activity exists and is linked to the coach's team
       const { data: activityData, error: activityError } = await supabase
         .from('activities')
-        .select('team_id')
-        .eq('id', selectedActivity.id)
+        .select('id, team_id')
+        .eq('id', baseActivityId)
         .single();
       
-      console.log('Activity data:', activityData, 'Error:', activityError);
-      
-      if (activityData && activityData.team_id) {
+      console.log('[AttendanceScreen] Activity data:', activityData, 'Error:', activityError);
+      if (activityData) {
+        console.log('[AttendanceScreen] Activity ID type:', typeof activityData.id);
+        console.log('[AttendanceScreen] Activity ID length:', activityData.id.length);
+      }
+
+      if (activityData) {
         const { data: teamData, error: teamError } = await supabase
           .from('teams')
-          .select('coach_id')
+          .select('id, coach_id')
           .eq('id', activityData.team_id)
           .single();
           
-        console.log('Team data:', teamData, 'Error:', teamError);
-        
-        if (teamData && teamData.coach_id) {
-          console.log('Coach ID for team:', teamData.coach_id);
+        console.log('[AttendanceScreen] Team data:', teamData, 'Error:', teamError);
+        if (teamData) {
+          console.log('[AttendanceScreen] Team ID type:', typeof teamData.id);
+          console.log('[AttendanceScreen] Team ID length:', teamData.id.length);
+          console.log('[AttendanceScreen] Team coach_id type:', typeof teamData.coach_id);
+          console.log('[AttendanceScreen] Team coach_id length:', teamData.coach_id.length);
+          console.log('[AttendanceScreen] Coach matches team coach:', parsedCoachData.id === teamData.coach_id);
+        }
+
+        if (teamData) {
+          const { data: coachData, error: coachError } = await supabase
+            .from('coaches')
+            .select('id, is_active')
+            .eq('id', teamData.coach_id)
+            .single();
+            
+          console.log('[AttendanceScreen] Coach data:', coachData, 'Error:', coachError);
+          if (coachData) {
+            console.log('[AttendanceScreen] Coach ID type:', typeof coachData.id);
+            console.log('[AttendanceScreen] Coach ID length:', coachData.id.length);
+          }
+          console.log('[AttendanceScreen] Coach ID match:', coachData?.id === attendanceRecorderId);
+          console.log('[AttendanceScreen] Coach is active:', coachData?.is_active);
         }
       }
       
@@ -461,40 +501,39 @@ export const AttendanceScreen = () => {
       const attendanceRecords = Object.entries(attendance)
         .filter(([_, status]) => status !== null) // Only include players with a status
         .map(([playerId, status]) => ({
-          activity_id: selectedActivity.id,
+          activity_id: baseActivityId,
           player_id: playerId,
-          status: status, // status is already 'present' or 'absent'
-          recorded_by: attendanceRecorderId, // Use the admin_id (auth user ID)
-          recorded_at: new Date().toISOString(),
-          coach_name: storedCoachData ? JSON.parse(storedCoachData).name : null // Add the coach's name
+          status: status,
+          recorded_by: attendanceRecorderId, // Use auth user's ID as required by DB schema
+          recorded_at: new Date().toISOString()
         }));
 
-      console.log('Attendance records to save:', attendanceRecords.length);
+      console.log('[AttendanceScreen] Attendance records to save:', JSON.stringify(attendanceRecords, null, 2));
       
       if (attendanceRecords.length > 0) {
-        // Use upsert operation directly - this will update existing records or insert new ones
-        // The unique constraint on (activity_id, player_id) will ensure we update existing records
         const { error } = await supabase
           .from('activity_attendance')
           .upsert(attendanceRecords, { 
             onConflict: 'activity_id,player_id', 
-            ignoreDuplicates: false // set to false to update existing records
+            ignoreDuplicates: false
           });
 
         if (error) {
-          console.error('Error saving attendance:', error);
+          console.error('[AttendanceScreen] Error saving attendance:', error);
+          console.error('[AttendanceScreen] Full error details:', JSON.stringify(error, null, 2));
           throw error;
         }
         
-        console.log('Attendance records successfully upserted');
+        console.log('[AttendanceScreen] Attendance records successfully upserted');
       } else {
-        console.log('No attendance records to save');
+        console.log('[AttendanceScreen] No attendance records to save');
       }
       
       Alert.alert('Success', 'Attendance saved successfully');
     } catch (error) {
-      console.error('Error saving attendance:', error);
-      Alert.alert('Error', `Failed to save attendance: ${JSON.stringify(error)}`);
+      console.error('[AttendanceScreen] Error saving attendance:', error);
+      console.error('[AttendanceScreen] Full error details:', JSON.stringify(error, null, 2));
+      Alert.alert('Error', `Failed to save attendance: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsSaving(false);
     }

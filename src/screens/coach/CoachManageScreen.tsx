@@ -61,50 +61,68 @@ export const CoachManageScreen = () => {
     try {
       setIsLoading(true);
       const storedCoachData = await AsyncStorage.getItem('coach_data');
-      console.log('Stored coach data:', storedCoachData);
+      console.log('[DEBUG] Stored coach data:', storedCoachData);
       
       if (!storedCoachData) {
-        console.log('No stored coach data found');
+        console.log('[DEBUG] No stored coach data found');
         setIsLoading(false);
         return;
       }
 
       const coachData = JSON.parse(storedCoachData);
-      console.log('Loading data for coach:', coachData);
+      console.log('[DEBUG] Loading data for coach:', {
+        id: coachData.id,
+        name: coachData.name,
+        access_code: coachData.access_code
+      });
 
       // Load teams using the get_coach_teams function
-      console.log('Fetching teams for coach (using coach.id):', coachData.id);
+      console.log('[DEBUG] Fetching teams for coach (using coach.id):', coachData.id);
       const { data: teamsData, error: teamsError } = await supabase
         .rpc('get_coach_teams', { p_coach_id: coachData.id });
 
       if (teamsError) {
-        console.error('Error fetching teams:', teamsError);
+        console.error('[DEBUG] Error fetching teams:', teamsError);
         Alert.alert('Error', 'Failed to load teams. Please try again.');
       } else {
-        console.log('Teams fetched:', teamsData);
+        console.log('[DEBUG] Teams fetched:', teamsData);
         const transformedTeams = (teamsData || []).map((team: { team_id: string; team_name: string; player_count?: number }) => ({
           id: team.team_id,
           name: team.team_name,
           players_count: team.player_count || 0
         }));
-        console.log('Transformed teams:', transformedTeams);
+        console.log('[DEBUG] Transformed teams:', transformedTeams);
         setTeams(transformedTeams);
       }
 
       // Load players using the get_coach_players function
-      console.log('Fetching players for coach (using coach.id):', coachData.id);
+      console.log('[DEBUG] Fetching players for coach (using coach.id):', coachData.id);
       const { data: playersData, error: playersError } = await supabase
         .rpc('get_coach_players', { p_coach_id: coachData.id });
 
       if (playersError) {
-        console.error('Error fetching players:', playersError);
+        console.error('[DEBUG] Error fetching players:', playersError);
         Alert.alert('Error', 'Failed to load players. Please try again.');
         setPlayers([]);
       } else {
-        console.log('Players fetched from RPC:', playersData);
+        console.log('[DEBUG] Players fetched from RPC:', {
+          count: playersData?.length || 0,
+          data: playersData?.map((p: { 
+            player_id: string; 
+            player_name: string; 
+            team_id: string; 
+            team_name: string; 
+          }) => ({
+            id: p.player_id,
+            name: p.player_name,
+            team_id: p.team_id,
+            team_name: p.team_name
+          }))
+        });
         
         // If no players data, set empty array and continue
         if (!playersData || playersData.length === 0) {
+          console.log('[DEBUG] No players data returned from RPC');
           setPlayers([]);
           return;
         }

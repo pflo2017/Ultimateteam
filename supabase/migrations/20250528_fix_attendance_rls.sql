@@ -1,14 +1,14 @@
--- Drop existing policies to start fresh
-DROP POLICY IF EXISTS "Coaches can view attendance" ON activity_attendance;
+-- Drop existing policies
+DROP POLICY IF EXISTS "Emergency direct coach fix" ON activity_attendance;
+DROP POLICY IF EXISTS "Direct coach can record attendance" ON activity_attendance;
 DROP POLICY IF EXISTS "Coaches can record attendance" ON activity_attendance;
 DROP POLICY IF EXISTS "Coaches can update their attendance records" ON activity_attendance;
-DROP POLICY IF EXISTS "Admins can manage all attendance" ON activity_attendance;
-DROP POLICY IF EXISTS "Parents can view their children's attendance" ON activity_attendance;
+DROP POLICY IF EXISTS "Coaches can delete attendance" ON activity_attendance;
 
 -- Grant necessary permissions
 GRANT SELECT, INSERT, UPDATE, DELETE ON activity_attendance TO authenticated;
 
--- Allow coaches to view attendance for their team's activities (simplified policy)
+-- Allow coaches to view attendance for their team's activities
 CREATE POLICY "Coaches can view attendance"
 ON activity_attendance
 FOR SELECT
@@ -19,12 +19,15 @@ USING (
     JOIN teams t ON a.team_id = t.id
     JOIN coaches c ON t.coach_id = c.id
     WHERE a.id = activity_attendance.activity_id 
-    AND c.admin_id = auth.uid()
+    AND (
+      c.admin_id = auth.uid()
+      OR c.id::text = auth.uid()
+    )
     AND c.is_active = true
   )
 );
 
--- Allow coaches to record attendance for their team's activities (simplified policy)
+-- Allow coaches to record attendance for their team's activities
 CREATE POLICY "Coaches can record attendance"
 ON activity_attendance
 FOR INSERT
@@ -35,13 +38,12 @@ WITH CHECK (
     JOIN teams t ON a.team_id = t.id
     JOIN coaches c ON t.coach_id = c.id
     WHERE a.id = activity_attendance.activity_id 
-    AND c.admin_id = auth.uid()
+    AND c.id = activity_attendance.recorded_by::uuid
     AND c.is_active = true
   )
-  AND recorded_by = auth.uid()
 );
 
--- Allow coaches to update attendance they recorded (simplified policy)
+-- Allow coaches to update attendance they recorded
 CREATE POLICY "Coaches can update their attendance records"
 ON activity_attendance
 FOR UPDATE
@@ -52,10 +54,9 @@ USING (
     JOIN teams t ON a.team_id = t.id
     JOIN coaches c ON t.coach_id = c.id
     WHERE a.id = activity_attendance.activity_id 
-    AND c.admin_id = auth.uid()
+    AND c.id = activity_attendance.recorded_by::uuid
     AND c.is_active = true
   )
-  AND recorded_by = auth.uid()
 );
 
 -- Allow coaches to delete attendance for their team's activities
@@ -69,7 +70,7 @@ USING (
     JOIN teams t ON a.team_id = t.id
     JOIN coaches c ON t.coach_id = c.id
     WHERE a.id = activity_attendance.activity_id 
-    AND c.admin_id = auth.uid()
+    AND c.id = activity_attendance.recorded_by::uuid
     AND c.is_active = true
   )
 );
@@ -83,20 +84,5 @@ USING (
   EXISTS (
     SELECT 1 FROM admin_profiles 
     WHERE user_id = auth.uid()
-  )
-);
-
--- Allow parents to view attendance for their children
-CREATE POLICY "Parents can view their children's attendance"
-ON activity_attendance
-FOR SELECT
-TO authenticated
-USING (
-  EXISTS (
-    SELECT 1 FROM parent_children pc
-    JOIN players p ON p.name = pc.full_name
-    WHERE pc.parent_id = auth.uid()
-    AND pc.is_active = true
-    AND p.id = activity_attendance.player_id
   )
 ); 

@@ -10,6 +10,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, CommonActions } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { CoachStackParamList } from '../../navigation/CoachNavigator';
+import { getCoachInternalId } from '../../utils/coachUtils';
 
 // Mocked available teams for coach
 const MOCK_TEAMS = [
@@ -116,17 +117,20 @@ export const CoachNewsScreen = () => {
     const fetchTeams = async () => {
       setLoadingTeams(true);
       try {
-        // Use the same logic as Schedule/Create Activity: get coachData from AsyncStorage
-        const storedCoachData = await AsyncStorage.getItem('coach_data');
-        if (!storedCoachData) {
+        // Use the utility function to get the coach's internal ID
+        const coachId = await getCoachInternalId();
+        
+        if (!coachId) {
+          console.error('[CoachNewsScreen] No coach ID found');
           setAvailableTeams([]);
           setLoadingTeams(false);
           return;
         }
-        const coachData = JSON.parse(storedCoachData);
-        // Use the get_coach_teams RPC to get teams
+        
+        // Use the get_coach_teams RPC with the internal coach ID
         const { data: teamsData, error } = await supabase
-          .rpc('get_coach_teams', { p_coach_id: coachData.id });
+          .rpc('get_coach_teams', { p_coach_id: coachId });
+          
         if (error) {
           console.error('Error fetching teams:', error);
           setAvailableTeams([]);

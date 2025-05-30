@@ -181,38 +181,67 @@ export const AttendanceReportsScreen = () => {
   const loadTeams = async () => {
     try {
       setIsLoadingTeams(true);
+      console.log('[AttendanceReportsScreen] Loading teams for user role:', userRole);
       
       if (userRole === 'admin') {
         // For admin, fetch all teams from their club
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          console.error('[AttendanceReportsScreen] No auth user found');
+          return;
+        }
 
         const { data: club } = await supabase
           .from('clubs')
-        .select('id')
+          .select('id')
           .eq('admin_id', user.id)
-        .single();
+          .single();
 
-        if (!club) return;
+        if (!club) {
+          console.error('[AttendanceReportsScreen] No club found for admin');
+          return;
+        }
         
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('teams')
           .select('id, name')
           .eq('club_id', club.id)
           .eq('is_active', true)
           .order('name');
 
+        if (error) {
+          console.error('[AttendanceReportsScreen] Error fetching teams:', error);
+          return;
+        }
+
         if (data) {
+          console.log('[AttendanceReportsScreen] Loaded', data.length, 'teams for admin');
           setTeams(data);
           setSelectedTeam(null); // Default to All Teams
         }
-      } else if (userRole === 'coach' && userId) {
-        // For coach, fetch teams using the get_coach_teams function
+      } else if (userRole === 'coach') {
+        // For coach, get coach ID from storage and use get_coach_teams function
+        const coachDataRaw = await AsyncStorage.getItem('coach_data');
+        if (!coachDataRaw) {
+          console.error('[AttendanceReportsScreen] No coach data found in storage');
+          return;
+        }
+        
+        const coachData = JSON.parse(coachDataRaw);
+        const coachId = coachData?.id;
+        
+        if (!coachId) {
+          console.error('[AttendanceReportsScreen] No coach ID found in storage');
+          return;
+        }
+        
+        console.log('[AttendanceReportsScreen] Using coach ID for teams:', coachId);
+        
         const { data, error } = await supabase
-          .rpc('get_coach_teams', { p_coach_id: userId });
+          .rpc('get_coach_teams', { p_coach_id: coachId });
 
         if (error) {
-          console.error('Error fetching teams:', error);
+          console.error('[AttendanceReportsScreen] Error fetching teams:', error);
           return;
         }
         
@@ -222,12 +251,15 @@ export const AttendanceReportsScreen = () => {
             id: team.team_id,
             name: team.team_name
           }));
+          console.log('[AttendanceReportsScreen] Loaded', transformedTeams.length, 'teams for coach:', transformedTeams);
           setTeams(transformedTeams);
           setSelectedTeam(null); // Default to All Teams
+        } else {
+          console.log('[AttendanceReportsScreen] No teams found for coach');
         }
       }
     } catch (error) {
-      console.error('Error loading teams:', error);
+      console.error('[AttendanceReportsScreen] Error loading teams:', error);
     } finally {
       setIsLoadingTeams(false);
     }
@@ -237,6 +269,11 @@ export const AttendanceReportsScreen = () => {
   const loadAttendanceRecords = async () => {
     try {
       setIsLoading(true);
+      console.log('[AttendanceReportsScreen] Loading attendance records...');
+      console.log('[AttendanceReportsScreen] Selected team:', selectedTeam);
+      console.log('[AttendanceReportsScreen] All teams:', teams);
+      console.log('[AttendanceReportsScreen] Date range:', dateRange.start.toISOString(), 'to', dateRange.end.toISOString());
+      console.log('[AttendanceReportsScreen] Selected type:', selectedType);
       
       // Cast the activity_type to explicitly handle the type compatibility
       let activityTypeParam = null;
@@ -253,13 +290,16 @@ export const AttendanceReportsScreen = () => {
         
       // Apply team filter if a specific team is selected
       if (selectedTeam) {
+        console.log('[AttendanceReportsScreen] Filtering by team:', selectedTeam.id);
         activitiesQuery = activitiesQuery.eq('team_id', selectedTeam.id);
       } else if (teams.length > 0) {
         // If "All Teams" is selected, include all teams the user has access to
         const teamIds = teams.map(team => team.id);
+        console.log('[AttendanceReportsScreen] Filtering by all teams:', teamIds);
         activitiesQuery = activitiesQuery.in('team_id', teamIds);
       } else {
         // No teams available
+        console.log('[AttendanceReportsScreen] No teams available');
         setAttendanceRecords([]);
         setIsLoading(false);
         return;
@@ -268,9 +308,11 @@ export const AttendanceReportsScreen = () => {
       const { data: activitiesData, error: activitiesError } = await activitiesQuery;
         
       if (activitiesError) {
-        console.error('Error loading activities:', activitiesError);
+        console.error('[AttendanceReportsScreen] Error loading activities:', activitiesError);
         throw activitiesError;
       }
+      
+      console.log('[AttendanceReportsScreen] Activities found:', activitiesData?.length || 0);
       
       // Filter by activity type if needed
       let filteredActivities = activitiesData || [];
@@ -278,9 +320,11 @@ export const AttendanceReportsScreen = () => {
         filteredActivities = filteredActivities.filter(activity => 
           activity.type === activityTypeParam
         );
+        console.log('[AttendanceReportsScreen] Activities after type filter:', filteredActivities.length);
       }
       
       if (filteredActivities.length === 0) {
+        console.log('[AttendanceReportsScreen] No activities match the criteria');
         setAttendanceRecords([]);
         setIsLoading(false);
         return;
@@ -288,6 +332,7 @@ export const AttendanceReportsScreen = () => {
       
       // Step 2: Get all attendance records for these activities
       const activityIds = filteredActivities.map(a => a.id);
+      console.log('[AttendanceReportsScreen] Searching for attendance records for activities:', activityIds);
       
       const { data: attendanceData, error: attendanceError } = await supabase
         .from('activity_attendance')
@@ -295,18 +340,18 @@ export const AttendanceReportsScreen = () => {
         .in('activity_id', activityIds);
         
       if (attendanceError) {
-        console.error('Error loading attendance records:', attendanceError);
+        console.error('[AttendanceReportsScreen] Error loading attendance records:', attendanceError);
         throw attendanceError;
       }
       
       if (!attendanceData || attendanceData.length === 0) {
-        console.log('No attendance records found for the selected activities');
+        console.log('[AttendanceReportsScreen] No attendance records found for the selected activities');
         setAttendanceRecords([]);
         setIsLoading(false);
         return;
       }
       
-      console.log(`Found ${attendanceData.length} attendance records`);
+      console.log(`[AttendanceReportsScreen] Found ${attendanceData.length} attendance records`);
       
       // Step 3: Get player details for these records
       const playerIds = [...new Set(attendanceData.map(record => record.player_id))];
@@ -317,7 +362,7 @@ export const AttendanceReportsScreen = () => {
         .in('id', playerIds);
         
       if (playersError) {
-        console.error('Error loading players:', playersError);
+        console.error('[AttendanceReportsScreen] Error loading players:', playersError);
         throw playersError;
       }
       
@@ -330,7 +375,7 @@ export const AttendanceReportsScreen = () => {
         .in('id', teamIds);
         
       if (teamsError) {
-        console.error('Error loading teams:', teamsError);
+        console.error('[AttendanceReportsScreen] Error loading teams:', teamsError);
         throw teamsError;
       }
       
@@ -394,11 +439,11 @@ export const AttendanceReportsScreen = () => {
         };
       });
       
-      console.log(`Formatted ${formattedRecords.length} attendance records`);
+      console.log(`[AttendanceReportsScreen] Formatted ${formattedRecords.length} attendance records`);
       setAttendanceRecords(formattedRecords);
       
     } catch (error) {
-      console.error('Error loading attendance records:', error);
+      console.error('[AttendanceReportsScreen] Error loading attendance records:', error);
       setAttendanceRecords([]);
     } finally {
       setIsLoading(false);
