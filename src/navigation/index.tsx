@@ -24,6 +24,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { RootStackParamList } from '../types/navigation';
 import { AttendanceReportDetailsScreen } from '../screens/AttendanceReportDetailsScreen';
+import AddAttendanceScreen from '../screens/AddAttendanceScreen';
 
 // Add global type declaration for reloadRole
 declare global {
@@ -122,6 +123,13 @@ export const Navigation = () => {
                   headerShown: false,
                 }}
               />
+              <Stack.Screen
+                name="AddAttendance"
+                component={AddAttendanceScreen}
+                options={{
+                  headerShown: false,
+                }}
+              />
             </>
           ) : role === 'admin' ? (
             <>
@@ -157,6 +165,13 @@ export const Navigation = () => {
               <Stack.Screen
                 name="CreateActivity"
                 component={CreateActivityScreen}
+                options={{
+                  headerShown: false,
+                }}
+              />
+              <Stack.Screen
+                name="AddAttendance"
+                component={AddAttendanceScreen}
                 options={{
                   headerShown: false,
                 }}
@@ -207,6 +222,13 @@ export const Navigation = () => {
                   headerShown: false,
                 }}
               />
+              <Stack.Screen
+                name="AddAttendance"
+                component={AddAttendanceScreen}
+                options={{
+                  headerShown: false,
+                }}
+              />
             </>
           ) : (
             <>
@@ -221,6 +243,13 @@ export const Navigation = () => {
               <Stack.Screen name="ParentRegistration" component={ParentRegistrationScreen} />
               <Stack.Screen name="ParentVerification" component={ParentVerificationScreen} />
               <Stack.Screen name="ParentTeamCode" component={ParentTeamCodeScreen} />
+              <Stack.Screen
+                name="AddAttendance"
+                component={AddAttendanceScreen}
+                options={{
+                  headerShown: false,
+                }}
+              />
             </>
           )}
         </Stack.Navigator>

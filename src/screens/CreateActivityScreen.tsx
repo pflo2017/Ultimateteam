@@ -394,7 +394,7 @@ export const CreateActivityScreen = () => {
   const getActivityColor = (type: ActivityType) => {
     switch (type) {
       case 'training':
-        return COLORS.primary;
+        return '#4AADCC';
       case 'game':
         return '#E67E22'; // Orange
       case 'tournament':

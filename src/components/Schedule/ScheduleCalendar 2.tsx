@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView, SafeAreaView, Modal, TextInput, TouchableWithoutFeedback } from 'react-native';
-import { Text, Button, Card, FAB, Chip } from 'react-native-paper';
+import { View, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView, SafeAreaView, Modal, TextInput } from 'react-native';
+import { Text, Button, Card, FAB } from 'react-native-paper';
 import { Calendar, DateData } from 'react-native-calendars';
 import { COLORS, SPACING } from '../../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -11,7 +11,6 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../types/navigation';
 import { useCallback } from 'react';
-import { supabase } from '../../lib/supabase';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -22,7 +21,7 @@ type ScheduleCalendarProps = {
 
 type ViewMode = 'monthly' | 'weekly';
 
-// Helper functions for activity display
+// Helper functions for EventCard (must be at top level)
 const getActivityIcon = (type: ServiceActivityType) => {
   switch (type) {
     case 'training':
@@ -56,7 +55,7 @@ const getActivityTypeLabel = (type: ServiceActivityType | 'all') => {
 const getActivityColor = (type: ServiceActivityType) => {
   switch (type) {
     case 'training':
-      return '#4AADCC';
+      return COLORS.primary;
     case 'game':
       return '#E67E22'; // Orange
     case 'tournament':
@@ -64,6 +63,63 @@ const getActivityColor = (type: ServiceActivityType) => {
     default:
       return '#2ECC71'; // Green
   }
+};
+
+// Exported EventCard at top-level
+export const EventCard = ({ activity }: { activity: Activity }) => {
+  const startTime = parseISO(activity.start_time);
+  const cardNavigation = useNavigation<NavigationProp>();
+  const activityColor = getActivityColor(activity.type);
+
+  const handlePress = () => {
+    if (!activity.id) {
+      console.error('Cannot navigate to activity details: Missing activity ID');
+      return;
+    }
+    try {
+      console.log('Navigating to activity details with ID:', activity.id);
+      cardNavigation.navigate('ActivityDetails', { activityId: activity.id });
+    } catch (error) {
+      console.error('Error navigating to activity details:', error);
+    }
+  };
+
+  return (
+    <Card
+      style={[styles.eventCard, { borderLeftWidth: 4, borderLeftColor: activityColor }]}
+      onPress={handlePress}
+    >
+      <Card.Content>
+        <View style={styles.eventHeader}>
+          <View style={styles.eventType}>
+            <MaterialCommunityIcons
+              name={getActivityIcon(activity.type)}
+              size={18}
+              color={activityColor}
+            />
+            <Text style={[styles.eventTypeText, { color: activityColor }]}> 
+              {getActivityTypeLabel(activity.type)}
+            </Text>
+            {activity.is_repeating && (
+              <MaterialCommunityIcons name="repeat" size={14} color={activityColor} style={styles.repeatIcon} />
+            )}
+          </View>
+          <Text style={styles.eventTime}>{format(startTime, 'HH:mm')}</Text>
+        </View>
+        {/* Title row with score for games */}
+        <View style={styles.eventTitleRow}>
+          <Text style={styles.eventTitle}>{activity.title}</Text>
+        </View>
+        {activity.teams?.name && (
+          <Text style={styles.eventTeam}>{activity.teams.name}</Text>
+        )}
+        <Text style={styles.eventDate}>
+          {format(startTime, 'EEE, d MMM')}
+          {activity.duration ? ` • ${activity.duration}` : ''}
+        </Text>
+      </Card.Content>
+    </Card>
+  );
 };
 
 export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalendarProps) => {
@@ -78,12 +134,6 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
   const [showTypeFilter, setShowTypeFilter] = useState(false);
   const [showMonthFilter, setShowMonthFilter] = useState(false);
   const [selectedType, setSelectedType] = useState<ServiceActivityType | 'all'>('all');
-  
-  // Floating Filter FAB
-  const [showFilterModal, setShowFilterModal] = useState(false);
-  const [selectedFilterType, setSelectedFilterType] = useState<ServiceActivityType | 'all'>('all');
-  const [teams, setTeams] = useState<{ id: string; name: string }[]>([]); // To be fetched
-  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]); // All selected by default
   
   // Use focus effect to reload activities when the screen comes into focus
   useFocusEffect(
@@ -100,34 +150,6 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
   useEffect(() => {
     loadActivities();
   }, [viewMode === 'monthly' ? currentMonth : currentWeek]);
-  
-  useEffect(() => {
-    const fetchTeamsForAdmin = async () => {
-      if (userRole !== 'admin') return;
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-        const { data: club } = await supabase
-          .from('clubs')
-          .select('id')
-          .eq('admin_id', user.id)
-          .single();
-        if (!club) return;
-        const { data: teamsData, error } = await supabase
-          .from('teams')
-          .select('id, name')
-          .eq('club_id', club.id)
-          .eq('is_active', true)
-          .order('name');
-        if (!error && teamsData) {
-          setTeams(teamsData);
-        }
-      } catch (err) {
-        console.error('Error fetching teams for admin:', err);
-      }
-    };
-    fetchTeamsForAdmin();
-  }, [userRole]);
   
   const loadActivities = async () => {
     try {
@@ -217,7 +239,7 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
   
   // Filter activities for selected date
   const getActivitiesForSelectedDate = () => {
-    const filtered = activities
+    return activities
       .filter(activity => {
         const activityDate = activity.start_time.split('T')[0];
         const matchesDate = viewMode === 'monthly' 
@@ -226,11 +248,6 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
         const matchesType = selectedType === 'all' || activity.type === selectedType;
         return matchesDate && matchesType;
       });
-    // Sort chronologically in weekly view
-    if (viewMode === 'weekly') {
-      return filtered.sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
-    }
-    return filtered;
   };
   
   const handleMonthChange = (month: DateData) => {
@@ -303,29 +320,48 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
       {/* Make the entire page scrollable */}
       <ScrollView style={styles.mainScrollView} showsVerticalScrollIndicator={false}>
         <View style={styles.container}>
-          {/* Replace the header/filter/tabs row with a new row containing horizontal tabs and the filter button */}
-          <View style={styles.tabsRow}>
-            <View style={styles.tabsContainer}>
+          {/* Filter Section - matching Payment screen style */}
+          <View style={styles.filtersContainer}>
+            <View style={styles.filtersRow}>
               <TouchableOpacity
-                style={styles.tabButton}
-                onPress={() => setViewMode('monthly')}
+                style={styles.filterButton}
+                onPress={() => setShowTypeFilter(true)}
               >
-                <Text style={[styles.tabText, viewMode === 'monthly' && styles.tabTextActive]}>Monthly</Text>
-                {viewMode === 'monthly' && <View style={styles.tabUnderline} />}
+                <MaterialCommunityIcons name="filter-variant" size={20} color={COLORS.primary} style={styles.filterIcon} />
+                <Text style={styles.filterButtonText} numberOfLines={1}>
+                  {getActivityTypeLabel(selectedType)}
+                </Text>
+                <MaterialCommunityIcons name="chevron-down" size={20} color={COLORS.grey[400]} />
               </TouchableOpacity>
+              
               <TouchableOpacity
-                style={styles.tabButton}
-                onPress={() => setViewMode('weekly')}
+                style={styles.filterButton}
+                onPress={() => setShowMonthFilter(true)}
               >
-                <Text style={[styles.tabText, viewMode === 'weekly' && styles.tabTextActive]}>Weekly</Text>
-                {viewMode === 'weekly' && <View style={styles.tabUnderline} />}
+                <MaterialCommunityIcons name="calendar-month" size={20} color={COLORS.primary} style={styles.filterIcon} />
+                <Text style={styles.filterButtonText} numberOfLines={1}>
+                  {format(viewMode === 'monthly' ? currentMonth : currentWeek, 'MMMM yyyy')}
+                </Text>
+                <MaterialCommunityIcons name="chevron-down" size={20} color={COLORS.grey[400]} />
               </TouchableOpacity>
             </View>
+          </View>
+          
+          {/* View Mode Toggle */}
+          <View style={styles.viewToggleChipsRow}>
             <TouchableOpacity
-              style={styles.filterIconButton}
-              onPress={() => setShowFilterModal(true)}
+              style={[styles.toggleChipSmall, viewMode === 'monthly' && styles.toggleChipSmallActive]}
+              onPress={() => setViewMode('monthly')}
             >
-              <MaterialCommunityIcons name="filter" size={24} color={COLORS.primary} />
+              <MaterialCommunityIcons name="calendar-month" size={16} color={viewMode === 'monthly' ? COLORS.white : COLORS.primary} />
+              <Text style={[styles.toggleChipSmallText, viewMode === 'monthly' && styles.toggleChipSmallTextActive]}>Monthly</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.toggleChipSmall, viewMode === 'weekly' && styles.toggleChipSmallActive]}
+              onPress={() => setViewMode('weekly')}
+            >
+              <MaterialCommunityIcons name="calendar-week" size={16} color={viewMode === 'weekly' ? COLORS.white : COLORS.primary} />
+              <Text style={[styles.toggleChipSmallText, viewMode === 'weekly' && styles.toggleChipSmallTextActive]}>Weekly</Text>
             </TouchableOpacity>
           </View>
           
@@ -365,7 +401,7 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
             <View style={styles.eventsContent}>
               {!isLoading && getActivitiesForSelectedDate().length > 0 ? (
                 getActivitiesForSelectedDate().map(activity => (
-                  <EventCard key={activity.id} activity={activity} isWeeklyView={viewMode === 'weekly'} />
+                  <EventCard key={activity.id} activity={activity} />
                 ))
               ) : (
                 !isLoading && (
@@ -381,7 +417,7 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
       
       {userRole !== 'parent' && (
         <TouchableOpacity style={styles.fab} onPress={onCreateActivity} activeOpacity={0.85}>
-          <Text style={styles.fabTextNews}>+</Text>
+          <Text style={styles.fabText}>+</Text>
         </TouchableOpacity>
       )}
       
@@ -522,103 +558,6 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
           </View>
         </View>
       </Modal>
-      
-      {/* Filter Modal/Bottom Sheet */}
-      <Modal
-        visible={showFilterModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowFilterModal(false)}
-      >
-        <TouchableWithoutFeedback onPress={() => setShowFilterModal(false)}>
-          <View style={styles.filterModalOverlay}>
-            <TouchableWithoutFeedback onPress={() => {}}>
-              <View style={styles.filterModalContent}>
-                <ScrollView>
-                  <Text style={styles.filterModalTitle}>Filter Activities</Text>
-                  <Text style={styles.filterModalSection}>Activity Type</Text>
-                  <View style={styles.filterChipRow}>
-                    {(['all', 'training', 'game', 'tournament', 'other'] as (ServiceActivityType | 'all')[]).map((type) => {
-                      const isSelected = selectedFilterType === type;
-                      let selectedColor = COLORS.primary;
-                      if (type === 'training') selectedColor = '#4AADCC';
-                      else if (type === 'game') selectedColor = '#E67E22';
-                      else if (type === 'tournament') selectedColor = '#8E44AD';
-                      else if (type === 'other') selectedColor = '#2ECC71';
-                      else if (type === 'all') selectedColor = COLORS.primary;
-                      return (
-                        <TouchableOpacity
-                          key={type}
-                          style={[
-                            styles.chip,
-                            isSelected && { backgroundColor: selectedColor, borderColor: selectedColor }
-                          ]}
-                          onPress={() => setSelectedFilterType(type as ServiceActivityType)}
-                        >
-                          <MaterialCommunityIcons
-                            name={getActivityIcon(type as ServiceActivityType)}
-                            size={16}
-                            color={isSelected ? '#fff' : selectedColor}
-                            style={{ marginRight: 4 }}
-                          />
-                          <Text style={[
-                            styles.chipText,
-                            isSelected && { color: '#fff' }
-                          ]}>
-                            {getActivityTypeLabel(type as ServiceActivityType)}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                  <Text style={styles.filterModalSection}>Teams</Text>
-                  <View style={styles.filterChipRow}>
-                    <TouchableOpacity
-                      style={[
-                        styles.chip,
-                        selectedTeamIds.length === teams.length && { backgroundColor: COLORS.primary, borderColor: COLORS.primary }
-                      ]}
-                      onPress={() => setSelectedTeamIds(selectedTeamIds.length === teams.length ? [] : teams.map(t => t.id))}
-                    >
-                      <Text style={[
-                        styles.chipText,
-                        selectedTeamIds.length === teams.length && { color: '#fff' }
-                      ]}>All Teams</Text>
-                    </TouchableOpacity>
-                    {teams.map(team => {
-                      const isSelected = selectedTeamIds.includes(team.id);
-                      return (
-                        <TouchableOpacity
-                          key={team.id}
-                          style={[
-                            styles.chip,
-                            isSelected && { backgroundColor: COLORS.primary, borderColor: COLORS.primary }
-                          ]}
-                          onPress={() => {
-                            setSelectedTeamIds(prev =>
-                              prev.includes(team.id)
-                                ? prev.filter(id => id !== team.id)
-                                : [...prev, team.id]
-                            );
-                          }}
-                        >
-                          <Text style={[
-                            styles.chipText,
-                            isSelected && { color: '#fff' }
-                          ]}>{team.name}</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                  <Button mode="contained" onPress={() => setShowFilterModal(false)} style={styles.filterApplyButton}>
-                    Apply Filters
-                  </Button>
-                </ScrollView>
-              </View>
-            </TouchableWithoutFeedback>
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
     </SafeAreaView>
   );
 };
@@ -635,46 +574,67 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
-  tabsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.md,
-    paddingBottom: SPACING.md,
+  filtersContainer: {
+    padding: SPACING.lg,
     backgroundColor: COLORS.background,
   },
-  tabsContainer: {
+  filtersRow: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 8,
-    justifyContent: 'center',
+    justifyContent: 'space-between',
+    gap: SPACING.md,
+  },
+  filterButton: {
     flex: 1,
-  },
-  tabButton: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginHorizontal: 8,
-    paddingHorizontal: 4,
+    backgroundColor: COLORS.white,
+    borderRadius: 8,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
   },
-  tabText: {
-    fontSize: 16,
-    color: COLORS.grey[600],
-    fontWeight: '400',
-  },
-  tabTextActive: {
+  filterButtonText: {
+    flex: 1,
     color: COLORS.text,
-    fontWeight: '700',
+    fontSize: 14,
+    marginLeft: SPACING.xs,
   },
-  tabUnderline: {
-    marginTop: 2,
-    height: 4,
-    width: '100%',
+  filterIcon: {
+    marginRight: SPACING.xs,
+  },
+  viewToggleChipsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: SPACING.md,
+    gap: 8,
+  },
+  toggleChipSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.grey[200],
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+    marginHorizontal: 2,
+    height: 32,
+  },
+  toggleChipSmallActive: {
     backgroundColor: COLORS.primary,
-    borderRadius: 2,
   },
-  filterIconButton: {
-    padding: SPACING.xs,
-    marginLeft: 8,
+  toggleChipSmallText: {
+    color: COLORS.primary,
+    fontWeight: '500',
+    fontSize: 14,
+    marginLeft: 6,
+  },
+  toggleChipSmallTextActive: {
+    color: COLORS.white,
   },
   weekViewContainer: {
     backgroundColor: COLORS.white,
@@ -872,136 +832,9 @@ const styles = StyleSheet.create({
     color: COLORS.grey[600],
     marginBottom: 2,
   },
-  fabTextNews: {
-    color: COLORS.white,
-    fontSize: 32,
+  fabText: {
+    fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 2,
-  },
-  filterModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    justifyContent: 'flex-end',
-  },
-  filterModalContent: {
-    backgroundColor: COLORS.white,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    padding: 24,
-    minHeight: 320,
-  },
-  filterModalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 16,
-  },
-  filterModalSection: {
-    fontSize: 15,
-    fontWeight: '600',
-    marginTop: 12,
-    marginBottom: 8,
-  },
-  filterChipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 8,
-  },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.white,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: COLORS.grey[300],
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    marginRight: 8,
-    marginBottom: 8,
-    minHeight: 32,
-  },
-  chipSelected: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-  },
-  chipText: {
-    color: COLORS.text,
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  chipTextSelected: {
     color: COLORS.white,
   },
-  filterApplyButton: {
-    marginTop: 16,
-  },
-});
-
-export const EventCard = ({ activity, isWeeklyView }: { activity: Activity, isWeeklyView?: boolean }) => {
-  const startTime = parseISO(activity.start_time);
-  const cardNavigation = useNavigation<NavigationProp>();
-  const activityColor = getActivityColor(activity.type);
-
-  const handlePress = () => {
-    if (!activity.id) {
-      console.error('Cannot navigate to activity details: Missing activity ID');
-      return;
-    }
-    try {
-      console.log('Navigating to activity details with ID:', activity.id);
-      cardNavigation.navigate('ActivityDetails', { activityId: activity.id });
-    } catch (error) {
-      console.error('Error navigating to activity details:', error);
-    }
-  };
-
-  return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-      {isWeeklyView && (
-        <View style={{ width: 44, alignItems: 'center', justifyContent: 'center', marginRight: 4 }}>
-          <Text style={{ color: COLORS.grey[600], fontSize: 14, fontWeight: '500', lineHeight: 18 }}>
-            {format(startTime, 'EEE')}
-          </Text>
-          <Text style={{ color: COLORS.text, fontSize: 22, fontWeight: 'bold', lineHeight: 26 }}>
-            {format(startTime, 'd')}
-          </Text>
-        </View>
-      )}
-      <Card 
-        style={[styles.eventCard, { borderLeftWidth: 4, borderLeftColor: activityColor, minHeight: 88, flex: 1, justifyContent: 'center' }]} 
-        onPress={handlePress}
-      >
-        <Card.Content style={{ justifyContent: 'center' }}>
-          <View style={styles.eventHeader}>
-            <View style={styles.eventType}>
-              <MaterialCommunityIcons 
-                name={getActivityIcon(activity.type)} 
-                size={18} 
-                color={activityColor} 
-              />
-              <Text style={[styles.eventTypeText, { color: activityColor }]}> 
-                {getActivityTypeLabel(activity.type)}
-              </Text>
-              {activity.is_repeating && (
-                <MaterialCommunityIcons name="repeat" size={14} color={activityColor} style={styles.repeatIcon} />
-              )}
-            </View>
-            <Text style={styles.eventTime}>
-              {format(startTime, 'HH:mm')}
-            </Text>
-          </View>
-          <View style={styles.eventTitleRow}>
-            <Text style={styles.eventTitle}>{activity.title}</Text>
-          </View>
-          {activity.teams?.name && (
-            <Text style={styles.eventTeam}>{activity.teams.name}</Text>
-          )}
-          <Text style={styles.eventDate}>
-            {format(startTime, 'EEE, d MMM')}
-            {activity.duration ? ` • ${activity.duration}` : ''}
-          </Text>
-        </Card.Content>
-      </Card>
-    </View>
-  );
-}; 
+}); 

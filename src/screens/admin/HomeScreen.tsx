@@ -1,28 +1,18 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, Platform } from 'react-native';
-import { Text, Card, TouchableRipple } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, TouchableOpacity, FlatList } from 'react-native';
+import { Text } from 'react-native-paper';
 import { COLORS, SPACING } from '../../constants/theme';
 import { supabase } from '../../lib/supabase';
 import { useNavigation, useIsFocused, CompositeNavigationProp } from '@react-navigation/native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import type { MaterialCommunityIcons as IconType } from '@expo/vector-icons';
+import { getActivitiesByDateRange, Activity } from '../../services/activitiesService';
+import { format, addDays } from 'date-fns';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { AdminStackParamList, AdminTabParamList } from '../../types/navigation';
-import Animated, { 
-  FadeInUp,
-  useAnimatedStyle, 
-  withSpring,
-  withTiming,
-  useSharedValue,
-  WithSpringConfig,
-} from 'react-native-reanimated';
-
-type CardType = 'teams' | 'coaches' | 'players' | 'payments';
-
-type ScreenType = keyof AdminStackParamList | 'Payments';
+import { EventCard } from '../../components/Schedule/ScheduleCalendar';
 
 // Define a composite navigation type that can access both stack and tab navigators
+// (kept for navigation to details and schedule)
 type AdminNavigationProp = CompositeNavigationProp<
   NativeStackNavigationProp<AdminStackParamList>,
   BottomTabNavigationProp<AdminTabParamList>
@@ -31,20 +21,14 @@ type AdminNavigationProp = CompositeNavigationProp<
 export const AdminHomeScreen = () => {
   const [clubName, setClubName] = useState<string>('');
   const [adminName, setAdminName] = useState<string>('');
-  const [stats, setStats] = useState({
-    teams: 0,
-    coaches: 0,
-    players: 0,
-    pendingPayments: 0,
-    collectionsCount: 0
-  });
+  const [activities, setActivities] = useState<Activity[]>([]);
   const navigation = useNavigation<AdminNavigationProp>();
   const isFocused = useIsFocused();
 
   useEffect(() => {
     if (isFocused) {
       loadProfile();
-      loadStats();
+      loadUpcomingActivities();
     }
   }, [isFocused]);
 
@@ -52,13 +36,11 @@ export const AdminHomeScreen = () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-
       const { data: profile } = await supabase
         .from('admin_profiles')
         .select('club_name, admin_name')
         .eq('user_id', user.id)
         .single();
-
       if (profile) {
         setClubName(profile.club_name);
         setAdminName(profile.admin_name);
@@ -68,202 +50,71 @@ export const AdminHomeScreen = () => {
     }
   };
 
-  const loadStats = async () => {
+  const loadUpcomingActivities = async () => {
     try {
-      console.log('Loading stats...');
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        console.error('No user found');
-        return;
+      const today = new Date();
+      const sevenDaysLater = addDays(today, 7);
+      const { data, error } = await getActivitiesByDateRange(
+        today.toISOString(),
+        sevenDaysLater.toISOString()
+      );
+      if (error) throw error;
+      if (data) {
+        // Sort by start_time ascending
+        const sorted = [...data].sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
+        setActivities(sorted);
       }
-
-      // Get club ID
-      const { data: club } = await supabase
-        .from('clubs')
-        .select('id')
-        .eq('admin_id', user.id)
-        .single();
-
-      if (!club) {
-        console.error('No club found');
-        return;
-      }
-
-      console.log('Loading stats for club:', club.id);
-
-      // Get teams data and count
-      const { data: teamsData, error: teamsError } = await supabase
-        .from('teams')
-        .select('id')
-        .eq('club_id', club.id)
-        .eq('is_active', true);
-
-      if (teamsError) {
-        console.error('Error fetching teams:', teamsError);
-        return;
-      }
-
-      const teamsCount = teamsData?.length || 0;
-      console.log('Active teams data:', teamsData);
-      console.log('Active teams count:', teamsCount);
-
-      // Get coaches count
-      const { data: coachesData, error: coachesError } = await supabase
-        .from('coaches')
-        .select('id')
-        .eq('club_id', club.id)
-        .eq('is_active', true);
-
-      if (coachesError) {
-        console.error('Error fetching coaches:', coachesError);
-        return;
-      }
-
-      const coachesCount = coachesData?.length || 0;
-      console.log('Active coaches count:', coachesCount);
-
-      // Get players count
-      const { data: playersData, error: playersError } = await supabase
-        .from('players')
-        .select('id')
-        .eq('club_id', club.id)
-        .eq('is_active', true);
-
-      if (playersError) {
-        console.error('Error fetching players:', playersError);
-        return;
-      }
-
-      const playersCount = playersData?.length || 0;
-      console.log('Active players count:', playersCount);
-
-      // Get unpaid payments count
-      const { data: unpaidPaymentsData, error: unpaidPaymentsError } = await supabase
-        .from('players')
-        .select('id')
-        .eq('club_id', club.id)
-        .eq('is_active', true)
-        .eq('player_status', 'unpaid');
-
-      if (unpaidPaymentsError) {
-        console.error('Error fetching unpaid payments:', unpaidPaymentsError);
-        return;
-      }
-
-      const unpaidPaymentsCount = unpaidPaymentsData?.length || 0;
-      console.log('Unpaid payments count:', unpaidPaymentsCount);
-
-      // Get collections count (payments collected by coaches pending review)
-      const { data: collectionsData, error: collectionsError } = await supabase
-        .from('payment_collections')
-        .select('id')
-        .eq('is_processed', false);
-
-      if (collectionsError) {
-        console.error('Error fetching collections:', collectionsError);
-        return;
-      }
-
-      const collectionsCount = collectionsData?.length || 0;
-      console.log('Pending review collections count:', collectionsCount);
-
-      console.log('Setting stats:', {
-        teams: teamsCount,
-        coaches: coachesCount,
-        players: playersCount,
-        pendingPayments: unpaidPaymentsCount,
-        collectionsCount: collectionsCount
-      });
-
-      setStats({
-        teams: teamsCount,
-        coaches: coachesCount,
-        players: playersCount,
-        pendingPayments: unpaidPaymentsCount,
-        collectionsCount: collectionsCount
-      });
     } catch (error) {
-      console.error('Error loading stats:', error);
+      console.error('Error loading upcoming activities:', error);
     }
   };
 
-  const handleCardPress = (screen: ScreenType, type: CardType, title: string) => {
-    if (screen === 'Manage') {
-      navigation.navigate('Manage', { activeTab: type });
-    } else if (screen === 'Payments') {
-      if (type === 'payments' && title === 'Collected') {
-        navigation.navigate('Payments', { showCollections: true } as any);
-      } else {
-        navigation.navigate('Payments');
-      }
-    }
+  const handleActivityPress = (activity: Activity) => {
+    navigation.navigate('ActivityDetails', { activityId: activity.id });
   };
 
-  const renderCard = (
-    title: string, 
-    value: number, 
-    subtitle: string, 
-    icon: keyof typeof IconType.glyphMap, 
-    screen: ScreenType,
-    type: CardType,
-    delay: number
-  ) => {
-    const scale = useSharedValue(1);
+  const handleSeeAll = () => {
+    navigation.navigate('Schedule');
+  };
 
-    const animatedStyle = useAnimatedStyle(() => ({
-      transform: [{ scale: scale.value }]
-    }));
-
-    const onPressIn = () => {
-      scale.value = withSpring(0.95, {
-        damping: 15,
-        stiffness: 100,
-      } as WithSpringConfig);
-    };
-
-    const onPressOut = () => {
-      scale.value = withSpring(1, {
-        damping: 15,
-        stiffness: 100,
-      } as WithSpringConfig);
-    };
-
+  // Carousel render
+  const renderCarousel = () => {
+    if (activities.length === 0) {
+      return (
+        <View style={styles.emptyCarousel}>
+          <Text style={styles.emptyText}>No upcoming activities in the next 7 days.</Text>
+        </View>
+      );
+    }
     return (
-      <Animated.View 
-        entering={FadeInUp.delay(delay).duration(1000).springify()}
-        style={styles.cardWrapper}
-      >
-        <Animated.View style={animatedStyle}>
-          <TouchableRipple
-            onPress={() => handleCardPress(screen as ScreenType, type, title)}
-            onPressIn={onPressIn}
-            onPressOut={onPressOut}
-            style={styles.touchable}
-            borderless
-          >
-            <Card style={styles.card}>
-              <Card.Content style={styles.cardContent}>
-                <MaterialCommunityIcons 
-                  name={icon}
-                  size={24} 
-                  color={COLORS.white}
-                  style={styles.cardIcon}
-                />
-                <Text style={styles.cardTitle}>{title}</Text>
-                <Text style={styles.cardValue}>{value}</Text>
-                <View style={styles.cardFooter}>
-                  <Text style={styles.cardSubtitle}>{subtitle}</Text>
-                  <MaterialCommunityIcons 
-                    name="chevron-right" 
-                    size={20} 
-                    color={COLORS.white}
-                  />
-                </View>
-              </Card.Content>
-            </Card>
-          </TouchableRipple>
-        </Animated.View>
-      </Animated.View>
+      <>
+        <View style={styles.divider} />
+        <View style={styles.carouselHeaderRow}>
+          <Text style={styles.carouselTitle}>Future activities</Text>
+        </View>
+        <View style={styles.carouselContainer}>
+          <FlatList
+            data={activities.slice(0, 3)}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            keyExtractor={item => item.id}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.carouselCardWrapper}
+                onPress={() => handleActivityPress(item)}
+                activeOpacity={0.85}
+              >
+                <EventCard activity={item} />
+              </TouchableOpacity>
+            )}
+          />
+        </View>
+        {activities.length > 3 && (
+          <TouchableOpacity onPress={handleSeeAll} style={styles.seeAllActionWrapper} activeOpacity={0.7}>
+            <Text style={styles.seeAllActionText}>See all &gt;</Text>
+          </TouchableOpacity>
+        )}
+      </>
     );
   };
 
@@ -275,64 +126,8 @@ export const AdminHomeScreen = () => {
           Manage and stay connected with your club
         </Text>
       </View>
-      
-      <ScrollView 
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.statsContainer}>
-          {renderCard(
-            'Teams',
-            stats.teams,
-            'View and manage teams',
-            'account-group-outline',
-            'Manage',
-            'teams',
-            100
-          )}
-          
-          {renderCard(
-            'Coaches',
-            stats.coaches,
-            'Manage coach accounts',
-            'account-tie',
-            'Manage',
-            'coaches',
-            200
-          )}
-          
-          {renderCard(
-            'Players',
-            stats.players,
-            'View player details',
-            'run',
-            'Manage',
-            'players',
-            300
-          )}
-          
-          {renderCard(
-            'Payments',
-            stats.pendingPayments,
-            'Unpaid Payments',
-            'credit-card-outline',
-            'Payments',
-            'payments',
-            400
-          )}
-          
-          {renderCard(
-            'Collected',
-            stats.collectionsCount,
-            'Collected by coaches',
-            'cash-register',
-            'Payments',
-            'payments',
-            500
-          )}
-        </View>
-      </ScrollView>
+      {/* Carousel at the top */}
+      {renderCarousel()}
     </View>
   );
 };
@@ -341,72 +136,67 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+    paddingTop: SPACING.lg,
   },
   header: {
-    padding: SPACING.xl,
-    paddingBottom: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+    marginBottom: SPACING.md,
   },
   title: {
-    color: COLORS.text,
     fontWeight: 'bold',
+    color: COLORS.text,
+    marginBottom: 4,
+    fontSize: 22,
   },
   subtitle: {
     color: COLORS.grey[600],
-    marginTop: SPACING.xs,
+    marginBottom: 24,
   },
-  scrollView: {
-    flex: 1,
+  divider: {
+    height: 1,
+    backgroundColor: COLORS.grey[200],
+    marginHorizontal: SPACING.lg,
+    marginBottom: 16,
   },
-  scrollContent: {
-    padding: SPACING.lg,
-  },
-  statsContainer: {
+  carouselHeaderRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingLeft: SPACING.lg,
+    marginBottom: 16,
   },
-  cardWrapper: {
-    width: '48%',
-    marginBottom: SPACING.lg,
-    borderRadius: 16,
+  carouselTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.text,
   },
-  touchable: {
-    borderRadius: 16,
-  },
-  card: {
-    backgroundColor: '#0CC1EC',
-    elevation: 2,
-    borderRadius: 16,
-  },
-  cardContent: {
-    padding: SPACING.lg,
-  },
-  cardIcon: {
-    marginBottom: SPACING.sm,
-  },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.white,
-    marginBottom: SPACING.xs,
-  },
-  cardValue: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: COLORS.white,
-    marginBottom: SPACING.sm,
-  },
-  cardFooter: {
+  carouselContainer: {
+    paddingLeft: SPACING.lg,
+    paddingBottom: SPACING.md,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
   },
-  cardSubtitle: {
-    fontSize: 14,
-    color: COLORS.white,
-    flex: 1,
-    marginRight: SPACING.sm,
-    height: 40,
-    lineHeight: 20,
+  carouselCardWrapper: {
+    marginRight: SPACING.md,
+    width: 280,
+  },
+  seeAllActionWrapper: {
+    alignItems: 'center',
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  seeAllActionText: {
+    color: COLORS.text,
+    fontWeight: '600',
+    fontSize: 15,
+  },
+  emptyCarousel: {
+    padding: SPACING.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyText: {
+    color: COLORS.grey[500],
+    fontSize: 16,
   },
 }); 

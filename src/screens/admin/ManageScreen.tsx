@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Platform, Alert } from 'react-native';
-import { Text, SegmentedButtons, ActivityIndicator } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, Platform, Alert, TouchableOpacity } from 'react-native';
+import { Text, ActivityIndicator } from 'react-native-paper';
 import { COLORS, SPACING } from '../../constants/theme';
 import { supabase } from '../../lib/supabase';
 import { useNavigation, useRoute, useIsFocused } from '@react-navigation/native';
@@ -409,25 +409,30 @@ export const AdminManageScreen = () => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.tabContainer}>
-        <SegmentedButtons
-          value={activeTab}
-          onValueChange={(value) => setActiveTab(value as CardType)}
-          buttons={[
-            { value: 'teams', label: 'Teams' },
-            { value: 'coaches', label: 'Coaches' },
-            { value: 'players', label: 'Players' },
-          ]}
-          style={styles.segmentedButtons}
-          theme={{
-            colors: {
-              primary: '#212121',
-              secondaryContainer: '#EEFBFF',
-              onSecondaryContainer: '#212121',
-              outline: '#E0E0E0',
-            }
-          }}
-        />
+      <View style={styles.horizontalTabsRow}>
+        <View style={styles.horizontalTabsContainer}>
+          <TouchableOpacity
+            style={styles.horizontalTabButton}
+            onPress={() => setActiveTab('teams')}
+          >
+            <Text style={[styles.horizontalTabText, activeTab === 'teams' && styles.horizontalTabTextActive]}>Teams</Text>
+            {activeTab === 'teams' && <View style={styles.horizontalTabUnderline} />}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.horizontalTabButton}
+            onPress={() => setActiveTab('coaches')}
+          >
+            <Text style={[styles.horizontalTabText, activeTab === 'coaches' && styles.horizontalTabTextActive]}>Coaches</Text>
+            {activeTab === 'coaches' && <View style={styles.horizontalTabUnderline} />}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.horizontalTabButton}
+            onPress={() => setActiveTab('players')}
+          >
+            <Text style={[styles.horizontalTabText, activeTab === 'players' && styles.horizontalTabTextActive]}>Players</Text>
+            {activeTab === 'players' && <View style={styles.horizontalTabUnderline} />}
+          </TouchableOpacity>
+        </View>
       </View>
 
       {activeTab === 'teams' && (
@@ -470,14 +475,41 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.white,
   },
-  tabContainer: {
-    padding: SPACING.lg,
+  horizontalTabsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: SPACING.lg,
     paddingTop: Platform.OS === 'ios' ? 60 : 40,
-  },
-  segmentedButtons: {
+    paddingBottom: SPACING.md,
     backgroundColor: COLORS.white,
-    borderRadius: 8,
-    elevation: 0,
-    shadowColor: 'transparent',
+  },
+  horizontalTabsContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+    justifyContent: 'center',
+    flex: 1,
+  },
+  horizontalTabButton: {
+    alignItems: 'center',
+    marginHorizontal: 8,
+    paddingHorizontal: 4,
+  },
+  horizontalTabText: {
+    fontSize: 16,
+    color: COLORS.grey[600],
+    fontWeight: '400',
+  },
+  horizontalTabTextActive: {
+    color: COLORS.text,
+    fontWeight: '700',
+  },
+  horizontalTabUnderline: {
+    marginTop: 2,
+    height: 4,
+    width: '100%',
+    backgroundColor: COLORS.primary,
+    borderRadius: 2,
   },
 }); 

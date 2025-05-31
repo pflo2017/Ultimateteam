@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, FlatList, ActivityIndicator, Alert, TouchableOpacity, ScrollView } from 'react-native';
+import { View, StyleSheet, FlatList, ActivityIndicator, Alert, TouchableOpacity, ScrollView, TouchableWithoutFeedback, Modal } from 'react-native';
 import { Text, Button, Checkbox, FAB, TextInput } from 'react-native-paper';
+import { Chip } from 'react-native-paper';
 import { COLORS, SPACING } from '../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { WeeklyCalendarCard } from '../components/Attendance/WeeklyCalendarCard';
@@ -16,9 +17,11 @@ import {
 } from '../services/activitiesService';
 import { format, addWeeks, subWeeks, startOfWeek, endOfWeek, isSameDay } from 'date-fns';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getCoachInternalId } from '../utils/coachUtils';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '../types/navigation';
 
 type Player = {
   id: string;
@@ -67,6 +70,26 @@ export const AttendanceScreen = () => {
 
   // Add this near the other useState hooks:
   const [isSaving, setIsSaving] = useState(false);
+  const [isFilterModalVisible, setFilterModalVisible] = useState(false);
+
+  // Add to styles
+  const activityTypeOptions = [
+    { label: 'All', value: 'all' },
+    { label: 'Training', value: 'training' },
+    { label: 'Game', value: 'game' },
+    { label: 'Tournament', value: 'tournament' },
+    { label: 'Other', value: 'other' },
+  ];
+
+  // Add to AttendanceScreen component
+  const [filterType, setFilterType] = useState<ActivityType | 'all'>('all');
+  const [filterTeamIds, setFilterTeamIds] = useState<string[]>([]);
+
+  // Add at the top of the component, after useState hooks
+  const [attendanceRecords, setAttendanceRecords] = useState<{ activity: Activity, records: any[] }[]>([]);
+  const [isLoadingAttendanceRecords, setIsLoadingAttendanceRecords] = useState(false);
+
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   // Load user role on mount
   useEffect(() => {
@@ -135,6 +158,119 @@ export const AttendanceScreen = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedActivity]);
+
+  // Move fetchAttendanceRecords function above hooks and ensure it's only defined once
+  const fetchAttendanceRecords = async () => {
+    setIsLoadingAttendanceRecords(true);
+    try {
+      // 1. Get activities for the selected date, team, and type
+      const weekStart = startOfWeek(currentWeek, { weekStartsOn: 1 });
+      const weekEnd = endOfWeek(currentWeek, { weekStartsOn: 1 });
+      console.log('[AttendanceScreen] Fetching activities for week:', {
+        start: format(weekStart, 'yyyy-MM-dd'),
+        end: format(weekEnd, 'yyyy-MM-dd'),
+        teamId: selectedTeam?.id,
+        type: selectedType
+      });
+      const { data: activitiesData, error: activitiesError } = await getActivitiesByDateRange(
+        weekStart.toISOString(),
+        weekEnd.toISOString(),
+        selectedTeam?.id
+      );
+      if (activitiesError) throw activitiesError;
+      if (!activitiesData) {
+        setAttendanceRecords([]);
+        setIsLoadingAttendanceRecords(false);
+        return;
+      }
+      console.log('[AttendanceScreen] Raw activities found:', activitiesData.map(a => ({
+        id: a.id,
+        title: a.title,
+        type: a.type,
+        date: a.start_time.split('T')[0]
+      })));
+      // Filter by type
+      const filteredActivities = selectedType === 'all'
+        ? activitiesData
+        : activitiesData.filter(a => a.type === selectedType);
+      console.log('[AttendanceScreen] After type filter:', filteredActivities.map(a => ({
+        id: a.id,
+        title: a.title,
+        type: a.type,
+        date: a.start_time.split('T')[0]
+      })));
+      // Filter by selected date
+      const selectedDateStr = format(selectedDate, 'yyyy-MM-dd');
+      console.log('[AttendanceScreen] Filtering for date:', selectedDateStr);
+      const activitiesForDate = filteredActivities.filter(activity => {
+        const activityDateStr = activity.start_time.split('T')[0];
+        const matches = activityDateStr === selectedDateStr;
+        console.log('[AttendanceScreen] Activity date check:', {
+          activityId: activity.id,
+          activityDate: activityDateStr,
+          selectedDate: selectedDateStr,
+          matches
+        });
+        return activityDateStr === selectedDateStr;
+      });
+      console.log('[AttendanceScreen] Final filtered activities:', activitiesForDate.map(a => ({
+        id: a.id,
+        title: a.title,
+        type: a.type,
+        date: a.start_time.split('T')[0]
+      })));
+      if (activitiesForDate.length === 0) {
+        setAttendanceRecords([]);
+        setIsLoadingAttendanceRecords(false);
+        return;
+      }
+      // 2. Get all attendance records for these activities
+      const activityIds = activitiesForDate.map(a => a.id.split('-').slice(0, 5).join('-'));
+      console.log('[AttendanceScreen] Fetching attendance for activity IDs:', activityIds);
+      const { data: attendanceData, error: attendanceError } = await supabase
+        .from('activity_attendance')
+        .select('*, player:player_id (id, name)')
+        .in('activity_id', activityIds);
+      if (attendanceError) throw attendanceError;
+      // 3. Group attendance records by activity
+      const grouped: Record<string, { activity: Activity, records: any[] }> = {};
+      activitiesForDate.forEach(activity => {
+        grouped[activity.id] = {
+          activity,
+          records: []
+        };
+      });
+      (attendanceData || []).forEach(record => {
+        const baseId = record.activity_id;
+        const activity = activitiesForDate.find(a => a.id.startsWith(baseId));
+        if (activity && grouped[activity.id]) {
+          grouped[activity.id].records.push(record);
+        }
+      });
+      console.log('[AttendanceScreen] Final grouped records:', Object.entries(grouped).map(([id, data]) => ({
+        activityId: id,
+        activityTitle: data.activity.title,
+        activityType: data.activity.type,
+        recordCount: data.records.length
+      })));
+      setAttendanceRecords(Object.values(grouped));
+    } catch (error) {
+      console.error('[AttendanceScreen] Error fetching attendance records:', error);
+      setAttendanceRecords([]);
+    } finally {
+      setIsLoadingAttendanceRecords(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAttendanceRecords();
+  }, [selectedDate, selectedType, selectedTeam, currentWeek]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchAttendanceRecords();
+    }, [selectedDate, selectedType, selectedTeam, currentWeek])
+  );
 
   // Week navigation
   const handlePrevWeek = () => {
@@ -539,141 +675,232 @@ export const AttendanceScreen = () => {
     }
   };
 
+  // Helper functions for icons and labels (copy from ScheduleCalendar)
+  const getActivityIcon = (type: ActivityType | 'all') => {
+    switch (type) {
+      case 'training':
+        return 'whistle';
+      case 'game':
+        return 'trophy-outline';
+      case 'tournament':
+        return 'tournament';
+      case 'other':
+        return 'calendar-text';
+      default:
+        return 'filter-variant-remove';
+    }
+  };
+  const getActivityTypeLabel = (type: ActivityType | 'all') => {
+    switch (type) {
+      case 'training':
+        return 'Training';
+      case 'game':
+        return 'Game';
+      case 'tournament':
+        return 'Tournament';
+      case 'other':
+        return 'Other';
+      case 'all':
+        return 'All Types';
+      default:
+        return 'Event';
+    }
+  };
+  const getActivityColor = (type: ActivityType | 'all') => {
+    switch (type) {
+      case 'training':
+        return '#4AADCC';
+      case 'game':
+        return '#E67E22';
+      case 'tournament':
+        return '#8E44AD';
+      case 'other':
+        return '#2ECC71';
+      default:
+        return COLORS.primary;
+    }
+  };
+
   return (
     <View style={styles.container}>
-      {/* Main ScrollView that makes the entire page scrollable */}
-      <ScrollView 
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Weekly Calendar */}
-        <WeeklyCalendarCard
-          currentDate={currentWeek}
-          selectedDate={selectedDate}
-          onDateSelect={setSelectedDate}
-          onPrevWeek={handlePrevWeek}
-          onNextWeek={handleNextWeek}
-        />
-        
-        {/* Activity Type Selector */}
-        <ActivityTypeSelector
-          selectedType={selectedType}
-          onTypeChange={(type) => {
-            setSelectedType(type);
-            setSelectedActivity(null);
-          }}
-        />
-        
-        {/* Activity Selector */}
-        <ActivitySelector
-          selectedActivity={selectedActivity}
-          activities={activities}
-          isLoading={isLoadingActivities}
-          onActivitySelect={setSelectedActivity}
-        />
-        
-        {/* Team Selector */}
-        <TeamSelector
-          selectedTeam={selectedTeam}
-          teams={teams}
-          onTeamSelect={setSelectedTeam}
-        />
-        
-        {/* Search */}
-        <View style={styles.searchContainer}>
-          <TextInput
-            style={styles.searchInput}
-            mode="outlined"
-            placeholder="Search players..."
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            left={<TextInput.Icon icon="magnify" color={COLORS.primary} />}
-            outlineStyle={styles.searchOutline}
-            dense
+      {/* Calculate weekDates and eventDates for event dots */}
+      {(() => {
+        const weekStart = startOfWeek(currentWeek, { weekStartsOn: 1 });
+        const weekEnd = endOfWeek(currentWeek, { weekStartsOn: 1 });
+        let d = new Date(weekStart);
+        const weekDates: string[] = [];
+        while (d <= weekEnd) {
+          weekDates.push(format(new Date(d), 'yyyy-MM-dd'));
+          d.setDate(d.getDate() + 1);
+        }
+        const eventDates = activities.map(a => a.start_time.split('T')[0]).filter((date, i, arr) => arr.indexOf(date) === i && weekDates.includes(date));
+        return (
+          <WeeklyCalendarCard
+            currentDate={currentWeek}
+            selectedDate={selectedDate}
+            onDateSelect={setSelectedDate}
+            onPrevWeek={handlePrevWeek}
+            onNextWeek={handleNextWeek}
+            eventDates={eventDates}
           />
-        </View>
-        
-        {/* Player List */}
-        {isLoadingPlayers ? (
-          <View style={styles.loadingContainer}>
+        );
+      })()}
+
+      {/* Header row with Attendance title and filter icon */}
+      <View style={styles.headerRow}>
+        <Text style={styles.reportsTitle}>Reports</Text>
+        <TouchableOpacity onPress={() => setFilterModalVisible(true)} style={styles.filterIconButton}>
+          <MaterialCommunityIcons name="filter" size={24} color={COLORS.primary} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Attendance Reports List for selected date */}
+      <ScrollView style={styles.reportsList}>
+        {isLoadingAttendanceRecords ? (
+          <View style={{ padding: 32, alignItems: 'center' }}>
             <ActivityIndicator size="large" color={COLORS.primary} />
-            <Text style={styles.loadingText}>Loading players...</Text>
+            <Text style={{ marginTop: 12, color: COLORS.grey[600] }}>Loading attendance records...</Text>
           </View>
-        ) : filteredPlayers.length > 0 ? (
-          <View style={styles.playersContainer}>
-            {filteredPlayers.map(item => (
-              <View key={item.id} style={styles.playerRow}>
-                <View style={styles.playerInfo}>
-                  <Text style={styles.playerName} numberOfLines={1} ellipsizeMode="tail">
-                    {item.name}
-                  </Text>
-                  <Text style={styles.playerTeam} numberOfLines={1} ellipsizeMode="tail">
-                    {teams.find(t => t.id === item.team_id)?.name || ''}
-                  </Text>
-                </View>
-                <View style={styles.attendanceRadioContainer}>
-                  <View style={styles.radioGroup}>
-                    <TouchableOpacity 
-                      style={[
-                        styles.radioButton, 
-                        attendance[item.id] === 'present' && styles.radioButtonSelected,
-                        styles.presentRadio
-                      ]}
-                      onPress={() => toggleAttendance(item.id, 'present')}
-                    >
-                      {attendance[item.id] === 'present' && (
-                        <View style={[styles.radioInner, { backgroundColor: COLORS.primary }]} />
-                      )}
-                    </TouchableOpacity>
-                    <Text style={styles.radioLabel}>Present</Text>
-                  </View>
-                  <View style={styles.radioGroup}>
-                    <TouchableOpacity 
-                      style={[
-                        styles.radioButton, 
-                        attendance[item.id] === 'absent' && styles.radioButtonSelected,
-                        styles.absentRadio
-                      ]}
-                      onPress={() => toggleAttendance(item.id, 'absent')}
-                    >
-                      {attendance[item.id] === 'absent' && (
-                        <View style={[styles.radioInner, { backgroundColor: COLORS.error }]} />
-                      )}
-                    </TouchableOpacity>
-                    <Text style={styles.radioLabel}>Absent</Text>
-                  </View>
-                </View>
-              </View>
-            ))}
+        ) : attendanceRecords.length === 0 ? (
+          <View style={{ padding: 32, alignItems: 'center' }}>
+            <MaterialCommunityIcons name="clipboard-text-outline" size={48} color={COLORS.grey[400]} />
+            <Text style={{ marginTop: 12, color: COLORS.grey[600], fontSize: 16 }}>No attendance records for this date.</Text>
           </View>
         ) : (
-          <View style={styles.emptyContainer}>
-            <MaterialCommunityIcons 
-              name="account-question" 
-              size={50} 
-              color={COLORS.grey[400]} 
-            />
-            <Text style={styles.emptyText}>
-              {selectedTeam ? 'No players found for this team' : 'Select a team to view players'}
-            </Text>
-          </View>
+          attendanceRecords.map((record, idx) => {
+            const presentCount = record.records.filter(r => r.status === 'present').length;
+            const totalCount = record.records.length;
+            return (
+              <TouchableOpacity
+                key={record.activity.id}
+                style={[styles.reportCard, idx > 0 && { marginTop: 16 }]}
+                activeOpacity={0.8}
+                onPress={() => navigation.navigate('AttendanceReportDetails', { activityId: record.activity.id })}
+              >
+                <View style={styles.reportHeader}>
+                  <MaterialCommunityIcons 
+                    name={getActivityIcon(record.activity.type)} 
+                    size={20} 
+                    color={getActivityColor(record.activity.type)} 
+                    style={{ marginRight: 6 }} 
+                  />
+                  <Text style={styles.reportTitle} numberOfLines={1} ellipsizeMode="tail">{record.activity.title}</Text>
+                  <Text style={styles.reportTime}>{format(new Date(record.activity.start_time), 'HH:mm')}</Text>
+                </View>
+                {record.records.length === 0 ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
+                    <MaterialCommunityIcons name="alert-circle-outline" size={16} color={COLORS.grey[600]} style={{ marginRight: 4 }} />
+                    <Text style={styles.noAttendanceText}>No attendance marked yet</Text>
+                  </View>
+                ) : (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
+                    <Text style={styles.attendanceCount}>{presentCount}</Text>
+                    <Text style={styles.attendanceSlash}>/</Text>
+                    <Text style={styles.attendanceTotal}>{totalCount}</Text>
+                    <Text style={styles.attendanceLabel}> present</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })
         )}
-        
-        {/* Add extra padding at the bottom for the FAB */}
-        <View style={styles.fabSpacer} />
       </ScrollView>
-      
-      {/* Floating Save Button */}
-      <TouchableOpacity
-        style={styles.saveButton}
-        onPress={handleSave}
-        disabled={!selectedActivity || isSaving}
-        activeOpacity={0.85}
+
+      {/* Filter Modal (refactored to match ScheduleCalendar) */}
+      <Modal
+        visible={isFilterModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setFilterModalVisible(false)}
       >
-        <MaterialCommunityIcons name="content-save" size={16} color="#212121" style={{ marginRight: 4 }} />
-        <Text style={styles.saveButtonText}>Save</Text>
-      </TouchableOpacity>
+        <TouchableWithoutFeedback onPress={() => setFilterModalVisible(false)}>
+          <View style={styles.filterModalOverlay}>
+            <TouchableWithoutFeedback onPress={() => {}}>
+              <View style={styles.filterModalContent}>
+                <ScrollView>
+                  <Text style={styles.filterModalTitle}>Filter Activities</Text>
+                  <Text style={styles.filterModalSection}>Activity Type</Text>
+                  <View style={styles.filterChipRow}>
+                    {(['all', 'training', 'game', 'tournament', 'other'] as (ActivityType | 'all')[]).map((type) => {
+                      const isSelected = filterType === type;
+                      const color = getActivityColor(type);
+                      return (
+                        <TouchableOpacity
+                          key={type}
+                          style={[
+                            styles.chip,
+                            isSelected && { backgroundColor: color, borderColor: color }
+                          ]}
+                          onPress={() => setFilterType(type)}
+                        >
+                          <MaterialCommunityIcons
+                            name={getActivityIcon(type)}
+                            size={16}
+                            color={isSelected ? '#fff' : color}
+                            style={{ marginRight: 4 }}
+                          />
+                          <Text style={[
+                            styles.chipText,
+                            isSelected && { color: '#fff' }
+                          ]}>
+                            {getActivityTypeLabel(type)}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                  <Text style={styles.filterModalSection}>Teams</Text>
+                  <View style={styles.filterChipRow}>
+                    <TouchableOpacity
+                      style={[
+                        styles.chip,
+                        filterTeamIds.length === 0 && { backgroundColor: COLORS.primary, borderColor: COLORS.primary }
+                      ]}
+                      onPress={() => setFilterTeamIds([])}
+                    >
+                      <Text style={[
+                        styles.chipText,
+                        filterTeamIds.length === 0 && { color: '#fff' }
+                      ]}>All Teams</Text>
+                    </TouchableOpacity>
+                    {teams.map(team => {
+                      const isSelected = filterTeamIds.includes(team.id);
+                      return (
+                        <TouchableOpacity
+                          key={team.id}
+                          style={[
+                            styles.chip,
+                            isSelected && { backgroundColor: COLORS.primary, borderColor: COLORS.primary }
+                          ]}
+                          onPress={() => {
+                            setFilterTeamIds(prev =>
+                              prev.includes(team.id)
+                                ? prev.filter(id => id !== team.id)
+                                : [...prev, team.id]
+                            );
+                          }}
+                        >
+                          <Text style={[
+                            styles.chipText,
+                            isSelected && { color: '#fff' }
+                          ]}>{team.name}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                  <Button mode="contained" onPress={() => {
+                    setFilterModalVisible(false);
+                    setSelectedType(filterType);
+                    setSelectedTeam(filterTeamIds.length > 0 ? teams.find(t => t.id === filterTeamIds[0]) || null : null);
+                  }} style={styles.filterApplyButton}>
+                    Apply Filters
+                  </Button>
+                </ScrollView>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
     </View>
   );
 };
@@ -854,5 +1081,202 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 12,
     borderTopRightRadius: 12,
     padding: SPACING.sm,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginHorizontal: SPACING.md,
+    marginTop: SPACING.md,
+    marginBottom: SPACING.sm,
+  },
+  reportsTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.text,
+  },
+  filterIconButton: {
+    padding: SPACING.xs,
+  },
+  fab: {
+    position: 'absolute',
+    right: 24,
+    bottom: 32,
+    backgroundColor: COLORS.primary,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 6,
+  },
+  fabText: {
+    color: COLORS.white,
+    fontSize: 32,
+    fontWeight: 'bold',
+    marginBottom: 2,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+  },
+  modalContent: {
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    padding: 24,
+    maxHeight: '90%',
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 16,
+    color: COLORS.primary,
+  },
+  closeButton: {
+    padding: 4,
+  },
+  sectionHeader: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.primary,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  reportsList: {
+    flex: 1,
+    marginHorizontal: SPACING.md,
+  },
+  filterModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'flex-end',
+  },
+  filterModalContent: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    padding: 24,
+    minHeight: 320,
+  },
+  filterModalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 16,
+  },
+  filterModalSection: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  filterChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 8,
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.grey[300],
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginRight: 8,
+    marginBottom: 8,
+    minHeight: 32,
+  },
+  chipSelected: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  chipText: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  chipTextSelected: {
+    color: COLORS.white,
+  },
+  filterApplyButton: {
+    marginTop: 16,
+  },
+  reportCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+    marginHorizontal: 8,
+  },
+  reportHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  reportTitle: {
+    fontWeight: 'bold',
+    fontSize: 15,
+    color: COLORS.text,
+    flex: 1,
+  },
+  reportTime: {
+    fontSize: 14,
+    color: COLORS.grey[600],
+    marginLeft: 8,
+  },
+  reportRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  reportPlayer: {
+    fontSize: 15,
+    color: COLORS.text,
+    flex: 1,
+  },
+  reportStatus: {
+    fontWeight: 'bold',
+    fontSize: 15,
+  },
+  noAttendanceText: {
+    color: COLORS.grey[600],
+    fontSize: 14,
+    fontStyle: 'italic',
+  },
+  attendanceCount: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: COLORS.primary,
+  },
+  attendanceSlash: {
+    fontSize: 16,
+    color: COLORS.text,
+    marginHorizontal: 2,
+  },
+  attendanceTotal: {
+    fontSize: 16,
+    color: COLORS.text,
+  },
+  attendanceLabel: {
+    fontSize: 14,
+    color: COLORS.grey[600],
+    marginLeft: 4,
   },
 }); 

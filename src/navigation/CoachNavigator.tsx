@@ -12,7 +12,7 @@ import { CoachNewsScreen } from '../screens/coach/NewsScreen';
 import { CoachSettingsScreen } from '../screens/coach/CoachSettingsScreen';
 import { CreateActivityScreen } from '../screens/CreateActivityScreen';
 import { ActivityDetailsScreen } from '../screens/ActivityDetailsScreen';
-import { AttendanceTabsScreen } from '../screens/AttendanceTabsScreen';
+import { AttendanceScreen } from '../screens/AttendanceScreen';
 import { Image, Pressable, View, StyleSheet, Text, Platform, Alert } from 'react-native';
 import { Menu } from 'react-native-paper';
 import { supabase } from '../lib/supabase';
@@ -238,7 +238,7 @@ const TabNavigator = () => {
       />
       <Tab.Screen
         name="Attendance"
-        component={AttendanceTabsScreen}
+        component={AttendanceScreen}
         options={{
           tabBarLabel: 'Attendance',
           tabBarIcon: ({ color, size }) => (

@@ -98,6 +98,7 @@ export type RootStackParamList = {
   ActivityDetails: { activityId: string };
   EditActivity: { activityId: string };
   AttendanceReportDetails: { activityId: string };
+  AddAttendance: { activityId?: string; teamId?: string };
 };
 
 export type ParentStackParamList = {

@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, SafeAreaView } from 'react-native';
-import { Text, Divider } from 'react-native-paper';
+import { Text, Divider, Button } from 'react-native-paper';
 import { COLORS, SPACING } from '@/constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '../types/navigation';
 import { format } from 'date-fns';
 import { supabase } from '@/lib/supabase';
 
@@ -11,6 +13,47 @@ import { supabase } from '@/lib/supabase';
 const capitalize = (str: string | null | undefined) => {
   if (!str) return '';
   return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+};
+
+// Helper function to extract base UUID from activity ID
+const extractBaseActivityId = (activityId: string) => {
+  // If the ID contains a date suffix (after the last hyphen), remove it
+  const parts = activityId.split('-');
+  if (parts.length > 5) {
+    // Return just the UUID part (first 5 segments)
+    return parts.slice(0, 5).join('-');
+  }
+  return activityId;
+};
+
+// Add helper functions for icon and color
+const getActivityIcon = (type: string) => {
+  switch (type) {
+    case 'training':
+      return 'whistle';
+    case 'game':
+      return 'trophy-outline';
+    case 'tournament':
+      return 'tournament';
+    case 'other':
+      return 'calendar-text';
+    default:
+      return 'calendar';
+  }
+};
+const getActivityColor = (type: string) => {
+  switch (type) {
+    case 'training':
+      return '#4AADCC';
+    case 'game':
+      return '#E67E22';
+    case 'tournament':
+      return '#8E44AD';
+    case 'other':
+      return '#2ECC71';
+    default:
+      return COLORS.primary;
+  }
 };
 
 type AttendanceRecord = {
@@ -43,9 +86,10 @@ type AttendanceReportDetailsRouteParams = {
 };
 
 export const AttendanceReportDetailsScreen = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<{ params: AttendanceReportDetailsRouteParams }, 'params'>>();
   const activityId = (route.params && (route.params as any).activityId) || '';
+  const baseActivityId = extractBaseActivityId(activityId);
 
   const [isLoading, setIsLoading] = useState(true);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
@@ -63,7 +107,7 @@ export const AttendanceReportDetailsScreen = () => {
         const { data: activityData, error: activityError } = await supabase
           .from('activities')
           .select('id, title, type, start_time, team_id')
-          .eq('id', activityId)
+          .eq('id', baseActivityId)
           .single();
         if (activityError) throw activityError;
         setActivity(activityData);
@@ -85,7 +129,7 @@ export const AttendanceReportDetailsScreen = () => {
         const { data: attendanceData, error: attendanceError } = await supabase
           .from('activity_attendance')
           .select('*')
-          .eq('activity_id', activityId);
+          .eq('activity_id', baseActivityId);
         if (attendanceError) throw attendanceError;
         setAttendance(attendanceData || []);
 
@@ -113,8 +157,8 @@ export const AttendanceReportDetailsScreen = () => {
         setIsLoading(false);
       }
     };
-    if (activityId) fetchAll();
-  }, [activityId]);
+    if (baseActivityId) fetchAll();
+  }, [baseActivityId]);
 
   const presentCount = attendance.filter((r) => r.status === 'present').length;
   const absentCount = attendance.filter((r) => r.status === 'absent').length;
@@ -150,7 +194,11 @@ export const AttendanceReportDetailsScreen = () => {
             <Text style={styles.detailText}>{team?.name || ''}</Text>
           </View>
           <View style={styles.detailRow}>
-            <MaterialCommunityIcons name="whistle" size={20} color={COLORS.primary} />
+            <MaterialCommunityIcons
+              name={getActivityIcon(activity?.type || attendance[0]?.activity_type || 'other')}
+              size={20}
+              color={getActivityColor(activity?.type || attendance[0]?.activity_type || 'other')}
+            />
             <Text style={styles.detailText}>{capitalize(activity?.type || attendance[0]?.activity_type)}</Text>
           </View>
           <View style={styles.summaryRow}>
@@ -165,7 +213,7 @@ export const AttendanceReportDetailsScreen = () => {
               <Text style={styles.playerName}>
                 {playerMap[record.player_id] || record.player_id || 'Unknown'}
               </Text>
-              <Text style={[styles.playerStatus, record.status === 'present' ? styles.present : styles.absent]}>
+              <Text style={[styles.playerStatus, { fontWeight: '400' }, record.status === 'present' ? styles.present : styles.absent]}>
                 {capitalize(record.status)}
               </Text>
             </View>
@@ -180,6 +228,20 @@ export const AttendanceReportDetailsScreen = () => {
                 {attendance[0]?.recorded_at ? format(new Date(attendance[0]?.recorded_at), 'MMM d, yyyy h:mm a') : ''}
               </Text>
             </View>
+          )}
+          {/* Show Create Attendance button if no attendance is marked */}
+          {attendance.length === 0 && (
+            <Button
+              mode="contained"
+              style={styles.createAttendanceButton}
+              onPress={() => {
+                if (activity) {
+                  navigation.navigate('AddAttendance', { activityId: activity.id, teamId: activity.team_id });
+                }
+              }}
+            >
+              Create Attendance
+            </Button>
           )}
         </ScrollView>
       )}
@@ -209,4 +271,5 @@ const styles = StyleSheet.create({
   playerStatus: { fontSize: 15, fontWeight: '600' },
   present: { color: COLORS.primary },
   absent: { color: COLORS.error },
+  createAttendanceButton: { marginTop: 32, alignSelf: 'center', borderRadius: 8, paddingHorizontal: 24, paddingVertical: 8 },
 }); 

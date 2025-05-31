@@ -11,7 +11,6 @@ interface WeeklyCalendarCardProps {
   onDateSelect: (date: Date) => void;
   onPrevWeek: () => void;
   onNextWeek: () => void;
-  eventDates?: string[];
 }
 
 export const WeeklyCalendarCard: React.FC<WeeklyCalendarCardProps> = ({
@@ -19,8 +18,7 @@ export const WeeklyCalendarCard: React.FC<WeeklyCalendarCardProps> = ({
   selectedDate,
   onDateSelect,
   onPrevWeek,
-  onNextWeek,
-  eventDates = []
+  onNextWeek
 }) => {
   // Generate week days starting from Monday
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
@@ -73,9 +71,6 @@ export const WeeklyCalendarCard: React.FC<WeeklyCalendarCardProps> = ({
             <Text style={[styles.dayNumber, day.isSelected && styles.selectedDayText]}>
               {day.dayNumber}
             </Text>
-            {eventDates.includes(format(day.date, 'yyyy-MM-dd')) && (
-              <View style={styles.eventDot} />
-            )}
           </TouchableOpacity>
         ))}
       </View>
@@ -141,13 +136,5 @@ const styles = StyleSheet.create({
   },
   selectedDayText: {
     color: COLORS.white,
-  },
-  eventDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-    backgroundColor: COLORS.primary,
-    marginTop: 2,
-    alignSelf: 'center',
   },
 }); 
