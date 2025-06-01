@@ -86,7 +86,6 @@ export const ManageCoachesScreen: React.FC<ManageCoachesScreenProps> = ({
                 color={COLORS.primary} 
               />
             </View>
-            
             <View style={{ flex: 1 }}>
               <Text 
                 style={{
@@ -110,7 +109,6 @@ export const ManageCoachesScreen: React.FC<ManageCoachesScreenProps> = ({
               </Text>
             </View>
           </View>
-          
           <IconButton
             icon="pencil"
             size={20}
@@ -122,13 +120,11 @@ export const ManageCoachesScreen: React.FC<ManageCoachesScreenProps> = ({
             onPress={() => navigation.navigate('EditCoach', { coachId: coach.id })}
           />
         </View>
-        
         <Divider style={{ 
           height: 1,
           backgroundColor: COLORS.grey[200],
           marginBottom: SPACING.md
         }} />
-        
         {/* Info Section */}
         <View style={{
           gap: SPACING.md,
@@ -151,7 +147,6 @@ export const ManageCoachesScreen: React.FC<ManageCoachesScreenProps> = ({
             </Text>
           </View>
         </View>
-        
         {/* Teams Section */}
         <View>
           <Text style={{
@@ -162,7 +157,6 @@ export const ManageCoachesScreen: React.FC<ManageCoachesScreenProps> = ({
           }}>
             Assigned Teams:
           </Text>
-          
           <View style={{
             flexDirection: 'row',
             flexWrap: 'wrap',

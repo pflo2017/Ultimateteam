@@ -851,7 +851,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xs,
     paddingVertical: 2,
   },
-  infoText: {
+  infoLabel: {
     fontSize: 14,
     color: COLORS.grey[600],
     marginLeft: SPACING.xs,
@@ -899,6 +899,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     marginLeft: 8,
+  },
+  infoValue: {
+    fontSize: 14,
+    color: COLORS.text,
+    fontWeight: '500',
   },
   emptyText: {
     textAlign: 'center',

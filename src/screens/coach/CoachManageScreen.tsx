@@ -50,12 +50,15 @@ export const CoachManageScreen = () => {
     }
     loadData();
   }, [route.params?.activeTab, route.params?.teamId]);
+<<<<<<< Updated upstream
 
   // Use the data refresh hook to listen for payment status changes
   useDataRefresh('players', () => {
     console.log("Payment status change detected - refreshing players data");
     loadData();
   });
+=======
+>>>>>>> Stashed changes
 
   const loadData = async () => {
     try {

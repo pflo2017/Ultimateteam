@@ -25,6 +25,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { RootStackParamList } from '../types/navigation';
 import { AttendanceReportDetailsScreen } from '../screens/AttendanceReportDetailsScreen';
 import AddAttendanceScreen from '../screens/AddAttendanceScreen';
+import { AttendanceStatisticsScreen } from '../screens/AttendanceStatisticsScreen';
 
 // Add global type declaration for reloadRole
 declare global {
@@ -130,6 +131,13 @@ export const Navigation = () => {
                   headerShown: false,
                 }}
               />
+              <Stack.Screen
+                name="AttendanceStatistics"
+                component={AttendanceStatisticsScreen}
+                options={{
+                  headerShown: false,
+                }}
+              />
             </>
           ) : role === 'admin' ? (
             <>
@@ -172,6 +180,13 @@ export const Navigation = () => {
               <Stack.Screen
                 name="AddAttendance"
                 component={AddAttendanceScreen}
+                options={{
+                  headerShown: false,
+                }}
+              />
+              <Stack.Screen
+                name="AttendanceStatistics"
+                component={AttendanceStatisticsScreen}
                 options={{
                   headerShown: false,
                 }}
@@ -229,6 +244,13 @@ export const Navigation = () => {
                   headerShown: false,
                 }}
               />
+              <Stack.Screen
+                name="AttendanceStatistics"
+                component={AttendanceStatisticsScreen}
+                options={{
+                  headerShown: false,
+                }}
+              />
             </>
           ) : (
             <>
@@ -246,6 +268,13 @@ export const Navigation = () => {
               <Stack.Screen
                 name="AddAttendance"
                 component={AddAttendanceScreen}
+                options={{
+                  headerShown: false,
+                }}
+              />
+              <Stack.Screen
+                name="AttendanceStatistics"
+                component={AttendanceStatisticsScreen}
                 options={{
                   headerShown: false,
                 }}
