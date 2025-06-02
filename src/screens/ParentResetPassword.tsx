@@ -32,8 +32,8 @@ export const ParentResetPasswordScreen = () => {
   const route = useRoute<ParentResetPasswordScreenRouteProp>();
   const { phoneNumber } = route.params;
   
-  const timerRef = useRef<ReturnType<typeof setInterval>>();
-  const cooldownRef = useRef<ReturnType<typeof setInterval>>();
+  const timerRef = useRef<ReturnType<typeof setInterval>>(undefined);
+  const cooldownRef = useRef<ReturnType<typeof setInterval>>(undefined);
 
   useEffect(() => {
     // Start countdown for code expiration

@@ -14,6 +14,7 @@ export default {
     assetBundlePatterns: [
       "**/*"
     ],
+    entryPoint: "./index.js",
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.ultimateteam.app",
@@ -31,7 +32,7 @@ export default {
     },
     extra: {
       supabaseUrl: process.env.SUPABASE_URL,
-      supabaseAnonKey: process.env.SUPABASE_ANON_KEY,
+      supabaseAnonKey: process.env.SUPABASE_ANON_KEY
     },
     plugins: [
       "expo-router"

@@ -74,7 +74,6 @@ const getPaymentStatusColor = (status: string) => {
   }
 };
 
-<<<<<<< Updated upstream
 const getPaymentStatusText = (status: string) => {
   switch (status.toLowerCase()) {
     case 'paid':
@@ -151,55 +150,6 @@ const PlayerCard = ({ player, onDetailsPress, onDelete }: {
           >
             <MaterialCommunityIcons name="dots-vertical" size={20} color={COLORS.grey[700]} />
           </TouchableOpacity>
-=======
-const PlayerCard = ({ player, onDetailsPress }: { player: Player; onDetailsPress: () => void }) => (
-  <Card style={styles.playerCard}>
-    <Card.Content>
-      <View style={styles.cardHeader}>
-        <View style={styles.cardTitleContainer}>
-          <MaterialCommunityIcons name="account" size={24} color={COLORS.primary} />
-          <Text style={styles.playerName}>{player.player_name}</Text>
-        </View>
-        <TouchableOpacity
-          onPress={onDetailsPress}
-          style={styles.actionButton}
-        >
-          <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.primary} />
-        </TouchableOpacity>
-      </View>
-      <View style={styles.cardContent}>
-        <View style={styles.infoRow}>
-          <MaterialCommunityIcons name="account-group" size={20} color={COLORS.primary} />
-          <Text style={styles.infoLabel}>
-            Team: <Text style={styles.infoValue}>{player.team_name || 'No team assigned'}</Text>
-          </Text>
-        </View>
-        
-        <View style={styles.infoRow}>
-          <MaterialCommunityIcons 
-            name="medical-bag" 
-            size={20} 
-            color={getMedicalVisaStatusColor(player.medical_visa_status)} 
-          />
-          <Text style={styles.infoLabel}>
-            Visa Status: <Text style={[styles.infoValue, { color: getMedicalVisaStatusColor(player.medical_visa_status) }]}>
-              {player.medical_visa_status.charAt(0).toUpperCase() + player.medical_visa_status.slice(1)}
-            </Text>
-          </Text>
-        </View>
-
-        <View style={styles.infoRow}>
-          <MaterialCommunityIcons 
-            name="cash" 
-            size={20} 
-            color={getPaymentStatusColor(player.payment_status)} 
-          />
-          <Text style={styles.infoLabel}>
-            Payment Status: <Text style={[styles.infoValue, { color: getPaymentStatusColor(player.payment_status) }]}>
-              {player.payment_status.charAt(0).toUpperCase() + player.payment_status.slice(1)}
-            </Text>
-          </Text>
->>>>>>> Stashed changes
         </View>
         <View style={styles.cardContent}>
           <View style={styles.infoRow}>
@@ -276,17 +226,21 @@ const PlayerCard = ({ player, onDetailsPress }: { player: Player; onDetailsPress
                     ]
                   );
                 }}
-                disabled={isDeleting}
               >
                 <MaterialCommunityIcons name="delete" size={20} color={COLORS.error} />
-                <Text style={[styles.menuItemText, { color: COLORS.error }]}>
-                  {isDeleting ? "Deleting..." : "Delete player"}
-                </Text>
+                <Text style={[styles.menuItemText, { color: COLORS.error }]}>Delete player</Text>
               </TouchableOpacity>
             </View>
           )}
         </View>
       </Card.Content>
+      
+      <TouchableOpacity 
+        style={styles.viewDetailsButton}
+        onPress={onDetailsPress}
+      >
+        <Text style={styles.viewDetailsText}>View Details</Text>
+      </TouchableOpacity>
     </Card>
   );
 };
@@ -794,7 +748,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.text,
     fontWeight: '500',
-<<<<<<< Updated upstream
   },
   menuContainer: {
     marginTop: SPACING.sm,
@@ -818,8 +771,6 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     fontSize: 14,
     color: COLORS.text,
-=======
->>>>>>> Stashed changes
   },
   emptyText: {
     textAlign: 'center',
@@ -939,6 +890,17 @@ const styles = StyleSheet.create({
   },
   deleteButtonText: {
     fontSize: 16,
+    fontWeight: 'bold',
+    color: COLORS.white,
+  },
+  viewDetailsButton: {
+    padding: SPACING.md,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: SPACING.md,
+  },
+  viewDetailsText: {
     fontWeight: 'bold',
     color: COLORS.white,
   },

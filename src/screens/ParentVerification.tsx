@@ -21,9 +21,9 @@ export default function ParentVerificationScreen({ navigation, route }: Props) {
   const [error, setError] = useState('');
   const [timeLeft, setTimeLeft] = useState(CODE_TIMEOUT);
   const [resendCooldown, setResendCooldown] = useState(0);
-  const timerRef = useRef<NodeJS.Timeout>();
-  const cooldownRef = useRef<NodeJS.Timeout>();
-  const inputRef = useRef<any>();
+  const timerRef = useRef<ReturnType<typeof setInterval>>(undefined);
+  const cooldownRef = useRef<ReturnType<typeof setInterval>>(undefined);
+  const inputRef = useRef<any>(undefined);
 
   useEffect(() => {
     // Start countdown for code expiration

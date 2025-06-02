@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { View, StyleSheet, Dimensions, Text, Animated } from 'react-native';
 import { COLORS } from '../constants/theme';
-import StadiumSvg from '../../assets/stadium.svg';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { FootballBall } from './FootballBall';
 
 const { width, height } = Dimensions.get('window');
@@ -71,7 +71,9 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onAnimationFinish })
           }
         ]}
       >
-        <StadiumSvg width={width * 0.4} height={height * 0.2} />
+        <View style={styles.stadiumIcon}>
+          <MaterialCommunityIcons name="stadium" size={80} color={COLORS.primary} />
+        </View>
         <Text style={styles.title}>Ultimate Team</Text>
         <Text style={styles.subtitle}>Welcome to the future of team management</Text>
         <Animated.View 
@@ -100,6 +102,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 20,
+  },
+  stadiumIcon: {
+    width: width * 0.4,
+    height: height * 0.2,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   title: {
     fontSize: 28,
