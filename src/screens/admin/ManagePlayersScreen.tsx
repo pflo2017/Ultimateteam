@@ -8,6 +8,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { AdminStackParamList } from '../../types/navigation';
 import { supabase } from '../../lib/supabase';
 import { useDataRefresh } from '../../utils/useDataRefresh';
+import { registerEventListener } from '../../utils/events';
 
 interface Team {
   id: string;
@@ -301,6 +302,22 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
     onRefresh();
   }, []);
   
+  // Listen for medical visa status changes
+  useEffect(() => {
+    console.log("[AdminManagePlayersScreen] Setting up medical visa status change listener");
+    
+    const handleMedicalVisaStatusChange = () => {
+      console.log("[AdminManagePlayersScreen] Medical visa status change detected - refreshing player data");
+      onRefresh();
+    };
+    
+    const unregister = registerEventListener('medical_visa_status_changed', handleMedicalVisaStatusChange);
+    
+    return () => {
+      unregister();
+    };
+  }, [onRefresh]);
+  
   // Use data refresh hook to refresh player data when status changes
   useDataRefresh('players', () => {
     console.log("[ManagePlayersScreen] Payment status change detected - refreshing player data");
@@ -310,6 +327,8 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
   // Create a PlayerCard component that fetches fresh status data
   const PlayerCardWithFreshStatus = ({ player }: { player: Player }) => {
     const [freshStatus, setFreshStatus] = useState<string | null>(null);
+    const [freshMedicalVisaStatus, setFreshMedicalVisaStatus] = useState<string | null>(null);
+    const [freshMedicalVisaIssueDate, setFreshMedicalVisaIssueDate] = useState<string | null>(null);
     
     // Fetch fresh payment status when card renders
     useEffect(() => {
@@ -318,25 +337,33 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
           // Fetch fresh data without logging each attempt
           const { data, error } = await supabase
             .from('players')
-            .select('payment_status, player_status')
+            .select('payment_status, player_status, medical_visa_status, medical_visa_issue_date')
             .eq('id', player.id)
             .single();
             
           if (!error && data) {
             // Use payment_status directly - no mapping needed
             const newStatus = data.payment_status;
+            const newMedicalVisaStatus = data.medical_visa_status;
             
             const oldStatus = player.paymentStatus || player.payment_status;
+            const oldMedicalVisaStatus = player.medicalVisaStatus;
             
             // Only log if there's an actual difference in the status
-            if (newStatus !== oldStatus) {
+            if (newStatus !== oldStatus || newMedicalVisaStatus !== oldMedicalVisaStatus) {
               console.log(`[PlayerCard] Status change for ${player.name}:`, {
-                old: oldStatus,
-                new: newStatus
+                old_payment: oldStatus,
+                new_payment: newStatus,
+                old_medical: oldMedicalVisaStatus,
+                new_medical: newMedicalVisaStatus,
+                old_issue_date: player.medicalVisaIssueDate || player.medical_visa_issue_date,
+                new_issue_date: data.medical_visa_issue_date
               });
             }
             
             setFreshStatus(newStatus);
+            setFreshMedicalVisaStatus(newMedicalVisaStatus);
+            setFreshMedicalVisaIssueDate(data.medical_visa_issue_date);
           }
         } catch (err) {
           console.error("Error fetching fresh status:", err);
@@ -348,6 +375,8 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
     
     // Use refreshed status if available, otherwise fall back to passed-in status
     const displayStatus = freshStatus || player.paymentStatus || player.payment_status || 'pending';
+    const displayMedicalVisaStatus = freshMedicalVisaStatus || player.medicalVisaStatus || 'pending';
+    const displayMedicalVisaIssueDate = freshMedicalVisaIssueDate || player.medicalVisaIssueDate || player.medical_visa_issue_date;
     
     // Format the date if it exists
     let formattedBirthDate = 'Not available';
@@ -408,7 +437,7 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
               Medical Visa
             </Text>
             <View style={{
-              backgroundColor: getMedicalVisaStatusColor(player.medicalVisaStatus) + '20',
+              backgroundColor: getMedicalVisaStatusColor(displayMedicalVisaStatus) + '20',
               borderRadius: 12,
               paddingHorizontal: SPACING.md,
               paddingVertical: 4,
@@ -419,23 +448,28 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
               <Text style={{
                 fontSize: FONT_SIZES.xs,
                 fontWeight: '600',
-                color: getMedicalVisaStatusColor(player.medicalVisaStatus)
+                color: getMedicalVisaStatusColor(displayMedicalVisaStatus)
               }}>
-                {player.medicalVisaStatus === 'no_status' 
+                {displayMedicalVisaStatus === 'no_status' 
                   ? 'No Status' 
-                  : player.medicalVisaStatus.charAt(0).toUpperCase() + player.medicalVisaStatus.slice(1)}
+                  : displayMedicalVisaStatus.charAt(0).toUpperCase() + displayMedicalVisaStatus.slice(1)}
               </Text>
             </View>
             <View style={{ alignItems: 'flex-end', marginLeft: 'auto' }}>
               <Text style={{ fontSize: FONT_SIZES.xs, color: COLORS.grey[600], fontWeight: '500' }}>Until</Text>
               <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '600' }}>
-                {player.medicalVisaStatus === 'valid' && player.medicalVisaIssueDate ?
+                {displayMedicalVisaStatus === 'valid' && displayMedicalVisaIssueDate ?
                   (() => {
-                    const issueDate = new Date(player.medicalVisaIssueDate);
-                    if (isNaN(issueDate.getTime())) return 'N/A';
-                    const expiryDate = new Date(issueDate);
-                    expiryDate.setMonth(expiryDate.getMonth() + 6);
-                    return expiryDate.toLocaleDateString('en-GB');
+                    try {
+                      const issueDate = new Date(displayMedicalVisaIssueDate);
+                      if (isNaN(issueDate.getTime())) return 'N/A';
+                      const expiryDate = new Date(issueDate);
+                      expiryDate.setMonth(expiryDate.getMonth() + 6);
+                      return expiryDate.toLocaleDateString('en-GB');
+                    } catch (e) {
+                      console.error("Error calculating expiry date:", e);
+                      return 'N/A';
+                    }
                   })()
                   : 'N/A'}
               </Text>

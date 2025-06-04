@@ -90,7 +90,7 @@ export const AttendanceReportDetailsScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<{ params: AttendanceReportDetailsRouteParams }, 'params'>>();
   const activityId = (route.params && (route.params as any).activityId) || '';
-  
+
   const [isLoading, setIsLoading] = useState(true);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [activity, setActivity] = useState<ActivityInfo | null>(null);
@@ -135,7 +135,7 @@ export const AttendanceReportDetailsScreen = () => {
             .from('activities')
             .select('id, title, type, start_time, team_id')
             .eq('id', parentId)
-            .single();
+          .single();
             
           if (parentError) throw parentError;
           

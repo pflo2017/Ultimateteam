@@ -6,6 +6,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { useDataRefresh } from '../../utils/useDataRefresh';
 import { Calendar } from 'react-native-calendars';
+import { forceRefresh, triggerEvent, registerEventListener } from '../../utils/events';
 
 interface Team {
   id: string;
@@ -111,14 +112,48 @@ const PlayerCard = ({ player, onDetailsPress, onDelete, onUpdateMedicalVisa }: {
   const [menuVisible, setMenuVisible] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [refreshedStatus, setRefreshedStatus] = useState<string | null>(null);
+  const [refreshedMedicalVisaStatus, setRefreshedMedicalVisaStatus] = useState<string | null>(null);
+  const [refreshedMedicalVisaIssueDate, setRefreshedMedicalVisaIssueDate] = useState<string | null>(null);
   
-  // Fetch fresh payment status when card renders
+  // Debug log for medical visa status
   useEffect(() => {
-    const getLatestStatus = async () => {
+    console.log(`[PlayerCard] Medical visa info for ${player.player_name}:`, {
+      status: player.medical_visa_status,
+      issue_date: player.medical_visa_issue_date,
+      player_id: player.id
+    });
+  }, [player.medical_visa_status, player.medical_visa_issue_date]);
+  
+  // Listen for medical visa status changes
+  useEffect(() => {
+    const handleMedicalVisaStatusChange = (updatedPlayer: Player) => {
+      if (updatedPlayer.id === player.id) {
+        console.log(`[PlayerCard] Received medical visa status change event for ${player.player_name}:`, {
+          old_status: player.medical_visa_status,
+          new_status: updatedPlayer.medical_visa_status,
+          old_issue_date: player.medical_visa_issue_date,
+          new_issue_date: updatedPlayer.medical_visa_issue_date
+        });
+        
+        setRefreshedMedicalVisaStatus(updatedPlayer.medical_visa_status);
+        setRefreshedMedicalVisaIssueDate(updatedPlayer.medical_visa_issue_date || null);
+      }
+    };
+    
+    const unregister = registerEventListener('medical_visa_status_changed', handleMedicalVisaStatusChange);
+    
+    return () => {
+      unregister();
+    };
+  }, [player.id, player.medical_visa_status, player.medical_visa_issue_date]);
+  
+  // Fetch fresh payment and medical visa status when card renders
+  useEffect(() => {
+    const getLatestData = async () => {
       try {
         const { data, error } = await supabase
           .from('players')
-          .select('payment_status, player_status')
+          .select('payment_status, player_status, medical_visa_status, medical_visa_issue_date')
           .eq('id', player.id)
           .single();
           
@@ -126,19 +161,25 @@ const PlayerCard = ({ player, onDetailsPress, onDelete, onUpdateMedicalVisa }: {
           // Use payment_status directly - no mapping needed
           const newStatus = data.payment_status;
           
-          console.log(`[PlayerCard] Got fresh status for ${player.player_name}:`, {
-            old: player.payment_status,
-            new: newStatus
+          console.log(`[PlayerCard] Got fresh data for ${player.player_name}:`, {
+            old_payment: player.payment_status,
+            new_payment: newStatus,
+            old_medical: player.medical_visa_status,
+            new_medical: data.medical_visa_status,
+            old_issue_date: player.medical_visa_issue_date,
+            new_issue_date: data.medical_visa_issue_date
           });
           
           setRefreshedStatus(newStatus);
+          setRefreshedMedicalVisaStatus(data.medical_visa_status);
+          setRefreshedMedicalVisaIssueDate(data.medical_visa_issue_date);
         }
       } catch (err) {
         console.error("Error fetching fresh status:", err);
       }
     };
     
-    getLatestStatus();
+    getLatestData();
   }, [player.id]);
   
   const toggleMenu = () => {
@@ -147,6 +188,13 @@ const PlayerCard = ({ player, onDetailsPress, onDelete, onUpdateMedicalVisa }: {
   
   // Use refreshed status if available, otherwise fall back to passed-in status
   const displayStatus = refreshedStatus || player.payment_status;
+  const displayMedicalVisaStatus = (() => {
+    // Don't default to 'pending' - use the actual value from the database
+    const status = refreshedMedicalVisaStatus || player.medical_visa_status;
+    console.log(`[PlayerCard] Player ${player.player_name} medical visa status: ${status} (fresh: ${refreshedMedicalVisaStatus}, original: ${player.medical_visa_status})`);
+    return status;
+  })();
+  const displayMedicalVisaIssueDate = refreshedMedicalVisaIssueDate || player.medical_visa_issue_date;
   
   // Format the date if it exists
   let formattedBirthDate = 'Not available';
@@ -209,7 +257,7 @@ const PlayerCard = ({ player, onDetailsPress, onDelete, onUpdateMedicalVisa }: {
             Medical Visa
           </Text>
           <View style={{
-            backgroundColor: getMedicalVisaStatusColor(player.medical_visa_status) + '20',
+            backgroundColor: getMedicalVisaStatusColor(displayMedicalVisaStatus) + '20',
             borderRadius: 12,
             paddingHorizontal: SPACING.md,
             paddingVertical: 4,
@@ -220,19 +268,19 @@ const PlayerCard = ({ player, onDetailsPress, onDelete, onUpdateMedicalVisa }: {
             <Text style={{
               fontSize: FONT_SIZES.xs,
               fontWeight: '600',
-              color: getMedicalVisaStatusColor(player.medical_visa_status)
+              color: getMedicalVisaStatusColor(displayMedicalVisaStatus)
             }}>
-              {player.medical_visa_status.charAt(0).toUpperCase() + player.medical_visa_status.slice(1)}
+              {displayMedicalVisaStatus.charAt(0).toUpperCase() + displayMedicalVisaStatus.slice(1)}
             </Text>
           </View>
           
-          {player.medical_visa_status === 'valid' && player.medical_visa_issue_date && (
+          {displayMedicalVisaStatus === 'valid' && displayMedicalVisaIssueDate && (
             <View style={{ alignItems: 'flex-end', marginLeft: 'auto' }}>
               <Text style={{ fontSize: FONT_SIZES.xs, color: COLORS.grey[600], fontWeight: '500' }}>Until</Text>
               <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '600' }}>
                 {(() => {
                   try {
-                    const issueDate = new Date(player.medical_visa_issue_date);
+                    const issueDate = new Date(displayMedicalVisaIssueDate);
                     if (isNaN(issueDate.getTime())) return 'N/A';
                     const expiryDate = new Date(issueDate);
                     expiryDate.setMonth(expiryDate.getMonth() + 6);
@@ -427,49 +475,94 @@ export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> =
     
     setIsUpdatingMedicalVisa(true);
     try {
+      // Ensure status is not null or empty
+      if (!status) {
+        console.error('[handleUpdateMedicalVisaStatus] Status is null or empty, defaulting to pending');
+        status = 'pending' as 'valid' | 'expired';
+      }
+      
       // Determine the issue date - use selected date for valid status, null for expired
       const issueDate = status === 'valid' ? selectedMedicalVisaDate.toISOString() : null;
       
-      // Update in parent_children table
-      const { error: parentChildError } = await supabase
-        .from('parent_children')
-        .update({ 
-          medical_visa_status: status,
-          medical_visa_issue_date: issueDate
-        })
-        .eq('parent_id', updatingPlayer.parent_id)
-        .eq('team_id', updatingPlayer.team_id)
-        .eq('full_name', updatingPlayer.player_name);
+      console.log(`[handleUpdateMedicalVisaStatus] Updating medical visa for ${updatingPlayer.player_name}:`, {
+        status,
+        issueDate,
+        player_id: updatingPlayer.id
+      });
+      
+      // Use the stored procedure to update both tables at once
+      const { data: updateResult, error: updateError } = await supabase
+        .rpc('update_medical_visa_status', {
+          p_player_id: updatingPlayer.id,
+          p_status: status,
+          p_issue_date: issueDate
+        });
 
-      if (parentChildError) {
-        console.error('Error updating parent_children medical visa status:', parentChildError);
-      }
+      console.log('[DEBUG] Update medical visa status result:', { 
+        success: !updateError, 
+        error: updateError?.message,
+        data: updateResult
+      });
 
-      // Update in players table 
-      const { error: playerError } = await supabase
-        .from('players')
-        .update({ 
-          medical_visa_status: status,
-          medical_visa_issue_date: issueDate
-        })
-        .eq('id', updatingPlayer.id);
-
-      if (playerError) {
-        console.error('Error updating player medical visa status:', playerError);
+      if (updateError) {
+        console.error('Error updating medical visa status:', updateError);
         Alert.alert('Error', 'Failed to update medical visa status');
-      } else {
-        // Update the player in our local state
-        if (selectedPlayer && selectedPlayer.id === updatingPlayer.id) {
-          setSelectedPlayer({
-            ...selectedPlayer,
-            medical_visa_status: status
-          });
-        }
-        
-        // Close the modal and refresh
-        setIsMedicalVisaModalVisible(false);
-        onRefresh();
+        setIsUpdatingMedicalVisa(false);
+        return;
       }
+
+      // Verify the update by fetching the player data again
+      const { data: verifyData, error: verifyError } = await supabase
+        .from('players')
+        .select('medical_visa_status, medical_visa_issue_date')
+        .eq('id', updatingPlayer.id)
+        .single();
+        
+      console.log('[DEBUG] Verification fetch result:', {
+        success: !verifyError,
+        error: verifyError?.message,
+        data: verifyData
+      });
+      
+      // Add more detailed logging to help diagnose the issue
+      if (!verifyError && verifyData) {
+        console.log(`[DEBUG] CONFIRMED medical visa status in database for ${updatingPlayer.player_name}:`, {
+          status: verifyData.medical_visa_status,
+          issue_date: verifyData.medical_visa_issue_date,
+          status_type: typeof verifyData.medical_visa_status,
+          is_null: verifyData.medical_visa_status === null,
+          is_undefined: verifyData.medical_visa_status === undefined,
+          is_empty: verifyData.medical_visa_status === ''
+        });
+      }
+      
+      console.log(`[handleUpdateMedicalVisaStatus] Successfully updated medical visa for ${updatingPlayer.player_name}`);
+
+      // Update the player in our local state
+      if (selectedPlayer && selectedPlayer.id === updatingPlayer.id) {
+        setSelectedPlayer({
+          ...selectedPlayer,
+          medical_visa_status: status,
+          medical_visa_issue_date: issueDate || undefined
+        });
+      }
+      
+      // Also update the player in the filteredPlayers list
+      const updatedPlayer = {
+        ...updatingPlayer,
+        medical_visa_status: status,
+        medical_visa_issue_date: issueDate || undefined
+      };
+      
+      // Trigger a medical visa status changed event
+      triggerEvent('medical_visa_status_changed', updatedPlayer);
+      
+      // Force a refresh of the players data
+      forceRefresh('players');
+      
+      // Close the modal and refresh
+      setIsMedicalVisaModalVisible(false);
+      onRefresh();
     } catch (error) {
       console.error('Error updating medical visa status:', error);
       Alert.alert('Error', 'An unexpected error occurred');

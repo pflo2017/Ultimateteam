@@ -28,6 +28,7 @@ interface Player {
   created_at?: string;
   birth_date?: string;
   last_payment_date?: string;
+  medical_visa_issue_date?: string;
 }
 
 export const CoachManageScreen = () => {
@@ -141,6 +142,8 @@ export const CoachManageScreen = () => {
               birth_date,
               payment_status,
               last_payment_date,
+              medical_visa_status,
+              medical_visa_issue_date,
               team_id,
               parent_id
             `)
@@ -153,8 +156,18 @@ export const CoachManageScreen = () => {
               id: completePlayerData[0].id,
               name: completePlayerData[0].name,
               payment_status: completePlayerData[0].payment_status,
-              last_payment_date: completePlayerData[0].last_payment_date
+              last_payment_date: completePlayerData[0].last_payment_date,
+              medical_visa_status: completePlayerData[0].medical_visa_status,
+              medical_visa_issue_date: completePlayerData[0].medical_visa_issue_date
             });
+            
+            // Log all players' medical visa status for debugging
+            console.log("QUERY - All players medical visa status:", completePlayerData.map(p => ({
+              id: p.id,
+              name: p.name,
+              medical_visa_status: p.medical_visa_status,
+              medical_visa_issue_date: p.medical_visa_issue_date
+            })));
             
             // Map the complete data to the RPC data format
             const enhancedPlayers = playersData.map((rpcPlayer: any) => {
@@ -163,7 +176,9 @@ export const CoachManageScreen = () => {
               if (completePlayer) {
                 console.log("STEP 3 - Found matching complete player data:", {
                   id: completePlayer.id,
-                  raw_last_payment_date: completePlayer.last_payment_date
+                  raw_last_payment_date: completePlayer.last_payment_date,
+                  medical_visa_status: completePlayer.medical_visa_status,
+                  medical_visa_issue_date: completePlayer.medical_visa_issue_date
                 });
                 
                 // Format last_payment_date to match admin screen format
@@ -178,7 +193,9 @@ export const CoachManageScreen = () => {
                   id: rpcPlayer.player_id,
                   created_at: completePlayer.created_at,
                   birth_date: completePlayer.birth_date,
-                  last_payment_date: lastPaymentDate
+                  last_payment_date: lastPaymentDate,
+                  medical_visa_status: completePlayer.medical_visa_status,
+                  medical_visa_issue_date: completePlayer.medical_visa_issue_date
                 };
               }
               console.log("STEP 5 - No matching complete player data found");
@@ -191,7 +208,9 @@ export const CoachManageScreen = () => {
             
             console.log("STEP 6 - Final enhanced players:", enhancedPlayers.map((p: any) => ({
               player_id: p.player_id,
-              last_payment_date: p.last_payment_date
+              last_payment_date: p.last_payment_date,
+              medical_visa_status: p.medical_visa_status,
+              medical_visa_issue_date: p.medical_visa_issue_date
             })));
             
             setPlayers(enhancedPlayers);
@@ -210,7 +229,7 @@ export const CoachManageScreen = () => {
           // Fetch last payment dates directly
           const { data: paymentData, error: paymentError } = await supabase
             .from('players')
-            .select('id, last_payment_date')
+            .select('id, last_payment_date, medical_visa_status, medical_visa_issue_date')
             .in('id', playerIds);
             
           if (!paymentError && paymentData) {
@@ -232,12 +251,17 @@ export const CoachManageScreen = () => {
             // Create a map for quick lookup
             const paymentDateMap = new Map();
             paymentData.forEach(item => {
-              paymentDateMap.set(item.id, item.last_payment_date);
+              paymentDateMap.set(item.id, {
+                last_payment_date: item.last_payment_date,
+                medical_visa_status: item.medical_visa_status,
+                medical_visa_issue_date: item.medical_visa_issue_date
+              });
             });
             
             // Add last_payment_date to each player
             playersWithPaymentDates = playersData.map((player: any) => {
-              const rawLastPaymentDate = paymentDateMap.get(player.player_id);
+              const playerData = paymentDateMap.get(player.player_id);
+              const rawLastPaymentDate = playerData?.last_payment_date;
               const formattedLastPaymentDate = rawLastPaymentDate
                 ? new Date(rawLastPaymentDate).toLocaleDateString('en-GB')
                 : null;
@@ -245,7 +269,9 @@ export const CoachManageScreen = () => {
               return {
                 ...player,
                 id: player.player_id,
-                last_payment_date: formattedLastPaymentDate
+                last_payment_date: formattedLastPaymentDate,
+                medical_visa_status: playerData?.medical_visa_status,
+                medical_visa_issue_date: playerData?.medical_visa_issue_date
               };
             });
           } else {
@@ -290,8 +316,15 @@ export const CoachManageScreen = () => {
             created_at: player.created_at || teamCreationDate,
             // Use birthdate from parent_children if available
             birth_date: childRecord?.birth_date || player.birth_date,
-            // Always include last_payment_date if present
-            last_payment_date: player.last_payment_date || undefined
+            // Include last_payment_date if present
+            last_payment_date: player.last_payment_date || undefined,
+            // Include medical visa fields - log the value for debugging
+            medical_visa_status: (() => {
+              const status = player.medical_visa_status;
+              console.log(`[DEBUG] Player ${player.player_name} medical visa status: ${status}`);
+              return status;
+            })(),
+            medical_visa_issue_date: player.medical_visa_issue_date
           };
         });
         

@@ -43,7 +43,8 @@ export type EventType =
   | 'chat_messages'
   | 'payment_status_changed'
   | 'payment_collection_added'
-  | 'payment_collection_processed';
+  | 'payment_collection_processed'
+  | 'medical_visa_status_changed';
 
 interface EventListener {
   id: string;
@@ -113,6 +114,23 @@ export const triggerEvent = (event: string, ...args: any[]): void => {
         debouncedForceRefresh('payments');
       }, 500);
     }, 300);
+  }
+
+  // Handle medical visa status changes
+  if (event === 'medical_visa_status_changed') {
+    const playerData = args[0] || {};
+    console.log('[Events] Medical visa status changed - scheduling refresh for players', 
+      args.length > 0 ? {
+        player_id: playerData.id,
+        player_name: playerData.player_name || playerData.name,
+        new_status: playerData.medical_visa_status,
+        issue_date: playerData.medical_visa_issue_date
+      } : 'No player data provided');
+    
+    setTimeout(() => {
+      console.log('[Events] Executing deferred refresh for medical visa status change');
+      debouncedForceRefresh('players');
+    }, 300) as unknown as NodeJS.Timeout;
   }
 
   // Handle payment collection events
