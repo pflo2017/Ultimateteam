@@ -40,6 +40,18 @@ type AttendanceRecord = {
   [playerId: string]: AttendanceStatus;
 };
 
+// Utility function to extract the base UUID from a recurring activity ID
+// NOTE: We're keeping this function for reference, but we'll now use the FULL activity ID
+// to ensure each recurring instance has its own independent attendance data
+const extractBaseActivityId = (id: string): string => {
+  // Check if the ID has a date suffix (format: uuid-date)
+  if (id.includes('-2025') || id.includes('-2024')) {
+    // Extract the base UUID part (first 36 characters which is a standard UUID)
+    return id.substring(0, 36);
+  }
+  return id;
+};
+
 export const AttendanceScreen = () => {
   // Date and week state
   const [currentWeek, setCurrentWeek] = useState<Date>(new Date());
@@ -224,14 +236,23 @@ export const AttendanceScreen = () => {
         setIsLoadingAttendanceRecords(false);
         return;
       }
-      // 2. Get all attendance records for these activities
-      const activityIds = activitiesForDate.map(a => a.id.split('-').slice(0, 5).join('-'));
+      
+      // 2. Get all attendance records for these activities - use the FULL activity IDs
+      const activityIds = activitiesForDate.map(a => a.id);
       console.log('[AttendanceScreen] Fetching attendance for activity IDs:', activityIds);
+      
+      // Use the full activity IDs to ensure each instance has its own attendance data
       const { data: attendanceData, error: attendanceError } = await supabase
         .from('activity_attendance')
         .select('*, player:player_id (id, name)')
         .in('activity_id', activityIds);
-      if (attendanceError) throw attendanceError;
+        
+      if (attendanceError) {
+        console.error('[AttendanceScreen] Error fetching attendance records:', attendanceError);
+        console.error('[AttendanceScreen] Error details:', JSON.stringify(attendanceError, null, 2));
+        throw attendanceError;
+      }
+      
       // 3. Group attendance records by activity
       const grouped: Record<string, { activity: Activity, records: any[] }> = {};
       activitiesForDate.forEach(activity => {
@@ -240,19 +261,23 @@ export const AttendanceScreen = () => {
           records: []
         };
       });
+      
       (attendanceData || []).forEach(record => {
-        const baseId = record.activity_id;
-        const activity = activitiesForDate.find(a => a.id.startsWith(baseId));
+        const activityId = record.activity_id;
+        // Find the exact activity that matches this record
+        const activity = activitiesForDate.find(a => a.id === activityId);
         if (activity && grouped[activity.id]) {
           grouped[activity.id].records.push(record);
         }
       });
+      
       console.log('[AttendanceScreen] Final grouped records:', Object.entries(grouped).map(([id, data]) => ({
         activityId: id,
         activityTitle: data.activity.title,
         activityType: data.activity.type,
         recordCount: data.records.length
       })));
+      
       setAttendanceRecords(Object.values(grouped));
     } catch (error) {
       console.error('[AttendanceScreen] Error fetching attendance records:', error);
@@ -511,13 +536,13 @@ export const AttendanceScreen = () => {
     try {
       setIsLoadingPlayers(true);
       
-      // Extract the base UUID from the activity ID (remove date suffix if present)
-      const baseActivityId = selectedActivity.id.split('-').slice(0, 5).join('-');
+      // Use the FULL activity ID to ensure we're loading attendance for this specific instance
+      const activityIdToUse = selectedActivity.id;
       
       const { data, error } = await supabase
         .from('activity_attendance')
         .select('*')
-        .eq('activity_id', baseActivityId);
+        .eq('activity_id', activityIdToUse);
         
       if (error) throw error;
       
@@ -555,89 +580,22 @@ export const AttendanceScreen = () => {
     try {
       setIsSaving(true);
       
-      // Extract the base UUID from the activity ID (remove date suffix if present)
-      const baseActivityId = selectedActivity.id.split('-').slice(0, 5).join('-');
-      console.log('[AttendanceScreen] Using base activity ID:', baseActivityId);
-      console.log('[AttendanceScreen] Base activity ID type:', typeof baseActivityId);
-      console.log('[AttendanceScreen] Base activity ID length:', baseActivityId.length);
-      
-      // Get coach data
-      const storedCoachData = await AsyncStorage.getItem('coach_data');
-      console.log('[AttendanceScreen] Raw stored coach data:', storedCoachData);
-
-      if (!storedCoachData) {
-        throw new Error('No coach data found');
-      }
-
-      const parsedCoachData = JSON.parse(storedCoachData);
-      console.log('[AttendanceScreen] Parsed coach data:', JSON.stringify(parsedCoachData, null, 2));
+      // Use the FULL activity ID to ensure each instance has its own attendance data
+      const activityIdToUse = selectedActivity.id;
+      console.log('[AttendanceScreen] Using full activity ID for attendance:', activityIdToUse);
 
       // Get the auth user's ID
       const { data: { user } } = await supabase.auth.getUser();
-      console.log('[AttendanceScreen] Auth user:', user);
       console.log('[AttendanceScreen] Auth user ID:', user?.id);
-      console.log('[AttendanceScreen] Auth user ID type:', typeof user?.id);
-      console.log('[AttendanceScreen] Auth user ID length:', user?.id?.length);
 
       // Use auth user's ID for recorded_by as required by the database schema
-      // There's a mismatch between the DB schema (requires auth.users(id)) and the RLS policy (checks for coaches.id)
       const attendanceRecorderId = user?.id;
-      console.log('[AttendanceScreen] Using auth user ID for recording:', attendanceRecorderId);
-      console.log('[AttendanceScreen] Auth user ID type:', typeof attendanceRecorderId);
-      console.log('[AttendanceScreen] Auth user ID length:', attendanceRecorderId?.length);
-      console.log('[AttendanceScreen] Coach ID from data:', parsedCoachData.id);
-
-      // Debug: Check if the activity exists and is linked to the coach's team
-      const { data: activityData, error: activityError } = await supabase
-        .from('activities')
-        .select('id, team_id')
-        .eq('id', baseActivityId)
-        .single();
-      
-      console.log('[AttendanceScreen] Activity data:', activityData, 'Error:', activityError);
-      if (activityData) {
-        console.log('[AttendanceScreen] Activity ID type:', typeof activityData.id);
-        console.log('[AttendanceScreen] Activity ID length:', activityData.id.length);
-      }
-
-      if (activityData) {
-        const { data: teamData, error: teamError } = await supabase
-          .from('teams')
-          .select('id, coach_id')
-          .eq('id', activityData.team_id)
-          .single();
-          
-        console.log('[AttendanceScreen] Team data:', teamData, 'Error:', teamError);
-        if (teamData) {
-          console.log('[AttendanceScreen] Team ID type:', typeof teamData.id);
-          console.log('[AttendanceScreen] Team ID length:', teamData.id.length);
-          console.log('[AttendanceScreen] Team coach_id type:', typeof teamData.coach_id);
-          console.log('[AttendanceScreen] Team coach_id length:', teamData.coach_id.length);
-          console.log('[AttendanceScreen] Coach matches team coach:', parsedCoachData.id === teamData.coach_id);
-        }
-
-        if (teamData) {
-          const { data: coachData, error: coachError } = await supabase
-            .from('coaches')
-            .select('id, is_active')
-            .eq('id', teamData.coach_id)
-            .single();
-            
-          console.log('[AttendanceScreen] Coach data:', coachData, 'Error:', coachError);
-          if (coachData) {
-            console.log('[AttendanceScreen] Coach ID type:', typeof coachData.id);
-            console.log('[AttendanceScreen] Coach ID length:', coachData.id.length);
-          }
-          console.log('[AttendanceScreen] Coach ID match:', coachData?.id === attendanceRecorderId);
-          console.log('[AttendanceScreen] Coach is active:', coachData?.is_active);
-        }
-      }
       
       // Prepare data for upsert
       const attendanceRecords = Object.entries(attendance)
         .filter(([_, status]) => status !== null) // Only include players with a status
         .map(([playerId, status]) => ({
-          activity_id: baseActivityId,
+          activity_id: activityIdToUse,
           player_id: playerId,
           status: status,
           recorded_by: attendanceRecorderId, // Use auth user's ID as required by DB schema

@@ -35,7 +35,7 @@ export const CreateActivityScreen = () => {
   const [activityType, setActivityType] = useState<ActivityType>(initialType);
   const [title, setTitle] = useState('');
   const [location, setLocation] = useState('');
-  const [startDate, setStartDate] = useState(new Date());
+  const [startDate, setStartDate] = useState(() => new Date());
   const [duration, setDuration] = useState('1h');
   const [isDatePickerVisible, setIsDatePickerVisible] = useState(false);
   const [additionalInfo, setAdditionalInfo] = useState('');
@@ -66,6 +66,15 @@ export const CreateActivityScreen = () => {
   // Initial data loading
   useEffect(() => {
     getCurrentUser();
+    
+    // Ensure startDate is initialized to a valid date
+    setStartDate(prev => {
+      if (!prev || isNaN(prev.getTime())) {
+        console.log('Initializing startDate to current date');
+        return new Date();
+      }
+      return prev;
+    });
   }, []);
   
   // Initialize repeat days with the current day of the week
@@ -338,6 +347,7 @@ export const CreateActivityScreen = () => {
   };
 
   const showStartDatePicker = () => {
+    console.log('Opening date picker with date:', startDate);
     setIsDatePickerVisible(true);
   };
 
@@ -346,6 +356,7 @@ export const CreateActivityScreen = () => {
   };
 
   const handleStartDateConfirm = (date: Date) => {
+    console.log('Date selected:', date);
     setStartDate(date);
     hideStartDatePicker();
   };
@@ -776,8 +787,9 @@ export const CreateActivityScreen = () => {
         mode="datetime"
         onConfirm={handleStartDateConfirm}
         onCancel={hideStartDatePicker}
-        date={startDate}
+        date={startDate instanceof Date && !isNaN(startDate.getTime()) ? startDate : new Date()}
         display="inline"
+        minimumDate={new Date()}
       />
     </SafeAreaView>
   );

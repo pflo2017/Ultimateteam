@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Platform, Alert, Text } from 'react-native';
-import { SegmentedButtons } from 'react-native-paper';
+import { View, StyleSheet, Platform, Alert, Text, TouchableOpacity } from 'react-native';
 import { COLORS, SPACING } from '../../constants/theme';
 import { supabase } from '../../lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -317,43 +316,44 @@ export const CoachManageScreen = () => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.tabContainer}>
-        <SegmentedButtons
-          value={activeTab}
-          onValueChange={value => setActiveTab(value as 'teams' | 'players')}
-          buttons={[
-            { value: 'teams', label: 'My Teams' },
-            { value: 'players', label: 'My Players' }
-          ]}
-          style={styles.segmentedButtons}
-          theme={{
-            colors: {
-              primary: '#212121',
-              secondaryContainer: '#EEFBFF',
-              onSecondaryContainer: '#212121',
-              outline: '#E0E0E0',
-            }
-          }}
-        />
+      <View style={styles.horizontalTabsRow}>
+        <View style={styles.horizontalTabsContainer}>
+          <TouchableOpacity
+            style={styles.horizontalTabButton}
+            onPress={() => setActiveTab('teams')}
+          >
+            <Text style={[styles.horizontalTabText, activeTab === 'teams' && styles.horizontalTabTextActive]}>Teams</Text>
+            {activeTab === 'teams' && <View style={styles.horizontalTabUnderline} />}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.horizontalTabButton}
+            onPress={() => setActiveTab('players')}
+          >
+            <Text style={[styles.horizontalTabText, activeTab === 'players' && styles.horizontalTabTextActive]}>Players</Text>
+            {activeTab === 'players' && <View style={styles.horizontalTabUnderline} />}
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {activeTab === 'teams' ? (
+      {activeTab === 'teams' && (
         <CoachManageTeamsScreen
           teams={teams}
           isLoading={isLoading}
           onRefresh={handleRefresh}
           refreshing={refreshing}
         />
-      ) : (
+      )}
+
+      {activeTab === 'players' && (
         <CoachManagePlayersScreen
           players={players}
           teams={teams}
           isLoading={isLoading}
+          onRefresh={handleRefresh}
           refreshing={refreshing}
           searchQuery={searchQuery}
-          selectedTeamId={selectedTeamId}
-          onRefresh={handleRefresh}
           onSearchChange={setSearchQuery}
+          selectedTeamId={selectedTeamId}
           onTeamSelect={setSelectedTeamId}
         />
       )}
@@ -364,16 +364,43 @@ export const CoachManageScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  tabContainer: {
-    padding: SPACING.lg,
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
-  },
-  segmentedButtons: {
     backgroundColor: COLORS.white,
-    borderRadius: 8,
-    elevation: 0,
-    shadowColor: 'transparent',
+  },
+  horizontalTabsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: SPACING.lg,
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingBottom: SPACING.md,
+    backgroundColor: COLORS.white,
+  },
+  horizontalTabsContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+    justifyContent: 'center',
+    flex: 1,
+  },
+  horizontalTabButton: {
+    alignItems: 'center',
+    marginHorizontal: 8,
+    paddingHorizontal: 4,
+  },
+  horizontalTabText: {
+    fontSize: 16,
+    color: COLORS.grey[600],
+    fontWeight: '400',
+  },
+  horizontalTabTextActive: {
+    color: COLORS.text,
+    fontWeight: '700',
+  },
+  horizontalTabUnderline: {
+    marginTop: 2,
+    height: 4,
+    width: '100%',
+    backgroundColor: COLORS.primary,
+    borderRadius: 2,
   },
 }); 

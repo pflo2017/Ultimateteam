@@ -1,302 +1,156 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, Platform } from 'react-native';
-import { Text, Card, TouchableRipple } from 'react-native-paper';
+import { View, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
+import { Text } from 'react-native-paper';
 import { COLORS, SPACING } from '../../constants/theme';
 import { supabase } from '../../lib/supabase';
-import { useNavigation } from '@react-navigation/native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import type { MaterialCommunityIcons as IconType } from '@expo/vector-icons';
+import { useNavigation, useIsFocused, CompositeNavigationProp } from '@react-navigation/native';
+import { getActivitiesByDateRange, Activity } from '../../services/activitiesService';
+import { format, addDays } from 'date-fns';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { CoachTabParamList } from '../../navigation/CoachNavigator';
-import Animated, { 
-  FadeInUp,
-  useAnimatedStyle, 
-  useSharedValue,
-  withSpring,
-  WithSpringConfig,
-} from 'react-native-reanimated';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import type { CoachStackParamList, CoachTabParamList } from '../../navigation/CoachNavigator';
+import { EventCard } from '../../components/Schedule/ScheduleCalendar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-interface Team {
-  id: string;
-  name: string;
-  player_count: number;
-}
-
-interface RawTeam {
-  team_id: string;
-  team_name: string;
-  player_count: number;
-}
-
-type CardType = 'teams' | 'players' | 'payments' | 'collections';
+// Define a composite navigation type that can access both stack and tab navigators
+type CoachNavigationProp = CompositeNavigationProp<
+  NativeStackNavigationProp<CoachStackParamList>,
+  BottomTabNavigationProp<CoachTabParamList>
+>;
 
 export const CoachDashboardScreen = () => {
-  const [stats, setStats] = useState({
-    teams: [] as Team[],
-    totalPlayers: 0,
-    pendingPayments: 0,
-    collectionsCount: 0
-  });
-  const navigation = useNavigation<NativeStackNavigationProp<CoachTabParamList>>();
+  const [coachName, setCoachName] = useState<string>('');
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const navigation = useNavigation<CoachNavigationProp>();
+  const isFocused = useIsFocused();
 
   useEffect(() => {
-    loadStats();
-  }, []);
+    if (isFocused) {
+      loadProfile();
+      loadUpcomingActivities();
+    }
+  }, [isFocused]);
 
-  const loadStats = async () => {
+  const loadProfile = async () => {
     try {
-      console.log('=== Starting loadStats ===');
-      
-      const storedCoachData = await AsyncStorage.getItem('coach_data');
-      if (!storedCoachData) {
-        console.log('No stored coach data found');
-        return;
+      const coachData = await AsyncStorage.getItem('coach_data');
+      if (coachData) {
+        const coach = JSON.parse(coachData);
+        setCoachName(coach.name || 'Coach');
       }
+    } catch (error) {
+      console.error('Error loading profile:', error);
+      }
+  };
 
-      const coachData = JSON.parse(storedCoachData);
-      console.log('Coach data from storage:', coachData);
+  const loadUpcomingActivities = async () => {
+    try {
+      // Get coach's team IDs
+      const coachData = await AsyncStorage.getItem('coach_data');
+      if (!coachData) return;
+      
+      const coach = JSON.parse(coachData);
 
       // Get teams using the get_coach_teams function
       const { data: teamsData, error: teamsError } = await supabase
-        .rpc('get_coach_teams', { p_coach_id: coachData.id });
+        .rpc('get_coach_teams', { p_coach_id: coach.id });
+        
+      if (teamsError) throw teamsError;
+      if (!teamsData || teamsData.length === 0) return;
+      
+      // Extract team IDs
+      const teamIds = teamsData.map((team: any) => team.team_id);
+      
+      // Get activities for the next 7 days for these teams
+      const today = new Date();
+      const sevenDaysLater = addDays(today, 7);
+      
+      // Fetch activities for all teams this coach manages
+      const promises = teamIds.map(teamId => 
+        getActivitiesByDateRange(
+          today.toISOString(),
+          sevenDaysLater.toISOString(),
+          teamId
+        )
+      );
 
-      console.log('Teams query result:', {
-        query: {
-          coach_id: coachData.id,
-          is_active: true
-        },
-        teams: teamsData,
-        error: teamsError,
-        errorMessage: teamsError?.message,
-        errorDetails: teamsError?.details
+      const results = await Promise.all(promises);
+
+      // Combine all activities and sort by start time
+      let allActivities: Activity[] = [];
+      results.forEach(result => {
+        if (result.data) {
+          allActivities = [...allActivities, ...result.data];
+        }
       });
-
-      if (teamsError) {
-        console.error('Error fetching teams:', teamsError);
-        return;
-      }
-
-      // Fetch collections count
-      const { data: collectionsData, error: collectionsError } = await supabase
-        .from('payment_collections')
-        .select('id')
-        .eq('coach_id', coachData.id)
-        .eq('is_processed', false);
-
-      if (collectionsError) {
-        console.error('Error fetching collections:', collectionsError);
-      }
-
-      const collectionsCount = collectionsData?.length || 0;
-      console.log('Collections count:', collectionsCount);
-
-      if (!teamsData || teamsData.length === 0) {
-        console.log('No teams returned from query');
-        setStats({
-          teams: [],
-          totalPlayers: 0,
-          pendingPayments: 0,
-          collectionsCount
-        });
-        return;
-      }
-
-      console.log('Found teams:', teamsData);
-
-      // Transform teams with player counts
-      const transformedTeams = teamsData.map((team: { team_id: string; team_name: string; player_count?: number }) => ({
-        id: team.team_id,
-        name: team.team_name,
-        player_count: team.player_count || 0
-      }));
-
-      console.log('Transformed teams:', transformedTeams);
-
-      // Calculate total players
-      const totalPlayers = transformedTeams.reduce((sum: number, team: Team) => sum + team.player_count, 0);
-
-      console.log('Setting stats:', {
-        teams: transformedTeams,
-        totalPlayers,
-        pendingPayments: 0,
-        collectionsCount
-      });
-
-      setStats({
-        teams: transformedTeams,
-        totalPlayers,
-        pendingPayments: 0,
-        collectionsCount
-      });
+      
+      // Sort by start_time ascending
+      const sorted = [...allActivities].sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
+      setActivities(sorted);
     } catch (error) {
-      console.error('Error in loadStats:', error);
-      if (error instanceof Error) {
-        console.error('Error details:', error.message, error.stack);
-      }
+      console.error('Error loading upcoming activities:', error);
     }
   };
 
-  const handleCardPress = (screen: keyof CoachTabParamList, type: CardType) => {
-    switch (screen) {
-      case 'Manage':
-        if (type === 'teams' || type === 'players') {
-          navigation.navigate('Manage', { activeTab: type });
-        }
-        break;
-      case 'Payments':
-        if (type === 'collections') {
-          // Navigate to payments screen with collections flag
-          navigation.navigate({
-            name: 'Payments',
-            params: { showCollections: true }
-          });
-        } else {
-          navigation.navigate({
-            name: 'Payments',
-            params: {}
-          });
-        }
-        break;
-      case 'CoachDashboard':
-        navigation.navigate({
-          name: 'CoachDashboard',
-          params: undefined
-        });
-        break;
-      case 'Schedule':
-        navigation.navigate({
-          name: 'Schedule',
-          params: undefined
-        });
-        break;
-      case 'Chat':
-        navigation.navigate({
-          name: 'Chat',
-          params: undefined
-        });
-        break;
-      case 'News':
-        navigation.navigate({
-          name: 'News',
-          params: undefined
-        });
-        break;
-    }
+  const handleActivityPress = (activity: Activity) => {
+    navigation.navigate('ActivityDetails', { activityId: activity.id });
   };
 
-  const renderCard = (
-    title: string, 
-    value: number, 
-    subtitle: string, 
-    icon: keyof typeof IconType.glyphMap, 
-    screen: keyof CoachTabParamList,
-    type: CardType,
-    delay: number
-  ) => {
-    const scale = useSharedValue(1);
+  const handleSeeAll = () => {
+    navigation.navigate('Schedule');
+  };
 
-    const animatedStyle = useAnimatedStyle(() => ({
-      transform: [{ scale: scale.value }]
-    }));
-
-    const onPressIn = () => {
-      scale.value = withSpring(0.95, {
-        damping: 15,
-        stiffness: 100,
-      } as WithSpringConfig);
-    };
-
-    const onPressOut = () => {
-      scale.value = withSpring(1, {
-        damping: 15,
-        stiffness: 100,
-      } as WithSpringConfig);
-    };
-
+  // Carousel render
+  const renderCarousel = () => {
+    if (activities.length === 0) {
+      return (
+        <View style={styles.emptyCarousel}>
+          <Text style={styles.emptyText}>No upcoming activities in the next 7 days.</Text>
+        </View>
+      );
+    }
     return (
-      <Animated.View 
-        entering={FadeInUp.delay(delay).duration(1000).springify()}
-        style={styles.cardWrapper}
-      >
-        <Animated.View style={animatedStyle}>
-          <TouchableRipple
-            onPress={() => handleCardPress(screen, type)}
-            onPressIn={onPressIn}
-            onPressOut={onPressOut}
-            style={styles.touchable}
-            borderless
-          >
-            <Card style={styles.card}>
-              <Card.Content style={styles.cardContent}>
-                <MaterialCommunityIcons 
-                  name={icon}
-                  size={24} 
-                  color={COLORS.white}
-                  style={styles.cardIcon}
-                />
-                <Text style={styles.cardTitle}>{title}</Text>
-                <Text style={styles.cardValue}>{value}</Text>
-                <View style={styles.cardFooter}>
-                  <Text style={styles.cardSubtitle}>{subtitle}</Text>
-                  <MaterialCommunityIcons 
-                    name="chevron-right" 
-                    size={20} 
-                    color={COLORS.white}
+      <>
+        <View style={styles.divider} />
+        <View style={styles.carouselHeaderRow}>
+          <Text style={styles.carouselTitle}>Future activities</Text>
+        </View>
+        <View style={styles.carouselContainer}>
+          <FlatList
+            data={activities.slice(0, 3)}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            keyExtractor={item => item.id}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.carouselCardWrapper}
+                onPress={() => handleActivityPress(item)}
+                activeOpacity={0.85}
+              >
+                <EventCard activity={item} />
+              </TouchableOpacity>
+            )}
                   />
                 </View>
-              </Card.Content>
-            </Card>
-          </TouchableRipple>
-        </Animated.View>
-      </Animated.View>
+        {activities.length > 3 && (
+          <TouchableOpacity onPress={handleSeeAll} style={styles.seeAllActionWrapper} activeOpacity={0.7}>
+            <Text style={styles.seeAllActionText}>See all &gt;</Text>
+          </TouchableOpacity>
+        )}
+      </>
     );
   };
 
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.container}>
-        <View style={styles.content}>
-          <View style={styles.cardsContainer}>
-            {renderCard(
-              'Total Players',
-              stats.totalPlayers,
-              'In your teams',
-              'run',
-              'Manage',
-              'players',
-              200
-            )}
-            {renderCard(
-              'Your Teams',
-              stats.teams.length,
-              'Your teams',
-              'account-group',
-              'Manage',
-              'teams',
-              400
-            )}
-            {renderCard(
-              'Payment Status',
-              stats.pendingPayments,
-              'Pending payments',
-              'cash-multiple',
-              'Payments',
-              'payments',
-              600
-            )}
-            {renderCard(
-              'Collected',
-              stats.collectionsCount,
-              'Cash collected pending review',
-              'cash-register',
-              'Payments',
-              'collections',
-              800
-            )}
+      <View style={styles.header}>
+        <Text variant="headlineMedium" style={styles.title}>Welcome, {coachName}</Text>
+        <Text variant="bodyLarge" style={styles.subtitle}>
+          Manage and stay connected with your teams
+        </Text>
           </View>
-        </View>
-      </ScrollView>
+      {/* Carousel at the top */}
+      {renderCarousel()}
     </View>
   );
 };
@@ -304,59 +158,68 @@ export const CoachDashboardScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.background,
+    paddingTop: SPACING.lg,
   },
-  content: {
-    padding: SPACING.lg,
-    paddingTop: Platform.OS === 'ios' ? 120 : 100, // Account for header + status bar
+  header: {
+    paddingHorizontal: SPACING.lg,
+    marginBottom: SPACING.md,
   },
-  cardsContainer: {
+  title: {
+    fontWeight: 'bold',
+    color: COLORS.text,
+    marginBottom: 4,
+    fontSize: 22,
+  },
+  subtitle: {
+    color: COLORS.grey[600],
+    marginBottom: 24,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: COLORS.grey[200],
+    marginHorizontal: SPACING.lg,
+    marginBottom: 16,
+  },
+  carouselHeaderRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingLeft: SPACING.lg,
+    marginBottom: 16,
   },
-  cardWrapper: {
-    width: '48%',
-    marginBottom: SPACING.lg,
-    borderRadius: 16,
+  carouselTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.text,
   },
-  touchable: {
-    borderRadius: 16,
-  },
-  card: {
-    backgroundColor: '#0CC1EC',
-    elevation: 2,
-    borderRadius: 16,
-  },
-  cardContent: {
-    padding: SPACING.lg,
-  },
-  cardIcon: {
-    marginBottom: SPACING.sm,
-  },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.white,
-    marginBottom: SPACING.xs,
-  },
-  cardValue: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: COLORS.white,
-    marginBottom: SPACING.sm,
-  },
-  cardFooter: {
+  carouselContainer: {
+    paddingLeft: SPACING.lg,
+    paddingBottom: SPACING.md,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
   },
-  cardSubtitle: {
-    fontSize: 14,
-    color: COLORS.white,
-    flex: 1,
-    marginRight: SPACING.sm,
-    height: 40,
-    lineHeight: 20,
+  carouselCardWrapper: {
+    marginRight: SPACING.md,
+    width: 280,
+  },
+  seeAllActionWrapper: {
+    alignItems: 'center',
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  seeAllActionText: {
+    color: COLORS.text,
+    fontWeight: '600',
+    fontSize: 15,
+  },
+  emptyCarousel: {
+    padding: SPACING.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyText: {
+    color: COLORS.grey[500],
+    fontSize: 16,
   },
 }); 

@@ -10,6 +10,18 @@ import { supabase } from '../lib/supabase';
 import { Activity, getActivitiesByDateRange } from '../services/activitiesService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// Utility function to extract the base UUID from a recurring activity ID
+// NOTE: We're keeping this function for reference, but we'll now use the FULL activity ID
+// to ensure each recurring instance has its own independent attendance data
+const extractBaseActivityId = (id: string): string => {
+  // Check if the ID has a date suffix (format: uuid-date)
+  if (id.includes('-2025') || id.includes('-2024')) {
+    // Extract the base UUID part (first 36 characters which is a standard UUID)
+    return id.substring(0, 36);
+  }
+  return id;
+};
+
 export default function AddAttendanceScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute();
@@ -100,10 +112,24 @@ export default function AddAttendanceScreen() {
     if (!selectedActivity) return;
     setIsLoadingPlayers(true);
     try {
-      const baseActivityId = selectedActivity.id.split('-').slice(0, 5).join('-');
-      const { data, error } = await supabase.from('activity_attendance').select('*').eq('activity_id', baseActivityId);
+      // Use the FULL activity ID to ensure we're loading attendance for this specific instance
+      const activityIdToUse = selectedActivity.id;
+      
+      console.log('Loading attendance for specific activity instance:', {
+        activityId: activityIdToUse,
+        title: selectedActivity.title
+      });
+      
+      const { data, error } = await supabase
+        .from('activity_attendance')
+        .select('*')
+        .eq('activity_id', activityIdToUse);
+        
       if (!error && data) {
-        const attendanceMap = data.reduce((acc: any, record: any) => { acc[record.player_id] = record.status; return acc; }, {});
+        const attendanceMap = data.reduce((acc: any, record: any) => {
+          acc[record.player_id] = record.status;
+          return acc;
+        }, {});
         setAttendance(attendanceMap);
       }
     } catch (e) { console.error(e); }
@@ -116,13 +142,33 @@ export default function AddAttendanceScreen() {
     if (!selectedActivity?.id) { alert('Please select an activity first'); return; }
     setIsSaving(true);
     try {
-      const baseActivityId = selectedActivity.id.split('-').slice(0, 5).join('-');
+      // Use the FULL activity ID to ensure each instance has its own attendance data
+      const activityIdToUse = selectedActivity.id;
+      
+      console.log('Saving attendance for specific activity instance:', {
+        activityId: activityIdToUse,
+        title: selectedActivity.title
+      });
+      
       const { data: { user } } = await supabase.auth.getUser();
-      const attendanceRecords = Object.entries(attendance).filter(([_, status]) => status !== null).map(([playerId, status]) => ({ activity_id: baseActivityId, player_id: playerId, status: status, recorded_by: user?.id, recorded_at: new Date().toISOString() }));
+      const attendanceRecords = Object.entries(attendance)
+        .filter(([_, status]) => status !== null)
+        .map(([playerId, status]) => ({
+          activity_id: activityIdToUse,
+          player_id: playerId,
+          status: status,
+          recorded_by: user?.id,
+          recorded_at: new Date().toISOString()
+        }));
+        
       if (attendanceRecords.length > 0) {
-        const { error } = await supabase.from('activity_attendance').upsert(attendanceRecords, { onConflict: 'activity_id,player_id', ignoreDuplicates: false });
+        const { error } = await supabase
+          .from('activity_attendance')
+          .upsert(attendanceRecords, { onConflict: 'activity_id,player_id', ignoreDuplicates: false });
+          
         if (error) throw error;
       }
+      
       alert('Attendance saved successfully');
       if (navigation.canGoBack()) {
         navigation.pop(2);

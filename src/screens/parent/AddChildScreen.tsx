@@ -17,14 +17,10 @@ export const AddChildScreen = () => {
   const [name, setName] = useState('');
   const [birthDate, setBirthDate] = useState(new Date());
   const [teamCode, setTeamCode] = useState('');
-  const [medicalVisaStatus, setMedicalVisaStatus] = useState<'valid' | 'pending' | 'expired'>('pending');
-  const [medicalVisaIssueDate, setMedicalVisaIssueDate] = useState<Date | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [teamName, setTeamName] = useState<string | null>(null);
   const [showDatePickerModal, setShowDatePickerModal] = useState(false);
-  const [showMedicalVisaDatePickerModal, setShowMedicalVisaDatePickerModal] = useState(false);
   const [tempDate, setTempDate] = useState<Date>(birthDate);
-  const [tempMedicalVisaDate, setTempMedicalVisaDate] = useState<Date | null>(medicalVisaIssueDate);
 
   const navigation = useNavigation<AddChildScreenNavigationProp>();
 
@@ -40,20 +36,6 @@ export const AddChildScreen = () => {
 
   const cancelDatePicker = () => {
     setShowDatePickerModal(false);
-  };
-
-  const openMedicalVisaDatePicker = () => {
-    setTempMedicalVisaDate(medicalVisaIssueDate || new Date());
-    setShowMedicalVisaDatePickerModal(true);
-  };
-
-  const confirmMedicalVisaDatePicker = () => {
-    setMedicalVisaIssueDate(tempMedicalVisaDate);
-    setShowMedicalVisaDatePickerModal(false);
-  };
-
-  const cancelMedicalVisaDatePicker = () => {
-    setShowMedicalVisaDatePickerModal(false);
   };
 
   const validateTeamCode = async (code: string) => {
@@ -100,11 +82,6 @@ export const AddChildScreen = () => {
       return;
     }
 
-    if (medicalVisaStatus === 'valid' && !medicalVisaIssueDate) {
-      Alert.alert('Error', 'Please select the medical visa issue date');
-      return;
-    }
-
     setIsLoading(true);
     try {
       // Get parent data directly from AsyncStorage 
@@ -130,8 +107,8 @@ export const AddChildScreen = () => {
           birth_date: birthDate.toISOString(),
           team_id: team.id,
           parent_id: parent.id,
-          medical_visa_status: medicalVisaStatus,
-          medical_visa_issue_date: medicalVisaIssueDate?.toISOString(),
+          medical_visa_status: 'pending',
+          medical_visa_issue_date: null,
           is_active: true,
         });
 
@@ -224,49 +201,6 @@ export const AddChildScreen = () => {
             </Text>
           )}
 
-          <View style={styles.medicalVisaSection}>
-            <Text style={styles.sectionTitle}>Medical Visa Status</Text>
-            <View style={styles.statusRow}>
-              {['valid', 'pending', 'expired'].map(status => (
-                <Pressable
-                  key={status}
-                  onPress={() => {
-                    setMedicalVisaStatus(status as 'valid' | 'pending' | 'expired');
-                    if (status !== 'valid') setMedicalVisaIssueDate(null);
-                  }}
-                  style={[styles.statusOption, medicalVisaStatus === status && styles.statusOptionSelected]}
-                >
-                  <MaterialCommunityIcons
-                    name={medicalVisaStatus === status ? 'check-circle' : 'checkbox-blank-circle-outline'}
-                    size={20}
-                    color={status === 'valid' ? COLORS.success : status === 'pending' ? COLORS.warning : COLORS.error}
-                  />
-                  <Text style={[styles.statusLabel, { color: status === 'valid' ? COLORS.success : status === 'pending' ? COLORS.warning : COLORS.error }]}> 
-                    {status.charAt(0).toUpperCase() + status.slice(1)}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-
-            {medicalVisaStatus === 'valid' && (
-              <Pressable
-                onPress={openMedicalVisaDatePicker}
-                style={styles.dateInput}
-              >
-                  <MaterialCommunityIcons 
-                    name="calendar-check" 
-                    size={24} 
-                    color={COLORS.success}
-                  />
-                <Text style={styles.dateText}>
-                  {medicalVisaIssueDate 
-                    ? medicalVisaIssueDate.toLocaleDateString()
-                    : 'Select Issue Date'}
-                </Text>
-              </Pressable>
-            )}
-          </View>
-
           <Pressable 
             onPress={handleAddChild}
             disabled={isLoading}
@@ -284,17 +218,8 @@ export const AddChildScreen = () => {
         visible={showDatePickerModal}
         onCancel={cancelDatePicker}
         onConfirm={confirmDatePicker}
-              value={tempDate}
+        value={tempDate}
         onValueChange={setTempDate}
-      />
-
-      {/* Medical Visa Date Picker Modal using CalendarPickerModal for both platforms */}
-      <CalendarPickerModal
-        visible={showMedicalVisaDatePickerModal}
-        onCancel={cancelMedicalVisaDatePicker}
-        onConfirm={confirmMedicalVisaDatePicker}
-              value={tempMedicalVisaDate || new Date()}
-        onValueChange={setTempMedicalVisaDate}
       />
     </KeyboardAvoidingView>
   );
