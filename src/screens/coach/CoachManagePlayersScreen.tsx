@@ -7,6 +7,9 @@ import { supabase } from '../../lib/supabase';
 import { useDataRefresh } from '../../utils/useDataRefresh';
 import { Calendar } from 'react-native-calendars';
 import { forceRefresh, triggerEvent, registerEventListener } from '../../utils/events';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { CoachStackParamList } from '../../navigation/CoachNavigator';
 
 interface Team {
   id: string;
@@ -84,7 +87,7 @@ const getPaymentStatusText = (status: string) => {
     case 'pending':
       return 'Pending';
     case 'unpaid':
-      return 'Unpaid';
+      return 'Not Paid';
     case 'on_trial':
       return 'On Trial';
     case 'trial_ended':
@@ -104,96 +107,101 @@ const FONT_SIZES = {
 };
 
 const PlayerCard = ({ player, onDetailsPress, onDelete, onUpdateMedicalVisa }: { 
-  player: Player; 
-  onDetailsPress: () => void;
-  onDelete: (playerId: string) => Promise<void>;
+  player: Player;
+  onDetailsPress: (player: Player) => void;
+  onDelete: (player: Player) => void;
   onUpdateMedicalVisa: (player: Player) => void;
 }) => {
-  const [menuVisible, setMenuVisible] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
   const [refreshedStatus, setRefreshedStatus] = useState<string | null>(null);
+  const [refreshedPaidDate, setRefreshedPaidDate] = useState<string | null>(null);
   const [refreshedMedicalVisaStatus, setRefreshedMedicalVisaStatus] = useState<string | null>(null);
   const [refreshedMedicalVisaIssueDate, setRefreshedMedicalVisaIssueDate] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   
-  // Debug log for medical visa status
-  useEffect(() => {
-    console.log(`[PlayerCard] Medical visa info for ${player.player_name}:`, {
-      status: player.medical_visa_status,
-      issue_date: player.medical_visa_issue_date,
-      player_id: player.id
-    });
-  }, [player.medical_visa_status, player.medical_visa_issue_date]);
-  
-  // Listen for medical visa status changes
-  useEffect(() => {
-    const handleMedicalVisaStatusChange = (updatedPlayer: Player) => {
-      if (updatedPlayer.id === player.id) {
-        console.log(`[PlayerCard] Received medical visa status change event for ${player.player_name}:`, {
-          old_status: player.medical_visa_status,
-          new_status: updatedPlayer.medical_visa_status,
-          old_issue_date: player.medical_visa_issue_date,
-          new_issue_date: updatedPlayer.medical_visa_issue_date
-        });
+  const getLatestData = async () => {
+    if (isRefreshing) return; // Prevent multiple simultaneous refreshes
+    setIsRefreshing(true);
+    try {
+      // Get current year and month
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth() + 1;
+      
+      // Force a network request by adding a random param to bypass cache
+      const random = Math.random();
+      console.log(`[DEBUG] Fetching payment status for player ${player.id} (coach) for ${year}-${month}, random=${random}`);
+      
+      const { data, error } = await supabase
+        .from('monthly_payments')
+        .select('status, updated_at')
+        .eq('player_id', player.id)
+        .eq('year', year)
+        .eq('month', month)
+        .single();
         
-        setRefreshedMedicalVisaStatus(updatedPlayer.medical_visa_status);
-        setRefreshedMedicalVisaIssueDate(updatedPlayer.medical_visa_issue_date || null);
-      }
-    };
-    
-    const unregister = registerEventListener('medical_visa_status_changed', handleMedicalVisaStatusChange);
-    
-    return () => {
-      unregister();
-    };
-  }, [player.id, player.medical_visa_status, player.medical_visa_issue_date]);
-  
-  // Fetch fresh payment and medical visa status when card renders
-  useEffect(() => {
-    const getLatestData = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('players')
-          .select('payment_status, player_status, medical_visa_status, medical_visa_issue_date')
-          .eq('id', player.id)
-          .single();
-          
-        if (!error && data) {
-          // Use payment_status directly - no mapping needed
-          const newStatus = data.payment_status;
-          
-          console.log(`[PlayerCard] Got fresh data for ${player.player_name}:`, {
-            old_payment: player.payment_status,
-            new_payment: newStatus,
-            old_medical: player.medical_visa_status,
-            new_medical: data.medical_visa_status,
-            old_issue_date: player.medical_visa_issue_date,
-            new_issue_date: data.medical_visa_issue_date
-          });
-          
-          setRefreshedStatus(newStatus);
-          setRefreshedMedicalVisaStatus(data.medical_visa_status);
-          setRefreshedMedicalVisaIssueDate(data.medical_visa_issue_date);
+      console.log('[DEBUG] Raw payment status fetch result:', { data, error });
+      
+      if (!error && data && data.status) {
+        console.log(`[DEBUG] Setting fresh payment status for ${player.player_name || player.name}: ${data.status}`);
+        setRefreshedStatus(data.status);
+        if (data.status === 'paid' && data.updated_at) {
+          const paidDate = new Date(data.updated_at).toLocaleDateString('en-GB');
+          setRefreshedPaidDate(paidDate);
+        } else {
+          setRefreshedPaidDate(null);
         }
-      } catch (err) {
-        console.error("Error fetching fresh status:", err);
+      } else {
+        console.log(`[DEBUG] No payment data found for ${player.player_name || player.name}, setting to unpaid`);
+        setRefreshedStatus('unpaid');
+        setRefreshedPaidDate(null);
+      }
+      
+      // Also fetch fresh medical visa status
+      const { data: playerData, error: playerError } = await supabase
+        .from('players')
+        .select('medical_visa_status, medical_visa_issue_date')
+        .eq('id', player.id)
+        .single();
+        
+      if (!playerError && playerData) {
+        setRefreshedMedicalVisaStatus(playerData.medical_visa_status);
+        setRefreshedMedicalVisaIssueDate(playerData.medical_visa_issue_date);
+      }
+    } catch (error) {
+      console.error('Error fetching fresh data:', error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  // Fetch fresh data on mount
+  useEffect(() => {
+    getLatestData();
+  }, []);
+
+  // Listen for payment status changes
+  useEffect(() => {
+    const handlePaymentStatusChange = (playerId: string) => {
+      if (playerId === player.id) {
+        console.log(`[DEBUG] Payment status change detected for player ${player.id}, refreshing data`);
+        getLatestData();
       }
     };
     
-    getLatestData();
+    const unregister = registerEventListener('payment_status_changed', handlePaymentStatusChange);
+    return () => unregister();
   }, [player.id]);
-  
-  const toggleMenu = () => {
-    setMenuVisible(!menuVisible);
-  };
-  
-  // Use refreshed status if available, otherwise fall back to passed-in status
+
+  // Also listen for general payment data changes
+  useDataRefresh('payments', () => {
+    console.log(`[DEBUG] Payment data change detected, refreshing data for player ${player.id}`);
+    getLatestData();
+  });
+
+  // Use the refreshed status if available, otherwise fall back to the prop
   const displayStatus = refreshedStatus || player.payment_status;
-  const displayMedicalVisaStatus = (() => {
-    // Don't default to 'pending' - use the actual value from the database
-    const status = refreshedMedicalVisaStatus || player.medical_visa_status;
-    console.log(`[PlayerCard] Player ${player.player_name} medical visa status: ${status} (fresh: ${refreshedMedicalVisaStatus}, original: ${player.medical_visa_status})`);
-    return status;
-  })();
+  const displayPaidDate = refreshedPaidDate;
+  const displayMedicalVisaStatus = refreshedMedicalVisaStatus || player.medical_visa_status;
   const displayMedicalVisaIssueDate = refreshedMedicalVisaIssueDate || player.medical_visa_issue_date;
   
   // Format the date if it exists
@@ -317,11 +325,11 @@ const PlayerCard = ({ player, onDetailsPress, onDelete, onUpdateMedicalVisa }: {
               {getPaymentStatusText(displayStatus)}
             </Text>
           </View>
-          {player.last_payment_date && (
+          {displayStatus === 'paid' && displayPaidDate && (
             <View style={{ alignItems: 'flex-end', marginLeft: 'auto' }}>
-              <Text style={{ fontSize: FONT_SIZES.xs, color: COLORS.grey[600], fontWeight: '500' }}>Last Payment</Text>
+              <Text style={{ fontSize: FONT_SIZES.xs, color: COLORS.grey[600], fontWeight: '500' }}>Marked as paid on</Text>
               <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '600' }}>
-                {player.last_payment_date}
+                {displayPaidDate}
               </Text>
             </View>
           )}
@@ -330,7 +338,7 @@ const PlayerCard = ({ player, onDetailsPress, onDelete, onUpdateMedicalVisa }: {
         <View style={styles.actionButtons}>
           <TouchableOpacity 
             style={styles.viewButton}
-            onPress={onDetailsPress}
+            onPress={() => onDetailsPress(player)}
           >
             <MaterialCommunityIcons 
               name="account-details" 
@@ -392,68 +400,29 @@ export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> =
     return matchesSearch && matchesTeam && matchesMedical;
   });
 
+  const navigation = useNavigation<NativeStackNavigationProp<CoachStackParamList>>();
+
   const handleOpenPlayerDetails = async (player: Player) => {
     try {
-      console.log("Opening player details for:", {
-        id: player.id, 
-        player_id: player.player_id,
-        last_payment_date: player.last_payment_date
+      console.log("Opening player details for:", player.id);
+      
+      // Navigate to the player details screen
+      navigation.navigate('PlayerDetails', {
+        playerId: player.id,
+        role: 'coach'
       });
-      
-      // Fetch fresh player data to ensure we have the latest information
-      const { data: freshPlayerData, error: freshPlayerError } = await supabase
-        .from('players')
-        .select('last_payment_date')
-        .eq('id', player.id)
-        .single();
-        
-      if (!freshPlayerError && freshPlayerData?.last_payment_date) {
-        console.log("Retrieved fresh last_payment_date:", freshPlayerData.last_payment_date);
-        const formattedDate = typeof freshPlayerData.last_payment_date === 'string'
-          ? new Date(freshPlayerData.last_payment_date).toLocaleDateString('en-GB')
-          : freshPlayerData.last_payment_date || null;
-          
-        // Create a new player object with updated information
-        const updatedPlayer = {
-          ...player,
-          last_payment_date: formattedDate
-        };
-        
-        console.log("Using formatted date:", formattedDate);
-        setSelectedPlayer(updatedPlayer);
-      } else {
-        // Use existing player data if fetch fails
-        console.log("Using existing player data with last_payment_date:", player.last_payment_date);
-        setSelectedPlayer(player);
-      }
-      
-      // Fetch parent details if player has parent_id
-      if (player.parent_id) {
-        const { data, error } = await supabase
-          .from('parents')
-          .select('name, phone_number, email')
-          .eq('id', player.parent_id)
-          .single();
-        if (error) throw error;
-        setParentDetails(data);
-      } else {
-        setParentDetails(null);
-      }
-      
-      // Now show the modal
-      setIsPlayerDetailsModalVisible(true);
     } catch (error) {
-      console.error('Error fetching player details:', error);
-      Alert.alert('Error', 'Could not fetch player details.');
+      console.error('Error opening player details:', error);
+      Alert.alert('Error', 'Could not open player details');
     }
   };
 
-  const handleDeletePlayer = async (playerId: string) => {
+  const handleDeletePlayer = async (player: Player) => {
     try {
       const { error } = await supabase
         .from('players')
         .delete()
-        .eq('id', playerId);
+        .eq('id', player.id);
         
       if (error) throw error;
       
@@ -590,6 +559,16 @@ export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> =
     onRefresh();
   });
 
+  useEffect(() => {
+    // Listen for payment status changes from PaymentsScreen
+    const handlePaymentStatusChange = () => {
+      console.log('[CoachManagePlayersScreen] Payment status changed, refreshing player data');
+      onRefresh();
+    };
+    const unregister = registerEventListener('payment_status_changed', handlePaymentStatusChange);
+    return () => unregister();
+  }, [onRefresh]);
+
   return (
     <>
       <View style={styles.container}>
@@ -625,7 +604,7 @@ export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> =
               <PlayerCard
                 key={player.id}
                 player={player}
-                onDetailsPress={() => handleOpenPlayerDetails(player)}
+                onDetailsPress={handleOpenPlayerDetails}
                 onDelete={handleDeletePlayer}
                 onUpdateMedicalVisa={handleOpenMedicalVisaModal}
               />
@@ -834,184 +813,6 @@ export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> =
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
-              </View>
-            </View>
-          </Modal>
-
-          <Modal
-            visible={isPlayerDetailsModalVisible}
-            animationType="slide"
-            transparent={true}
-            onRequestClose={() => setIsPlayerDetailsModalVisible(false)}
-          >
-            <View style={styles.modalOverlay}>
-              <View style={styles.modalContent}>
-                <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>Player Details</Text>
-                  <Pressable 
-                    onPress={() => setIsPlayerDetailsModalVisible(false)}
-                    style={styles.closeButton}
-                  >
-                    <MaterialCommunityIcons
-                      name="close"
-                      size={24}
-                      color={COLORS.text}
-                    />
-                  </Pressable>
-                </View>
-                
-                {selectedPlayer && (
-                  <ScrollView>
-                    <View style={styles.detailsContainer}>
-                      <View style={styles.avatarContainer}>
-                        <MaterialCommunityIcons name="account-circle" size={80} color={COLORS.primary} />
-                        <Text style={styles.playerDetailName}>{selectedPlayer.player_name || selectedPlayer.name}</Text>
-                        <Text style={styles.teamDetailName}>{selectedPlayer.team_name}</Text>
-                      </View>
-                      
-                      <View style={styles.detailsSection}>
-                        <Text style={styles.modalSectionTitle}>Player Information</Text>
-                        <View style={styles.detailRow}>
-                          <Text style={styles.detailLabel}>Join Date:</Text>
-                          <Text style={styles.detailValue}>
-                            {selectedPlayer.created_at 
-                              ? new Date(selectedPlayer.created_at).toLocaleDateString('en-GB')
-                              : 'Unknown'}
-                          </Text>
-                        </View>
-                        <View style={styles.detailRow}>
-                          <Text style={styles.detailLabel}>Birthdate:</Text>
-                          <Text style={styles.detailValue}>
-                            {selectedPlayer.birth_date 
-                              ? new Date(selectedPlayer.birth_date).toLocaleDateString('en-GB')
-                              : 'Unknown'}
-                          </Text>
-                        </View>
-                      </View>
-                      
-                      <View style={styles.detailsSection}>
-                        <Text style={styles.modalSectionTitle}>Payment Information</Text>
-                        <View style={styles.detailRow}>
-                          <Text style={styles.detailLabel}>Status:</Text>
-                          <View style={[
-                            styles.statusBadge,
-                            { backgroundColor: getPaymentStatusColor(selectedPlayer.payment_status) + '20' }
-                          ]}>
-                            <Text style={[
-                              styles.statusText,
-                              { color: getPaymentStatusColor(selectedPlayer.payment_status) }
-                            ]}>
-                              {getPaymentStatusText(selectedPlayer.payment_status)}
-                            </Text>
-                          </View>
-                        </View>
-                        <View style={styles.detailRow}>
-                          <Text style={styles.detailLabel}>Last Payment:</Text>
-                          <Text style={styles.detailValue}>
-                            {selectedPlayer?.last_payment_date || 'N/A'}
-                          </Text>
-                        </View>
-                      </View>
-                      
-                      <View style={styles.detailsSection}>
-                        <Text style={styles.modalSectionTitle}>Medical Visa Information</Text>
-                        <View style={styles.detailRow}>
-                          <Text style={styles.detailLabel}>Status:</Text>
-                          <TouchableOpacity
-                            onPress={() => {
-                              setIsPlayerDetailsModalVisible(false);
-                              setTimeout(() => {
-                                handleOpenMedicalVisaModal(selectedPlayer);
-                              }, 300);
-                            }}
-                          >
-                            <View style={[
-                              styles.statusBadge,
-                              { backgroundColor: getMedicalVisaStatusColor(selectedPlayer.medical_visa_status) + '20' }
-                            ]}>
-                              <Text style={[
-                                styles.statusText,
-                                { color: getMedicalVisaStatusColor(selectedPlayer.medical_visa_status) }
-                              ]}>
-                                {selectedPlayer.medical_visa_status.charAt(0).toUpperCase() + selectedPlayer.medical_visa_status.slice(1)}
-                              </Text>
-                            </View>
-                          </TouchableOpacity>
-                        </View>
-                        
-                        {selectedPlayer.medical_visa_status === 'valid' && selectedPlayer.medical_visa_issue_date && (
-                          <>
-                            <View style={styles.detailRow}>
-                              <Text style={styles.detailLabel}>Issue Date:</Text>
-                              <Text style={styles.detailValue}>
-                                {new Date(selectedPlayer.medical_visa_issue_date).toLocaleDateString('en-GB')}
-                              </Text>
-                            </View>
-                            <View style={styles.detailRow}>
-                              <Text style={styles.detailLabel}>Expiry Date:</Text>
-                              <Text style={styles.detailValue}>
-                                {(() => {
-                                  try {
-                                    const issueDate = new Date(selectedPlayer.medical_visa_issue_date);
-                                    if (isNaN(issueDate.getTime())) return 'N/A';
-                                    const expiryDate = new Date(issueDate);
-                                    expiryDate.setMonth(expiryDate.getMonth() + 6);
-                                    return expiryDate.toLocaleDateString('en-GB');
-                                  } catch (e) {
-                                    console.error("Error calculating expiry date:", e);
-                                    return 'N/A';
-                                  }
-                                })()}
-                              </Text>
-                            </View>
-                          </>
-                        )}
-                      </View>
-                      
-                      {parentDetails && (
-                        <View style={styles.detailsSection}>
-                          <Text style={styles.modalSectionTitle}>Parent Information</Text>
-                          <View style={styles.detailRow}>
-                            <Text style={styles.detailLabel}>Name:</Text>
-                            <Text style={styles.detailValue}>{parentDetails.name}</Text>
-                          </View>
-                          <View style={styles.detailRow}>
-                            <Text style={styles.detailLabel}>Phone:</Text>
-                            <Text style={styles.detailValue}>{parentDetails.phone_number}</Text>
-                          </View>
-                          {parentDetails.email && (
-                            <View style={styles.detailRow}>
-                              <Text style={styles.detailLabel}>Email:</Text>
-                              <Text style={styles.detailValue}>{parentDetails.email}</Text>
-                            </View>
-                          )}
-                        </View>
-                      )}
-                      
-                      <TouchableOpacity 
-                        onPress={() => {
-                          setIsPlayerDetailsModalVisible(false);
-                          setTimeout(() => {
-                            if (selectedPlayer) {
-                              handleDeletePlayer(selectedPlayer.id);
-                            }
-                          }, 300);
-                        }}
-                        style={styles.deleteButton}
-                      >
-                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                          <MaterialCommunityIcons 
-                            name="delete" 
-                            size={20} 
-                            color={COLORS.white}
-                            style={{ marginRight: 8 }}
-                          />
-                          <Text style={styles.deleteButtonText}>Delete Player</Text>
-                        </View>
-                      </TouchableOpacity>
-                    </View>
-                  </ScrollView>
-                )}
               </View>
             </View>
           </Modal>

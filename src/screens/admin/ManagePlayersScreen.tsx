@@ -5,7 +5,7 @@ import { COLORS, SPACING, FONT_SIZES } from '../../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { AdminStackParamList } from '../../types/navigation';
+import type { AdminStackParamList } from '../../navigation/AdminTabNavigator';
 import { supabase } from '../../lib/supabase';
 import { useDataRefresh } from '../../utils/useDataRefresh';
 import { registerEventListener } from '../../utils/events';
@@ -87,79 +87,14 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
     try {
       console.log("Opening player details for:", player.id);
       
-      // Fetch fresh player data to ensure we have the latest information
-      const { data: freshPlayerData, error: freshPlayerError } = await supabase
-        .from('players')
-        .select('payment_status, player_status, last_payment_date')
-        .eq('id', player.id)
-        .single();
-        
-      if (!freshPlayerError && freshPlayerData) {
-        console.log("[AdminManagePlayersScreen] Got fresh data for player:", {
-          id: player.id,
-          name: player.name,
-          oldStatus: player.paymentStatus || player.payment_status,
-          newStatus: freshPlayerData.player_status || freshPlayerData.payment_status,
-          lastPaymentDate: freshPlayerData.last_payment_date
-        });
-        
-        // Use the payment_status directly - no mapping needed
-        let freshStatus = freshPlayerData.payment_status;
-        
-        // Format the last payment date if it exists
-        let formattedDate = 'No payment';
-        if (freshPlayerData.last_payment_date) {
-          try {
-            const date = new Date(freshPlayerData.last_payment_date);
-            if (!isNaN(date.getTime())) { // Check if date is valid
-              formattedDate = date.toLocaleDateString('en-GB');
-            }
-          } catch (e) {
-            console.error("Error formatting date:", e);
-          }
-        }
-        
-        // Create updated player object with fresh data
-        const updatedPlayer = {
-          ...player,
-          paymentStatus: freshStatus,
-          payment_status: freshStatus,
-          last_payment_date: formattedDate
-        };
-        
-        setSelectedPlayer(updatedPlayer);
-      } else {
-        // Use existing player data if fetch fails
-        console.log("Using existing player data");
-        setSelectedPlayer(player);
-      }
-      
-      setPaymentStatus(player.paymentStatus || player.payment_status || 'pending');
-      
-      // Fetch parent details if player has parent_id
-      if (player.parent_id) {
-        try {
-          const { data, error } = await supabase
-            .from('parents')
-            .select('name, phone_number, email')
-            .eq('id', player.parent_id)
-            .single();
-            
-          if (error) throw error;
-          setParentDetails(data);
-        } catch (error) {
-          console.error('Error fetching parent details:', error);
-          setParentDetails(null);
-        }
-      } else {
-        setParentDetails(null);
-      }
-      
-      setIsPlayerDetailsModalVisible(true);
+      // Navigate to the player details screen
+      navigation.navigate('PlayerDetails', {
+        playerId: player.id,
+        role: 'admin'
+      });
     } catch (error) {
       console.error('Error opening player details:', error);
-      setSelectedPlayer(player);
-      setIsPlayerDetailsModalVisible(true);
+      Alert.alert('Error', 'Could not open player details');
     }
   };
   
@@ -286,6 +221,8 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
       case 'overdue':
       case 'missed':
         return 'Overdue';
+      case 'unpaid':
+        return 'Not Paid';
       case 'on_trial':
         return 'On Trial';
       default:
@@ -324,57 +261,84 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
     onRefresh();
   });
 
+  // Listen for payment status changes from PaymentsScreen
+  useEffect(() => {
+    const handlePaymentStatusChange = () => {
+      console.log('[ManagePlayersScreen] Payment status changed, refreshing player data');
+      onRefresh();
+    };
+    const unregister = registerEventListener('payment_status_changed', handlePaymentStatusChange);
+    return () => unregister();
+  }, [onRefresh]);
+
   // Create a PlayerCard component that fetches fresh status data
   const PlayerCardWithFreshStatus = ({ player }: { player: Player }) => {
     const [freshStatus, setFreshStatus] = useState<string | null>(null);
+    const [freshPaidDate, setFreshPaidDate] = useState<string | null>(null);
     const [freshMedicalVisaStatus, setFreshMedicalVisaStatus] = useState<string | null>(null);
     const [freshMedicalVisaIssueDate, setFreshMedicalVisaIssueDate] = useState<string | null>(null);
     
-    // Fetch fresh payment status when card renders
     useEffect(() => {
       const getFreshStatus = async () => {
         try {
-          // Fetch fresh data without logging each attempt
+          // Get current year and month
+          const now = new Date();
+          const year = now.getFullYear();
+          const month = now.getMonth() + 1;
+          
+          // Fetch payment status and updated_at for this month from player_payments
+          // Force a network request by adding a random param to bypass cache
+          const random = Math.random();
+          console.log(`[DEBUG] Fetching payment status for player ${player.id} (admin) for ${year}-${month}, random=${random}`);
+          
           const { data, error } = await supabase
+            .from('monthly_payments')
+            .select('status, updated_at')
+            .eq('player_id', player.id)
+            .eq('year', year)
+            .eq('month', month)
+            .single();
+            
+          console.log('[DEBUG] Raw payment status fetch result:', { data, error });
+          
+          if (!error && data && data.status) {
+            console.log(`[DEBUG] Setting fresh payment status for ${player.name}: ${data.status}`);
+            setFreshStatus(data.status);
+            if (data.status === 'paid' && data.updated_at) {
+              const paidDate = new Date(data.updated_at).toLocaleDateString('en-GB');
+              setFreshPaidDate(paidDate);
+            } else {
+              setFreshPaidDate(null);
+            }
+          } else {
+            console.log(`[DEBUG] No payment data found for ${player.name}, setting to unpaid`);
+            setFreshStatus('unpaid');
+            setFreshPaidDate(null);
+          }
+          
+          // Also fetch fresh medical visa status
+          const { data: playerData, error: playerError } = await supabase
             .from('players')
-            .select('payment_status, player_status, medical_visa_status, medical_visa_issue_date')
+            .select('medical_visa_status, medical_visa_issue_date')
             .eq('id', player.id)
             .single();
             
-          if (!error && data) {
-            // Use payment_status directly - no mapping needed
-            const newStatus = data.payment_status;
-            const newMedicalVisaStatus = data.medical_visa_status;
-            
-            const oldStatus = player.paymentStatus || player.payment_status;
-            const oldMedicalVisaStatus = player.medicalVisaStatus;
-            
-            // Only log if there's an actual difference in the status
-            if (newStatus !== oldStatus || newMedicalVisaStatus !== oldMedicalVisaStatus) {
-              console.log(`[PlayerCard] Status change for ${player.name}:`, {
-                old_payment: oldStatus,
-                new_payment: newStatus,
-                old_medical: oldMedicalVisaStatus,
-                new_medical: newMedicalVisaStatus,
-                old_issue_date: player.medicalVisaIssueDate || player.medical_visa_issue_date,
-                new_issue_date: data.medical_visa_issue_date
-              });
-            }
-            
-            setFreshStatus(newStatus);
-            setFreshMedicalVisaStatus(newMedicalVisaStatus);
-            setFreshMedicalVisaIssueDate(data.medical_visa_issue_date);
+          if (!playerError && playerData) {
+            setFreshMedicalVisaStatus(playerData.medical_visa_status);
+            setFreshMedicalVisaIssueDate(playerData.medical_visa_issue_date);
           }
         } catch (err) {
-          console.error("Error fetching fresh status:", err);
+          console.error(`[ERROR] Error fetching fresh status for player ${player.name}:`, err);
+          setFreshStatus('unpaid');
+          setFreshPaidDate(null);
         }
       };
       
       getFreshStatus();
-    }, [player.id]);
+    }, [player.id, player.name]);
     
-    // Use refreshed status if available, otherwise fall back to passed-in status
-    const displayStatus = freshStatus || player.paymentStatus || player.payment_status || 'pending';
+    // Use freshStatus if available, otherwise fall back to player.payment_status
+    const displayStatus = freshStatus || player.payment_status;
     const displayMedicalVisaStatus = freshMedicalVisaStatus || player.medicalVisaStatus || 'pending';
     const displayMedicalVisaIssueDate = freshMedicalVisaIssueDate || player.medicalVisaIssueDate || player.medical_visa_issue_date;
     
@@ -462,10 +426,10 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
                   (() => {
                     try {
                       const issueDate = new Date(displayMedicalVisaIssueDate);
-                      if (isNaN(issueDate.getTime())) return 'N/A';
-                      const expiryDate = new Date(issueDate);
-                      expiryDate.setMonth(expiryDate.getMonth() + 6);
-                      return expiryDate.toLocaleDateString('en-GB');
+                    if (isNaN(issueDate.getTime())) return 'N/A';
+                    const expiryDate = new Date(issueDate);
+                    expiryDate.setMonth(expiryDate.getMonth() + 6);
+                    return expiryDate.toLocaleDateString('en-GB');
                     } catch (e) {
                       console.error("Error calculating expiry date:", e);
                       return 'N/A';
@@ -474,6 +438,38 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
                   : 'N/A'}
               </Text>
             </View>
+          </View>
+          
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: SPACING.md }}>
+            <MaterialCommunityIcons name="credit-card-outline" size={20} color={COLORS.primary} />
+            <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500' }}>
+              Payment Status
+            </Text>
+            <View style={{
+              backgroundColor: getPaymentStatusColor(displayStatus || '') + '20',
+              borderRadius: 12,
+              paddingHorizontal: SPACING.md,
+              paddingVertical: 4,
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginLeft: 4,
+            }}>
+              <Text style={{
+                fontSize: FONT_SIZES.xs,
+                fontWeight: '600',
+                color: getPaymentStatusColor(displayStatus || '')
+              }}>
+                {getPaymentStatusText(displayStatus || '')}
+              </Text>
+            </View>
+            {displayStatus === 'paid' && freshPaidDate && (
+              <View style={{ alignItems: 'flex-end', marginLeft: 'auto' }}>
+                <Text style={{ fontSize: FONT_SIZES.xs, color: COLORS.grey[600], fontWeight: '500' }}>Marked as paid on</Text>
+                <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '600' }}>
+                  {freshPaidDate}
+                </Text>
+              </View>
+            )}
           </View>
           
           <View style={styles.actionButtons}>
@@ -620,164 +616,6 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
         </View>
       </Modal>
       
-      <Modal
-        visible={isPlayerDetailsModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setIsPlayerDetailsModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Player Details</Text>
-              <TouchableOpacity 
-                onPress={() => setIsPlayerDetailsModalVisible(false)}
-                style={styles.closeButton}
-              >
-                <MaterialCommunityIcons
-                  name="close"
-                  size={24}
-                  color={COLORS.text}
-                />
-              </TouchableOpacity>
-            </View>
-            
-            {selectedPlayer && (
-              <ScrollView>
-                <View style={styles.detailsContainer}>
-                  <View style={styles.avatarContainer}>
-                    <MaterialCommunityIcons name="account-circle" size={80} color={COLORS.primary} />
-                    <Text style={styles.playerDetailName}>{selectedPlayer.name}</Text>
-                    <Text style={styles.teamDetailName}>{selectedPlayer.team ? selectedPlayer.team.name : 'No team assigned'}</Text>
-                  </View>
-                  
-                  <View style={styles.detailsSection}>
-                    <Text style={styles.sectionTitle}>Player Information</Text>
-                    <View style={styles.detailRow}>
-                      <Text style={styles.infoLabel}>Join Date:</Text>
-                      <Text style={styles.infoValueText}>{selectedPlayer.created_at ? new Date(selectedPlayer.created_at).toLocaleDateString('en-GB') : 'Unknown'}</Text>
-                    </View>
-                    <View style={styles.detailRow}>
-                      <Text style={styles.infoLabel}>Birthdate:</Text>
-                      <Text style={styles.infoValueText}>{selectedPlayer.birth_date ? new Date(selectedPlayer.birth_date).toLocaleDateString('en-GB') : 'Unknown'}</Text>
-                    </View>
-                  </View>
-                  
-                  <View style={styles.detailsSection}>
-                    <Text style={styles.sectionTitle}>Payment Information</Text>
-                    <View style={styles.detailRow}>
-                      <Text style={styles.infoLabel}>Status:</Text>
-                      <View style={[
-                        styles.statusBadge,
-                        { backgroundColor: getPaymentStatusColor(getPlayerPaymentStatus(selectedPlayer)) + '20' }
-                      ]}>
-                        <Text style={[
-                          styles.statusText,
-                          { color: getPaymentStatusColor(getPlayerPaymentStatus(selectedPlayer)) }
-                        ]}>
-                          {getPaymentStatusText(getPlayerPaymentStatus(selectedPlayer))}
-                        </Text>
-                      </View>
-                    </View>
-                    <View style={styles.detailRow}>
-                      <Text style={styles.infoLabel}>Last Payment:</Text>
-                      <Text style={styles.infoValueText}>
-                        {selectedPlayer.last_payment_date && selectedPlayer.last_payment_date !== 'Invalid Date' 
-                          ? selectedPlayer.last_payment_date 
-                          : 'No payment recorded'}
-                      </Text>
-                    </View>
-                  </View>
-                  
-                  <View style={styles.detailsSection}>
-                    <Text style={styles.sectionTitle}>Medical Visa Information</Text>
-                    <View style={styles.detailRow}>
-                      <Text style={styles.infoLabel}>Status:</Text>
-                      <View style={[
-                        styles.statusBadge,
-                        { backgroundColor: getMedicalVisaStatusColor(selectedPlayer.medicalVisaStatus) + '20' }
-                      ]}>
-                        <Text style={[
-                          styles.statusText,
-                          { color: getMedicalVisaStatusColor(selectedPlayer.medicalVisaStatus) }
-                        ]}>
-                          {selectedPlayer.medicalVisaStatus === 'no_status' 
-                            ? 'No Status' 
-                            : selectedPlayer.medicalVisaStatus.charAt(0).toUpperCase() + selectedPlayer.medicalVisaStatus.slice(1)}
-                        </Text>
-                      </View>
-                    </View>
-                    
-                    {selectedPlayer.medicalVisaStatus === 'valid' && selectedPlayer.medicalVisaIssueDate && (
-                      <>
-                        <View style={styles.detailRow}>
-                          <Text style={styles.infoLabel}>Issue Date:</Text>
-                          <Text style={styles.infoValueText}>
-                            {new Date(selectedPlayer.medicalVisaIssueDate).toLocaleDateString('en-GB')}
-                          </Text>
-                        </View>
-                        <View style={styles.detailRow}>
-                          <Text style={styles.infoLabel}>Expiry Date:</Text>
-                          <Text style={styles.infoValueText}>
-                            {(() => {
-                              try {
-                                const issueDate = new Date(selectedPlayer.medicalVisaIssueDate);
-                                if (isNaN(issueDate.getTime())) return 'N/A';
-                                const expiryDate = new Date(issueDate);
-                                expiryDate.setMonth(expiryDate.getMonth() + 6);
-                                return expiryDate.toLocaleDateString('en-GB');
-                              } catch (e) {
-                                console.error("Error calculating expiry date:", e);
-                                return 'N/A';
-                              }
-                            })()}
-                          </Text>
-                        </View>
-                      </>
-                    )}
-                  </View>
-                  
-                  {parentDetails && (
-                    <View style={styles.detailsSection}>
-                      <Text style={styles.sectionTitle}>Parent Information</Text>
-                      <View style={styles.detailRow}>
-                        <Text style={styles.infoLabel}>Name:</Text>
-                        <Text style={styles.infoValueText}>{parentDetails.name}</Text>
-                      </View>
-                      <View style={styles.detailRow}>
-                        <Text style={styles.infoLabel}>Phone:</Text>
-                        <Text style={styles.infoValueText}>{parentDetails.phone_number}</Text>
-                      </View>
-                      {parentDetails.email && (
-                        <View style={styles.detailRow}>
-                          <Text style={styles.infoLabel}>Email:</Text>
-                          <Text style={styles.infoValueText}>{parentDetails.email}</Text>
-                        </View>
-                      )}
-                    </View>
-                  )}
-                  
-                  <TouchableOpacity 
-                    onPress={() => handleDeletePlayer(selectedPlayer.id)}
-                    style={[styles.deleteButton, styles.modalDeleteButton]}
-                    disabled={isDeleting}
-                  >
-                    <MaterialCommunityIcons 
-                      name="delete" 
-                      size={20} 
-                      color={COLORS.white}
-                    />
-                    <Text style={styles.deleteButtonText}>
-                      {isDeleting ? "Deleting..." : "Delete Player"}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </ScrollView>
-            )}
-          </View>
-        </View>
-      </Modal>
-
       <Modal
         visible={isMedicalModalVisible}
         animationType="slide"

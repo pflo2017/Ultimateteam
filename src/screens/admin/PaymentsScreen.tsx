@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, TextInput, ScrollView, TouchableOpacity, Modal, Alert, Platform, SafeAreaView, KeyboardAvoidingView, Dimensions } from 'react-native';
 import { Text, Card, ActivityIndicator, SegmentedButtons, Button, Divider, Portal, Dialog, Menu } from 'react-native-paper';
 import { COLORS, SPACING, FONT_SIZES } from '../../constants/theme';
@@ -60,6 +60,11 @@ const PaymentsScreenComponent = () => {
     selectStatusPlayers: 0
   });
   
+  // Add month selector state
+  const [months, setMonths] = useState<{year: number, month: number, label: string}[]>([]);
+  const [selectedMonth, setSelectedMonth] = useState<{year: number, month: number, label: string} | null>(null);
+  const monthScrollRef = useRef<ScrollView>(null);
+  
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
@@ -79,7 +84,6 @@ const PaymentsScreenComponent = () => {
   const [selectedHistoryYear, setSelectedHistoryYear] = useState<number>(2025);
   const [availableYears, setAvailableYears] = useState<number[]>([2025]);
   const [isUpdateMonthModalVisible, setIsUpdateMonthModalVisible] = useState(false);
-  const [selectedMonth, setSelectedMonth] = useState<{year: number, month: number, date: Date} | null>(null);
   const [openDropdownMonth, setOpenDropdownMonth] = useState<string | null>(null);
   const [showCollections, setShowCollections] = useState(((route as any)?.params?.showCollections) === true);
   const [refreshing, setRefreshing] = useState(false);
@@ -98,7 +102,46 @@ const PaymentsScreenComponent = () => {
   useEffect(() => {
     fetchData();
     console.log('[AdminPaymentsScreen] Initial data fetch complete');
+    
+    // Generate months for horizontal selector
+    generateMonthsForSelector();
   }, []);
+
+  // Generate months for the horizontal selector (12 months starting from current month going back)
+  const generateMonthsForSelector = () => {
+    const currentDate = new Date();
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const monthsArray = [];
+    
+    // Add 6 months before current month and 5 months after
+    for (let i = -6; i <= 5; i++) {
+      const date = new Date(currentDate.getFullYear(), currentDate.getMonth() + i, 1);
+      const year = date.getFullYear();
+      const month = date.getMonth() + 1; // 1-indexed month
+      monthsArray.push({
+        year,
+        month,
+        label: `${monthNames[date.getMonth()]} ${year}`,
+        date: date
+      });
+    }
+    
+    setMonths(monthsArray);
+    
+    // Set current month as selected by default
+    const currentMonth = monthsArray.find(
+      m => m.month === currentDate.getMonth() + 1 && m.year === currentDate.getFullYear()
+    );
+    if (currentMonth) {
+      setSelectedMonth(currentMonth);
+    }
+  };
+
+  // Select a month from the horizontal selector
+  const handleMonthSelect = (month: {year: number, month: number, label: string}) => {
+    setSelectedMonth(month);
+    // TODO: Filter players based on selected month
+  };
 
   // Use data refresh hook to refresh when payment status changes
   useDataRefresh('payments', () => {
@@ -523,7 +566,7 @@ const PaymentsScreenComponent = () => {
       
       // Fetch all payment history records for this player for current year
       const { data, error } = await supabase
-        .from('player_payments')
+        .from('monthly_payments')
         .select('year, month, status')
         .eq('player_id', player.id)
         .in('year', years);
@@ -547,7 +590,7 @@ const PaymentsScreenComponent = () => {
           console.log("Updating current month payment record to match player's current status:", playerStatus);
           
           const { error: updateError } = await supabase
-            .from('player_payments')
+            .from('monthly_payments')
             .upsert({
               player_id: player.id,
               year: currentYear,
@@ -593,7 +636,7 @@ const PaymentsScreenComponent = () => {
     if (historyPlayer) {
       // Just refresh the payment history data for the new year
       supabase
-        .from('player_payments')
+        .from('monthly_payments')
         .select('year, month, status')
         .eq('player_id', historyPlayer.id)
         .eq('year', year)
@@ -629,7 +672,7 @@ const PaymentsScreenComponent = () => {
       
       // Update payment history record
       const { error: paymentError, data: paymentData } = await supabase
-        .from('player_payments')
+        .from('monthly_payments')
         .upsert({
           player_id: player.id,
           year,
@@ -639,11 +682,11 @@ const PaymentsScreenComponent = () => {
         }, { onConflict: 'player_id,year,month' });
 
       if (paymentError) {
-        console.error('Supabase upsert error (player_payments):', paymentError);
+        console.error('Supabase upsert error (monthly_payments):', paymentError);
         Alert.alert('Error', 'Failed to save payment status to server. Please try again.');
         return;
       } else {
-        console.log('Supabase upsert success (player_payments):', paymentData);
+        console.log('Supabase upsert success (monthly_payments):', paymentData);
       }
 
       // If this is the current month, update player status
@@ -2021,7 +2064,7 @@ const PaymentsScreenComponent = () => {
               <View style={[styles.modalContent, { maxHeight: '50%', width: '85%', borderRadius: 16 }]}>
                 <View style={styles.modalHeader}>
                   <Text style={[styles.modalTitle, { textAlign: 'center', width: '100%' }]}>
-                    {selectedMonth ? `Update ${selectedMonth.date.toLocaleString('default', { month: 'long', year: 'numeric' })}` : 'Update Payment'}
+                    {selectedMonth ? `Update ${new Date(selectedMonth.year, selectedMonth.month - 1).toLocaleString('default', { month: 'long', year: 'numeric' })}` : 'Update Payment'}
                   </Text>
                   <TouchableOpacity 
                     onPress={() => setIsUpdateMonthModalVisible(false)}
@@ -2065,7 +2108,7 @@ const PaymentsScreenComponent = () => {
                         
                         // Update the database
                         supabase
-                          .from('player_payments')
+                          .from('monthly_payments')
                           .upsert([
                             {
                               player_id: selectedPlayer.id,
@@ -2125,31 +2168,49 @@ const PaymentsScreenComponent = () => {
                         
                         setPaymentHistory(updatedHistory);
                         
-                        // Update the database
-                        supabase
-                          .from('player_payments')
-                          .upsert([
-                            {
-                              player_id: selectedPlayer.id,
-                              year: selectedMonth.year,
-                              month: selectedMonth.month,
-                              status: paymentRecordStatus,
-                            }
-                          ], { onConflict: 'player_id,year,month' })
-                          .then(({error}) => {
-                            if (error) {
-                              console.error('Error updating payment history:', error);
-                              Alert.alert('Error', 'Failed to update payment status.');
-                            } else {
-                              console.log('Payment status updated successfully');
-                              
-                              // If this is the current month, also update the player's status
-                              const currentMonth = new Date().getMonth() + 1;
-                              if (selectedMonth.month === currentMonth) {
-                                handleChangePaymentStatus('unpaid');
+                        // Update both monthly_payments and players tables
+                        Promise.all([
+                          // Update monthly_payments table
+                          supabase
+                            .from('monthly_payments')
+                            .upsert([
+                              {
+                                player_id: selectedPlayer.id,
+                                year: selectedMonth.year,
+                                month: selectedMonth.month,
+                                status: paymentRecordStatus,
                               }
+                            ], { onConflict: 'player_id,year,month' }),
+                          
+                          // Update player's current status in players table
+                          supabase
+                            .from('players')
+                            .update({ 
+                              payment_status: 'unpaid',
+                              last_payment_date: '' // Empty string for no payment date
+                            })
+                            .eq('id', selectedPlayer.id)
+                        ])
+                        .then(([monthlyResult, playerResult]) => {
+                          const monthlyError = monthlyResult.error;
+                          const playerError = playerResult.error;
+                          
+                          if (monthlyError || playerError) {
+                            console.error('Error updating payment status:', monthlyError || playerError);
+                            Alert.alert('Error', 'Failed to update payment status.');
+                          } else {
+                            console.log('Payment status updated successfully');
+                            
+                            // Update the local player state to reflect the change
+                            if (selectedPlayer) {
+                              selectedPlayer.payment_status = 'unpaid';
+                              selectedPlayer.last_payment_date = ''; // Empty string for no payment date
                             }
-                          });
+                            
+                            // Refresh the data to ensure UI is in sync
+                            fetchData();
+                          }
+                        });
                         
                         // Close the modal immediately for better UX
                         setIsUpdateMonthModalVisible(false);

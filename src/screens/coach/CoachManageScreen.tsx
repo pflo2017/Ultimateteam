@@ -152,21 +152,12 @@ export const CoachManageScreen = () => {
           if (completePlayerError) {
             console.error("Error fetching complete player data:", completePlayerError);
           } else if (completePlayerData && completePlayerData.length > 0) {
-            console.log("QUERY - Raw results example:", {
-              id: completePlayerData[0].id,
-              name: completePlayerData[0].name,
-              payment_status: completePlayerData[0].payment_status,
-              last_payment_date: completePlayerData[0].last_payment_date,
-              medical_visa_status: completePlayerData[0].medical_visa_status,
-              medical_visa_issue_date: completePlayerData[0].medical_visa_issue_date
-            });
-            
-            // Log all players' medical visa status for debugging
-            console.log("QUERY - All players medical visa status:", completePlayerData.map(p => ({
+            // Add debug logging for birthdates
+            console.log("QUERY - Birthdate data for players:", completePlayerData.map(p => ({
               id: p.id,
               name: p.name,
-              medical_visa_status: p.medical_visa_status,
-              medical_visa_issue_date: p.medical_visa_issue_date
+              birth_date: p.birth_date,
+              parent_id: p.parent_id
             })));
             
             // Map the complete data to the RPC data format
@@ -176,6 +167,9 @@ export const CoachManageScreen = () => {
               if (completePlayer) {
                 console.log("STEP 3 - Found matching complete player data:", {
                   id: completePlayer.id,
+                  name: completePlayer.name,
+                  birth_date: completePlayer.birth_date,
+                  parent_id: completePlayer.parent_id,
                   raw_last_payment_date: completePlayer.last_payment_date,
                   medical_visa_status: completePlayer.medical_visa_status,
                   medical_visa_issue_date: completePlayer.medical_visa_issue_date
@@ -287,6 +281,13 @@ export const CoachManageScreen = () => {
           
         if (parentChildrenError) {
           console.error('Error fetching parent children data:', parentChildrenError);
+        } else if (parentChildrenData) {
+          // Add debug logging for parent_children birthdates
+          console.log("QUERY - Birthdate data from parent_children:", parentChildrenData.map(pc => ({
+            parent_id: pc.parent_id,
+            full_name: pc.full_name,
+            birth_date: pc.birth_date
+          })));
         }
         
         // Fetch team creation dates for join date fallback
@@ -308,6 +309,16 @@ export const CoachManageScreen = () => {
             child => child.parent_id === player.parent_id && 
                     child.full_name.toLowerCase() === player.player_name.toLowerCase()
           );
+          
+          // Add debug logging for birthdate matching
+          console.log("STEP 7 - Processing birthdate for player:", {
+            player_id: player.player_id,
+            player_name: player.player_name,
+            parent_id: player.parent_id,
+            existing_birth_date: player.birth_date,
+            child_record_birth_date: childRecord?.birth_date,
+            final_birth_date: childRecord?.birth_date || player.birth_date
+          });
           
           return {
             ...player,
