@@ -1666,14 +1666,14 @@ export const CoachPaymentsScreen = () => {
           <TouchableOpacity onPress={() => setIsMonthPickerVisible(true)} style={styles.monthStepperLabelContainer} activeOpacity={0.7}>
             <Text style={styles.monthStepperLabel}>
               {selectedMonth ? `${selectedMonth.name} ${selectedMonth.year}` : ''}
-            </Text>
+                    </Text>
             {selectedTeamId && monthStatusMap[`${selectedMonth?.year}-${selectedMonth?.value}`] === 'all_paid' && (
               <MaterialCommunityIcons name="check-circle" size={20} color={COLORS.success} style={{ marginLeft: 8 }} />
             )}
             {selectedTeamId && monthStatusMap[`${selectedMonth?.year}-${selectedMonth?.value}`] === 'not_all_paid' && (
               <MaterialCommunityIcons name="flag" size={20} color={COLORS.error} style={{ marginLeft: 8 }} />
-            )}
-          </TouchableOpacity>
+                    )}
+                  </TouchableOpacity>
           <TouchableOpacity
             onPress={() => {
               if (!months.length || !selectedMonth) return;

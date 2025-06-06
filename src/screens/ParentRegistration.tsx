@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Alert } from 'react-native';
 import { Text, TextInput, Button } from 'react-native-paper';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
@@ -116,7 +116,23 @@ export const ParentRegistrationScreen = () => {
 
       // Store parent data in AsyncStorage so the root navigator can detect it
       await AsyncStorage.setItem('parent_data', JSON.stringify(parent));
-      // Do NOT navigate manually. The root navigator will switch automatically.
+      
+      // Show success message and trigger navigation
+      Alert.alert(
+        'Account Created Successfully',
+        'Welcome to Ultimate Team! Your account has been created.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              // The root navigator will handle the navigation based on the stored parent_data
+              if (global.reloadRole) {
+                global.reloadRole();
+              }
+            }
+          }
+        ]
+      );
       
     } catch (error: any) {
       console.error('Error creating account:', error);
@@ -214,6 +230,8 @@ export const ParentRegistrationScreen = () => {
               secureTextEntry={!showPassword}
               error={!!error}
               disabled={isLoading}
+              textContentType="none"
+              autoComplete="off"
               right={
                 <TextInput.Icon 
                   icon={showPassword ? "eye-off" : "eye"} 
@@ -236,6 +254,8 @@ export const ParentRegistrationScreen = () => {
               secureTextEntry={!showConfirmPassword}
               error={!!error}
               disabled={isLoading}
+              textContentType="none"
+              autoComplete="off"
               right={
                 <TextInput.Icon 
                   icon={showConfirmPassword ? "eye-off" : "eye"} 

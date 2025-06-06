@@ -14,6 +14,7 @@ interface Team {
   id: string;
   name: string;
   players_count: number;
+  access_code: string;
 }
 
 interface Player {
@@ -86,13 +87,42 @@ export const CoachManageScreen = () => {
         Alert.alert('Error', 'Failed to load teams. Please try again.');
       } else {
         console.log('[DEBUG] Teams fetched:', teamsData);
-        const transformedTeams = (teamsData || []).map((team: { team_id: string; team_name: string; player_count?: number }) => ({
-          id: team.team_id,
-          name: team.team_name,
-          players_count: team.player_count || 0
-        }));
-        console.log('[DEBUG] Transformed teams:', transformedTeams);
-        setTeams(transformedTeams);
+        
+        // Get the team IDs
+        const teamIds = (teamsData || []).map((team: { team_id: string }) => team.team_id);
+        
+        // Fetch full team details including access_code
+        if (teamIds.length > 0) {
+          const { data: fullTeamsData, error: fullTeamsError } = await supabase
+            .from('teams')
+            .select('id, name, access_code')
+            .in('id', teamIds);
+            
+          if (fullTeamsError) {
+            console.error('[DEBUG] Error fetching full team details:', fullTeamsError);
+          } else {
+            console.log('[DEBUG] Full teams data:', fullTeamsData);
+            
+            // Create a map of player counts from the original data
+            const playerCountMap = new Map();
+            (teamsData || []).forEach((team: { team_id: string; player_count?: number }) => {
+              playerCountMap.set(team.team_id, team.player_count || 0);
+            });
+            
+            // Transform data with access_code
+            const transformedTeams = (fullTeamsData || []).map((team) => ({
+              id: team.id,
+              name: team.name,
+              access_code: team.access_code || '',
+              players_count: playerCountMap.get(team.id) || 0
+            }));
+            
+            console.log('[DEBUG] Transformed teams with access codes:', transformedTeams);
+            setTeams(transformedTeams);
+          }
+        } else {
+          setTeams([]);
+        }
       }
 
       // Load players using the get_coach_players function

@@ -2171,15 +2171,15 @@ const PaymentsScreenComponent = () => {
                         // Update both monthly_payments and players tables
                         Promise.all([
                           // Update monthly_payments table
-                          supabase
-                            .from('monthly_payments')
-                            .upsert([
-                              {
-                                player_id: selectedPlayer.id,
-                                year: selectedMonth.year,
-                                month: selectedMonth.month,
-                                status: paymentRecordStatus,
-                              }
+                        supabase
+                          .from('monthly_payments')
+                          .upsert([
+                            {
+                              player_id: selectedPlayer.id,
+                              year: selectedMonth.year,
+                              month: selectedMonth.month,
+                              status: paymentRecordStatus,
+                            }
                             ], { onConflict: 'player_id,year,month' }),
                           
                           // Update player's current status in players table
@@ -2197,10 +2197,10 @@ const PaymentsScreenComponent = () => {
                           
                           if (monthlyError || playerError) {
                             console.error('Error updating payment status:', monthlyError || playerError);
-                            Alert.alert('Error', 'Failed to update payment status.');
-                          } else {
-                            console.log('Payment status updated successfully');
-                            
+                              Alert.alert('Error', 'Failed to update payment status.');
+                            } else {
+                              console.log('Payment status updated successfully');
+                              
                             // Update the local player state to reflect the change
                             if (selectedPlayer) {
                               selectedPlayer.payment_status = 'unpaid';
@@ -2209,8 +2209,8 @@ const PaymentsScreenComponent = () => {
                             
                             // Refresh the data to ensure UI is in sync
                             fetchData();
-                          }
-                        });
+                            }
+                          });
                         
                         // Close the modal immediately for better UX
                         setIsUpdateMonthModalVisible(false);

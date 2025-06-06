@@ -102,6 +102,7 @@ export type RootStackParamList = {
   AttendanceReportDetails: { activityId: string };
   AddAttendance: { activityId?: string; teamId?: string };
   PlayerDetails: { playerId: string; role: 'admin' | 'coach' | 'parent' };
+  StatisticsScreen: undefined;
 };
 
 export type ParentStackParamList = {

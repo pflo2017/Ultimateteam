@@ -680,7 +680,7 @@ export const AttendanceScreen = () => {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       {/* Calculate weekDates and eventDates for event dots */}
       {(() => {
         const weekStart = startOfWeek(currentWeek, { weekStartsOn: 1 });
@@ -859,7 +859,20 @@ export const AttendanceScreen = () => {
           </View>
         </TouchableWithoutFeedback>
       </Modal>
-    </View>
+
+      {/* Add the Statistics button at the bottom */}
+      <View style={styles.statisticsButtonContainer}>
+        <Button
+          mode="contained"
+          icon="chart-bar"
+          onPress={() => navigation.navigate('StatisticsScreen')}
+          style={styles.statisticsButton}
+          labelStyle={styles.statisticsButtonLabel}
+        >
+          View Statistics
+        </Button>
+      </View>
+    </SafeAreaView>
   );
 };
 
@@ -1236,5 +1249,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.grey[600],
     marginLeft: 4,
+  },
+  statisticsButtonContainer: {
+    position: 'absolute',
+    bottom: 16,
+    left: 16,
+    right: 16,
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  statisticsButton: {
+    width: '100%',
+    borderRadius: 8,
+    backgroundColor: COLORS.primary,
+  },
+  statisticsButtonLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: COLORS.white,
   },
 }); 
