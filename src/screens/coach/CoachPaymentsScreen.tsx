@@ -9,7 +9,7 @@ import { triggerEvent } from '../../utils/events';
 import { useDataRefresh } from '../../utils/useDataRefresh';
 import { RouteProp, useRoute } from '@react-navigation/native';
 import { CoachTabParamList } from '../../navigation/CoachNavigator';
-import { CoachCollectionsScreen } from './CoachCollectionsScreen';
+import { getPaymentStatusText, getPaymentStatusColor, updatePlayerPaymentStatus } from '../../services/paymentStatusService';
 
 interface Player {
   id: string;
@@ -707,7 +707,7 @@ export const CoachPaymentsScreen = () => {
   const togglePaymentStatus = async (player: Player) => {
     try {
       // Determine the new status (opposite of current)
-      const newStatus = player.payment_status === 'paid' ? 'unpaid' : 'paid';
+      const newStatus = player.payment_status === 'paid' ? 'not_paid' : 'paid';
       
       console.log(`Toggling payment status for ${player.player_name} from ${player.payment_status} to ${newStatus}`);
       
@@ -957,50 +957,76 @@ export const CoachPaymentsScreen = () => {
     setHistoryLoading(true);
     setHistoryPlayer(player);
     
-    // Get current date info
+    console.log("[DEBUG] Fetching payment history for player:", player.id);
+    
     const currentDate = new Date();
     const currentYear = currentDate.getFullYear();
-    const currentMonth = currentDate.getMonth(); // 0-11
+    const currentMonth = currentDate.getMonth() + 1; // 1-12
     
-    // Create array of months for the current year only (January to current month)
+    // Generate all months for the current year up to the current month
     const months = [];
-    // Start from January (month 0) and go up to the current month
-    for (let i = 0; i <= currentMonth; i++) {
-      months.push({
-        year: currentYear,
-        month: i + 1, // Convert to 1-12 format
-        date: new Date(currentYear, i, 1)
-      });
+    for (let m = 1; m <= currentMonth; m++) {
+      months.push({ year: currentYear, month: m, date: new Date(currentYear, m - 1, 1) });
     }
+    months.reverse(); // Most recent first
     
-    // Reverse the order to show most recent month first
-    months.reverse();
-    
+    console.log("[DEBUG] Generated months:", months.map(m => `${m.year}-${m.month}`));
     setHistoryMonths(months);
     
-    // Make sure we're using the correct player ID field
     const playerId = player.id;
-    console.log("Fetching payment history for player:", { 
-      id: player.id, 
-      player_id: player.player_id,
-      using_id: playerId
-    });
     
-    // Fetch payment history data for the current year only
     try {
-      const { data } = await supabase
+      // Fetch all payment records for this player for the current year
+      const { data, error } = await supabase
         .from('monthly_payments')
-        .select('year, month, status')
+        .select('*')
         .eq('player_id', playerId)
-        .eq('year', currentYear); // Only get current year
+        .eq('year', currentYear);
       
-      console.log("Fetched payment history:", data);
-      setPaymentHistory(data?.map((item: any) => ({
-        player_id: playerId,
-        year: item.year,
-        month: item.month,
-        status: item.status
-      })) || []);
+      if (error) throw error;
+      console.log("[DEBUG] Raw payment records:", data);
+      
+      // Build a map of records for lookup, ONLY for months <= currentMonth
+      const recordsByMonth: Record<string, any> = {};
+      (data || []).forEach(record => {
+        if (record.year === currentYear && record.month <= currentMonth) {
+          recordsByMonth[`${record.year}-${record.month}`] = record;
+        }
+      });
+      
+      console.log("[DEBUG] Filtered records by month:", recordsByMonth);
+      
+      // Build history for each month in our months array
+      const history = months.map(({ year, month }) => {
+        const key = `${year}-${month}`;
+        if (recordsByMonth[key]) {
+          return {
+            player_id: playerId,
+            year,
+            month,
+            status: recordsByMonth[key].status
+          };
+        } else if (month === currentMonth) {
+          // For current month with no record, use player's current status
+          return {
+            player_id: playerId,
+            year,
+            month,
+            status: player.payment_status || 'not_paid'
+          };
+        } else {
+          // For previous months with no record, show as Not Paid
+          return {
+            player_id: playerId,
+            year,
+            month,
+            status: 'not_paid'
+          };
+        }
+      });
+      
+      console.log("[DEBUG] Final payment history:", history.map(h => `${h.year}-${h.month}: ${h.status}`));
+      setPaymentHistory(history);
     } catch (error) {
       console.error('Error fetching payment history:', error);
     } finally {
@@ -1042,30 +1068,7 @@ export const CoachPaymentsScreen = () => {
 
   // First, add a helper function to map database status values back to display values
   const getDisplayPaymentStatus = (dbStatus: string, uiStatus?: string): string => {
-    console.log("Converting database status to UI status:", { dbStatus, uiStatus });
-    
-    // If we have the original UI status, prefer it
-    if (uiStatus && uiStatus !== 'select_status') {
-      return uiStatus;
-    }
-    
-    // Map database status to UI status
-    switch(dbStatus) {
-      // Payment status values
-      case 'paid':
-        return 'paid';
-      case 'pending':
-        return 'pending';
-      case 'unpaid':
-        return 'unpaid';
-      case 'on_trial':
-        return 'on_trial';
-      case 'trial_ended':
-        return 'trial_ended';
-      // Remove incorrect mappings that change payment statuses
-      default:
-        return dbStatus;
-    }
+    return dbStatus === 'paid' ? 'paid' : 'unpaid';
   };
 
   // Add this helper function near the getDisplayPaymentStatus function
@@ -1076,23 +1079,25 @@ export const CoachPaymentsScreen = () => {
     // The player_status ENUM column will get the exact status value directly
     
     // Map UI status values to valid database values for the old column
-    // Legacy column accepts: 'paid', 'pending', 'on_trial', 'trial_ended' but NOT 'unpaid'
+    // Legacy column accepts: 'paid', 'not_paid' but NOT 'unpaid', 'pending', 'on_trial', etc.
     switch(status) {
       case 'paid':
         return 'paid';
       case 'unpaid': 
-        return 'pending'; // Map 'unpaid' to 'pending' for database compatibility
+        return 'not_paid'; // Map 'unpaid' to 'not_paid' for database compatibility
       case 'pending':
-        return 'pending';
+        return 'not_paid'; // Map 'pending' to 'not_paid' for simplicity
       case 'on_trial':
-        return 'on_trial';
+        return 'not_paid'; // Map 'on_trial' to 'not_paid' for simplicity
       case 'trial_ended':
-        return 'trial_ended';
+        return 'not_paid'; // Map 'trial_ended' to 'not_paid' for simplicity
       case 'select_status':
-        return 'pending'; 
+        return 'not_paid'; // Map 'select_status' to 'not_paid' for simplicity
+      case 'not_paid':
+        return 'not_paid'; // Already correct format
       default:
-        console.log("Using default status 'pending' for unknown status:", status);
-        return 'pending';
+        console.log("Using default status 'not_paid' for unknown status:", status);
+        return 'not_paid';
     }
   };
 
@@ -1160,115 +1165,73 @@ export const CoachPaymentsScreen = () => {
   };
 
   const handleChangePaymentStatus = async (newStatus: string) => {
-    if (selectedPlayer) {
-      try {
-        // First update the player record (direct status)
-        console.log("Updating payment status for player:", {
-          id: selectedPlayer.id,
-          player_id: selectedPlayer.player_id,
-          current_status: selectedPlayer.payment_status,
-          new_status: newStatus,
-          is_same: selectedPlayer.id === selectedPlayer.player_id
+    if (!selectedPlayer) return;
+    
+    try {
+      console.log("[DEBUG] Changing payment status for player:", selectedPlayer.id, "to:", newStatus);
+      
+      // Get current date info for recording the payment
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth() + 1; // 1-12 format
+      
+      // Use stored procedure to update both tables at once
+      const dbStatus = newStatus === 'paid' ? 'paid' : 'not_paid';
+      
+      console.log("[DEBUG] Current month/year:", currentMonth, currentYear);
+      console.log("[DEBUG] Using database status:", dbStatus);
+      
+      // Update monthly_payments record (SOURCE OF TRUTH)
+      const { data: monthlyResult, error: monthlyError } = await supabase
+        .rpc('update_player_payment_status', {
+          p_player_id: selectedPlayer.id,
+          p_status: dbStatus,
+          p_year: currentYear,
+          p_month: currentMonth
         });
-        
-        // Update both fields - don't do any status conversion, use the exact payment status values
-        const updateData: any = { 
-          payment_status: newStatus,  // Use exact status, no mapping
-          player_status: newStatus    // Use exact status, no mapping
-        };
-        
-        // If status is paid, update the last_payment_date
-        if (newStatus === 'paid') {
-          const today = new Date().toISOString();
-          updateData.last_payment_date = today;
-          console.log("Setting last_payment_date to:", today);
-        }
-        
-        // Log the update details
-        console.log("Updating player with ID:", selectedPlayer.id);
-        console.log("Update data:", updateData);
-        
-        // Update in database
-        const { data: resultData, error: playerError } = await supabase
-          .from('players')
-          .update(updateData)
-          .eq('id', selectedPlayer.id)
-          .select();
-        
-        console.log("Update result:", { resultData, playerError });
-
-        if (playerError) throw playerError;
-
-        // Store the original UI status in local storage for this player
-        // This helps us remember what the UI should show even if the database uses simplified statuses
-        try {
-          const playerStatusKey = `player_status_${selectedPlayer.id}`;
-          await AsyncStorage.setItem(playerStatusKey, newStatus);
-          console.log("Saved UI status to AsyncStorage:", { id: selectedPlayer.id, status: newStatus });
-        } catch (e) {
-          console.error("Failed to save UI status to AsyncStorage:", e);
-        }
-
-        // Then insert/update the payment history for current month if needed
-        const currentYear = 2025;
-        const currentMonth = new Date().getMonth() + 1;
-        const dbStatus = getValidDatabaseStatus(newStatus);
-        
-        console.log("Upserting payment history with player_id:", selectedPlayer.id);
-        console.log("Payment history data:", { 
-          player_id: selectedPlayer.id, 
-          year: currentYear,
-          month: currentMonth,
-          status: dbStatus 
-        });
-        
-        const { error: historyError } = await supabase
-          .from('player_payments')
-          .upsert({
-            player_id: selectedPlayer.id,
-            year: currentYear,
-            month: currentMonth,
-            status: dbStatus
-          }, {
-            onConflict: 'player_id,year,month'
-          });
-          
-        if (historyError) {
-          console.error('Error updating payment history:', historyError);
-        }
-
-        // Also update the UI immediately
-        const updatedPlayers = players.map(p => 
-          p.id === selectedPlayer.id 
-            ? {
-                ...p, 
-                payment_status: newStatus, // Keep the UI status
-                last_payment_date: newStatus === 'paid' ? new Date().toLocaleDateString('en-GB') : p.last_payment_date
-              } 
-            : p
-        );
-        setPlayers(updatedPlayers);
-        
-        // Update the selectedPlayer state too
-        setSelectedPlayer({
-          ...selectedPlayer,
-          payment_status: newStatus, // Keep the UI status
-          last_payment_date: newStatus === 'paid' ? new Date().toLocaleDateString('en-GB') : selectedPlayer.last_payment_date
-        });
-
-        // Trigger event to notify other screens of the status change
-        const paymentDate = newStatus === 'paid' ? new Date().toISOString() : null;
-        triggerPaymentStatusChange(selectedPlayer.id, newStatus, paymentDate);
-
-        // Always reload data from the database after update
-        await fetchData();
-
-        setIsStatusChangeModalVisible(false);
-        Alert.alert('Success', `Payment status updated to ${getPaymentStatusText(newStatus).toLowerCase()}.`);
-      } catch (error) {
-        console.error('Error changing payment status:', error);
-        Alert.alert('Error', 'Failed to change payment status. Please try again.');
+      
+      if (monthlyError) {
+        console.error("[ERROR] Failed to update monthly payment:", monthlyError);
+        throw monthlyError;
       }
+      
+      console.log("[DEBUG] Monthly payment update result:", monthlyResult);
+      
+      // Also update the legacy player.payment_status field to keep it in sync
+      const { error: playerError } = await supabase
+        .from('players')
+        .update({
+          payment_status: dbStatus,
+          last_payment_date: dbStatus === 'paid' ? new Date().toISOString() : null
+        })
+        .eq('id', selectedPlayer.id);
+      
+      if (playerError) {
+        console.error("[ERROR] Failed to update player payment status:", playerError);
+        // Don't throw here, as the monthly_payments update succeeded
+      }
+      
+      // Trigger global event that payment status has changed
+      triggerPaymentStatusChange(
+        selectedPlayer.id,
+        newStatus,
+        dbStatus === 'paid' ? new Date().toISOString() : null
+      );
+      
+      // Close the modal and refresh
+      setIsStatusModalVisible(false);
+      
+      // Refresh data to show updated status
+      if (selectedMonth && selectedTeamId) {
+        await fetchMonthlyPaymentsForTeam(selectedMonth.year, selectedMonth.value, selectedTeamId);
+      } else if (selectedMonth) {
+        await fetchAllTeamsPayments(selectedMonth.year, selectedMonth.value);
+      }
+      
+      Alert.alert("Success", "Payment status updated successfully");
+    } catch (error) {
+      console.error("[ERROR] Error updating payment status:", error);
+      Alert.alert("Error", "Failed to update payment status");
     }
   };
 

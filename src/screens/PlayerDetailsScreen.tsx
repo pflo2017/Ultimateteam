@@ -54,6 +54,32 @@ type Attendance = {
   total: number;
 };
 
+// Helper function to get formatted payment status text
+const getPaymentStatusText = (status: string) => {
+  if (!status) return 'Not Paid';
+  return status.toLowerCase() === 'paid' ? 'Paid' : 'Not Paid';
+};
+
+// Helper function to get payment status color
+const getPaymentStatusColor = (status: string) => {
+  return status?.toLowerCase() === 'paid' ? COLORS.success : COLORS.error;
+};
+
+// Custom component for status pill display
+const StatusPill: React.FC<{ status: string }> = ({ status }) => (
+  <View style={[
+    styles.statusPill, 
+    { backgroundColor: getPaymentStatusColor(status) + '20' }
+  ]}>
+    <Text style={[
+      styles.statusPillText, 
+      { color: getPaymentStatusColor(status) }
+    ]}>
+      {getPaymentStatusText(status)}
+    </Text>
+  </View>
+);
+
 export const PlayerDetailsScreen = () => {
   const navigation = useNavigation();
   const route = useRoute<RouteProp<Record<string, PlayerDetailsScreenRouteParams>, string>>();
@@ -221,20 +247,72 @@ export const PlayerDetailsScreen = () => {
 
   const fetchPaymentHistory = async () => {
     if (!playerId) return;
-    
     try {
       setIsLoadingPaymentHistory(true);
+      const currentDate = new Date();
+      const currentYear = currentDate.getFullYear(); // This will be 2024, not 2025
+      const currentMonth = currentDate.getMonth() + 1; // 1-12
       
+      console.log("Current date:", currentDate, "Current year:", currentYear, "Current month:", currentMonth);
+      
+      // Generate all months for the current year in reverse order (most recent first)
+      const months = [];
+      // Start with the current month and go backwards
+      for (let m = currentMonth; m >= 1; m--) {
+        months.push({ year: currentYear, month: m });
+      }
+      
+      console.log("Generated months:", months.map(m => `${m.year}-${m.month}`));
+      
+      // Fetch payment records for this player for the current year
       const { data, error } = await supabase
         .from('monthly_payments')
         .select('*')
         .eq('player_id', playerId)
-        .order('year', { ascending: false })
-        .order('month', { ascending: false });
-        
-      if (error) throw error;
+        .eq('year', currentYear);
       
-      setPaymentHistory(data || []);
+      if (error) throw error;
+      console.log("Fetched payment records:", data);
+      
+      // Build a map of records for current year and valid months only
+      const recordsByMonth: Record<string, any> = {};
+      (data || []).forEach(record => {
+        if (record.year === currentYear && record.month <= currentMonth) {
+          recordsByMonth[`${record.year}-${record.month}`] = record;
+        }
+      });
+      console.log("Filtered records by month:", recordsByMonth);
+      
+      // Build history records for each month in the correct order (already in descending order)
+      const historyRecords = months.map(({ year, month }) => {
+        const key = `${year}-${month}`;
+        if (recordsByMonth[key]) {
+          return recordsByMonth[key];
+        } else if (month === currentMonth) {
+          // Only for current month, use player's current status if no DB record
+          return {
+            id: `virtual-${year}-${month}`,
+            player_id: playerId,
+            year,
+            month,
+            status: player?.payment_status || 'not_paid',
+            updated_at: new Date().toISOString()
+          };
+        } else {
+          // For previous months, always show Not Paid if missing
+          return {
+            id: `virtual-${year}-${month}`,
+            player_id: playerId,
+            year,
+            month,
+            status: 'not_paid',
+            updated_at: new Date().toISOString()
+          };
+        }
+      });
+      
+      console.log("Final history records:", historyRecords.map(r => `${r.year}-${r.month}: ${r.status}`));
+      setPaymentHistory(historyRecords);
       setIsPaymentHistoryVisible(true);
     } catch (err) {
       console.error('Error fetching payment history:', err);
@@ -243,7 +321,7 @@ export const PlayerDetailsScreen = () => {
       setIsLoadingPaymentHistory(false);
     }
   };
-
+  
   const formatDate = (dateString: string | null | undefined) => {
     if (!dateString) return 'Not available';
     try {
@@ -312,9 +390,7 @@ export const PlayerDetailsScreen = () => {
         <Section title="Payment Information">
           <InfoRow 
             label="Status" 
-            value={player.payment_status ? 
-              player.payment_status.charAt(0).toUpperCase() + player.payment_status.slice(1) : 
-              'Unknown'} 
+            value={<StatusPill status={player.payment_status} />} 
           />
           <InfoRow 
             label="Last Payment Date" 
@@ -345,6 +421,10 @@ export const PlayerDetailsScreen = () => {
                 </TouchableOpacity>
               </View>
               
+              {player && (
+                <Text style={styles.playerModalName}>{player.name}</Text>
+              )}
+              
               {isLoadingPaymentHistory ? (
                 <ActivityIndicator size="large" color={COLORS.primary} style={{ marginVertical: 20 }} />
               ) : (
@@ -356,14 +436,9 @@ export const PlayerDetailsScreen = () => {
                       <View key={index} style={styles.paymentItem}>
                         <View>
                           <Text style={styles.paymentMonth}>
-                            {new Date(0, payment.month - 1).toLocaleString('default', { month: 'long' })} {payment.year}
+                            {new Date(payment.year, payment.month - 1).toLocaleString('default', { month: 'long' })} {payment.year}
                           </Text>
-                          <Text style={[
-                            styles.paymentStatus, 
-                            { color: payment.status === 'paid' ? COLORS.success : COLORS.error }
-                          ]}>
-                            {payment.status.charAt(0).toUpperCase() + payment.status.slice(1)}
-                          </Text>
+                          <StatusPill status={payment.status} />
                         </View>
                         {payment.updated_at && (
                           <Text style={styles.paymentDate}>
@@ -447,10 +522,14 @@ const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title
   </View>
 );
 
-const InfoRow: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+const InfoRow: React.FC<{ label: string; value: string | React.ReactNode }> = ({ label, value }) => (
   <View style={styles.infoRow}>
     <Text style={styles.infoLabel}>{label}</Text>
-    <Text style={styles.infoValue}>{value}</Text>
+    {typeof value === 'string' ? (
+      <Text style={styles.infoValue}>{value}</Text>
+    ) : (
+      value
+    )}
   </View>
 );
 
@@ -591,19 +670,36 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: SPACING.sm,
+    paddingBottom: SPACING.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.grey[200],
   },
   paymentMonth: {
     fontSize: FONT_SIZES.sm,
     fontWeight: 'bold',
     color: COLORS.text,
+    marginBottom: 4,
   },
-  paymentStatus: {
+  statusPill: {
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    borderRadius: 16,
+    alignSelf: 'flex-start',
+    marginTop: 2,
+  },
+  statusPillText: {
     fontSize: FONT_SIZES.sm,
     fontWeight: '600',
-    color: COLORS.text,
   },
   paymentDate: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.grey[600],
+  },
+  playerModalName: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    marginBottom: SPACING.md,
+    textAlign: 'center',
   },
 }); 

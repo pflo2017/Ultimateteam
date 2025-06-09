@@ -21,7 +21,7 @@ export const getUserClubId = async (): Promise<string | null> => {
     const { data: coach } = await supabase
       .from('coaches')
       .select('club_id')
-      .eq('id', user.id)
+      .eq('user_id', user.id)
       .single();
 
     if (coach) return coach.club_id;

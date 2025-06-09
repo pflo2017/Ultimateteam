@@ -64,36 +64,35 @@ const getMedicalVisaStatusColor = (status: string) => {
 };
 
 const getPaymentStatusColor = (status: string) => {
-  switch (status.toLowerCase()) {
-    case 'paid':
-      return COLORS.success;
-    case 'pending':
-      return '#FFA500'; // Orange
-    case 'unpaid':
-      return COLORS.error;
-    case 'on_trial':
-      return COLORS.primary;
-    case 'trial_ended':
-      return COLORS.grey[800];
-    default:
-      return COLORS.grey[600];
-  }
+  return status.toLowerCase() === 'paid' ? COLORS.success : COLORS.error;
 };
 
 const getPaymentStatusText = (status: string) => {
-  switch (status.toLowerCase()) {
+  // Normalize all different spellings of the "not paid" status
+  if (!status) return 'Not Paid';
+  
+  const normalizedStatus = status.toLowerCase();
+  
+  switch (normalizedStatus) {
     case 'paid':
       return 'Paid';
+    case 'not_paid':
+    case 'unpaid':
+    case 'not paid':
+      return 'Not Paid';
     case 'pending':
       return 'Pending';
-    case 'unpaid':
-      return 'Not Paid';
     case 'on_trial':
       return 'On Trial';
     case 'trial_ended':
       return 'Trial Ended';
     default:
-      return status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Unknown';
+      // For any unknown value, try to make it presentable 
+      // Replace underscores with spaces and capitalize first letter
+      return status.replace(/_/g, ' ')
+        .split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
   }
 };
 

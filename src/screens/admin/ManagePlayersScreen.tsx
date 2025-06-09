@@ -195,40 +195,11 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
   };
 
   const getPaymentStatusColor = (status: string) => {
-    switch (status?.toLowerCase()) {
-      case 'paid':
-        return COLORS.success;
-      case 'pending':
-        return '#FFA500'; // Orange color for pending from PaymentsScreen
-      case 'overdue':
-      case 'missed':
-      case 'unpaid':
-        return COLORS.error;
-      case 'on_trial':
-        return COLORS.primary;
-      case 'trial_ended':
-        return COLORS.grey[800];
-      default:
-        return COLORS.grey[600];
-    }
+    return status?.toLowerCase() === 'paid' ? COLORS.success : COLORS.error;
   };
 
   const getPaymentStatusText = (status: string) => {
-    switch (status?.toLowerCase()) {
-      case 'paid':
-        return 'Paid';
-      case 'pending':
-        return 'Pending';
-      case 'overdue':
-      case 'missed':
-        return 'Overdue';
-      case 'unpaid':
-        return 'Not Paid';
-      case 'on_trial':
-        return 'On Trial';
-      default:
-        return status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Unknown';
-    }
+    return status?.toLowerCase() === 'paid' ? 'Paid' : 'Not Paid';
   };
 
   const getPlayerPaymentStatus = (player: Player): string => {

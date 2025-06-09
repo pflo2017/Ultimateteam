@@ -121,4 +121,48 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details. 
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Payment Status System
+
+The application uses a centralized payment status system to ensure consistency across all views.
+
+### Payment Status Types
+
+- `paid`: Player has paid for the current period
+- `unpaid`: Player has not paid for the current period
+- `pending`: Payment is pending
+- `on_trial`: Player is on trial period
+- `trial_ended`: Player's trial period has ended
+- `select_status`: Default status for new players
+
+### Implementation Details
+
+- Central source of truth in `player_payment_status` table
+- Historical records in `player_payment_status_history` table
+- Automatic synchronization with legacy tables (`players` and `monthly_payments`)
+- Real-time updates across all app views
+
+### Usage
+
+Use the `paymentStatusService.ts` functions to interact with payment statuses:
+
+```typescript
+import { 
+  getPlayerPaymentStatus, 
+  updatePlayerPaymentStatus,
+  getPaymentStatusText,
+  getPaymentStatusColor
+} from '../services/paymentStatusService';
+
+// Get a player's status
+const status = await getPlayerPaymentStatus(playerId);
+
+// Update a player's status
+await updatePlayerPaymentStatus(playerId, 'paid', 'admin');
+
+// Format status for display
+const displayText = getPaymentStatusText(status);
+```
+
+This ensures all payment status changes are properly tracked and synchronized across the application. 
