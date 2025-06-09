@@ -25,7 +25,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { RootStackParamList } from '../types/navigation';
 import { AttendanceReportDetailsScreen } from '../screens/AttendanceReportDetailsScreen';
 import AddAttendanceScreen from '../screens/AddAttendanceScreen';
-import { AttendanceStatisticsScreen } from '../screens/AttendanceStatisticsScreen';
+import { PlayerDetailsScreen } from '../screens/PlayerDetailsScreen';
+import { StatisticsScreen } from '../screens/StatisticsScreen';
 
 // Add global type declaration for reloadRole
 declare global {
@@ -132,8 +133,15 @@ export const Navigation = () => {
                 }}
               />
               <Stack.Screen
-                name="AttendanceStatistics"
-                component={AttendanceStatisticsScreen}
+                name="PlayerDetails"
+                component={PlayerDetailsScreen}
+                options={{
+                  headerShown: false,
+                }}
+              />
+              <Stack.Screen
+                name="StatisticsScreen"
+                component={StatisticsScreen}
                 options={{
                   headerShown: false,
                 }}
@@ -185,8 +193,15 @@ export const Navigation = () => {
                 }}
               />
               <Stack.Screen
-                name="AttendanceStatistics"
-                component={AttendanceStatisticsScreen}
+                name="PlayerDetails"
+                component={PlayerDetailsScreen}
+                options={{
+                  headerShown: false,
+                }}
+              />
+              <Stack.Screen
+                name="StatisticsScreen"
+                component={StatisticsScreen}
                 options={{
                   headerShown: false,
                 }}
@@ -245,8 +260,15 @@ export const Navigation = () => {
                 }}
               />
               <Stack.Screen
-                name="AttendanceStatistics"
-                component={AttendanceStatisticsScreen}
+                name="PlayerDetails"
+                component={PlayerDetailsScreen}
+                options={{
+                  headerShown: false,
+                }}
+              />
+              <Stack.Screen
+                name="StatisticsScreen"
+                component={StatisticsScreen}
                 options={{
                   headerShown: false,
                 }}
@@ -273,8 +295,15 @@ export const Navigation = () => {
                 }}
               />
               <Stack.Screen
-                name="AttendanceStatistics"
-                component={AttendanceStatisticsScreen}
+                name="PlayerDetails"
+                component={PlayerDetailsScreen}
+                options={{
+                  headerShown: false,
+                }}
+              />
+              <Stack.Screen
+                name="StatisticsScreen"
+                component={StatisticsScreen}
                 options={{
                   headerShown: false,
                 }}

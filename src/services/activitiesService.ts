@@ -1,6 +1,38 @@
 import { supabase } from '../lib/supabase';
 import { addDays, addWeeks, addMonths, format, parseISO, isBefore, isAfter, isSameDay, getDay } from 'date-fns';
 
+// Add helper function to get user's club_id
+export const getUserClubId = async (): Promise<string | null> => {
+  try {
+    // Check if user is authenticated
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+
+    // First try to get club_id if user is an admin
+    let { data: club } = await supabase
+      .from('clubs')
+      .select('id')
+      .eq('admin_id', user.id)
+      .single();
+
+    if (club) return club.id;
+
+    // If not an admin, check if user is a coach
+    const { data: coach } = await supabase
+      .from('coaches')
+      .select('club_id')
+      .eq('user_id', user.id)
+      .single();
+
+    if (coach) return coach.club_id;
+
+    return null;
+  } catch (error) {
+    console.error('Error getting user club ID:', error);
+    return null;
+  }
+};
+
 export type ActivityType = 'training' | 'game' | 'tournament' | 'other';
 
 export interface Activity {
@@ -52,9 +84,21 @@ interface ActivitiesResponse {
  */
 export const createActivity = async (activityData: Omit<Activity, 'id' | 'created_at'>): Promise<ActivityResponse> => {
   try {
+    // Get user's club_id
+    const clubId = await getUserClubId();
+    if (!clubId) {
+      throw new Error('User not associated with a club');
+    }
+
+    // Add club_id to activity data
+    const dataWithClubId = {
+      ...activityData,
+      club_id: clubId
+    };
+
     const { data, error } = await supabase
       .from('activities')
-      .insert(activityData)
+      .insert(dataWithClubId)
       .select()
       .single();
 
@@ -112,9 +156,16 @@ export const deleteActivity = async (id: string): Promise<{ error: Error | null 
  */
 export const getActivities = async (): Promise<ActivitiesResponse> => {
   try {
+    // Get user's club_id
+    const clubId = await getUserClubId();
+    if (!clubId) {
+      throw new Error('User not associated with a club');
+    }
+
     const { data, error } = await supabase
       .from('activities')
       .select('*')
+      .eq('club_id', clubId)
       .order('start_time', { ascending: true });
 
     if (error) throw error;
@@ -131,10 +182,17 @@ export const getActivities = async (): Promise<ActivitiesResponse> => {
  */
 export const getTeamActivities = async (teamId: string): Promise<ActivitiesResponse> => {
   try {
+    // Get user's club_id
+    const clubId = await getUserClubId();
+    if (!clubId) {
+      throw new Error('User not associated with a club');
+    }
+
     const { data, error } = await supabase
       .from('activities')
       .select('*')
       .eq('team_id', teamId)
+      .eq('club_id', clubId)
       .order('start_time', { ascending: true });
 
     if (error) throw error;
@@ -236,10 +294,17 @@ const generateRecurringInstances = (activity: Activity, startDate: string, endDa
  */
 export const getActivitiesByDateRange = async (startDate: string, endDate: string, teamId?: string): Promise<ActivitiesResponse> => {
   try {
+    // Get user's club_id
+    const clubId = await getUserClubId();
+    if (!clubId) {
+      throw new Error('User not associated with a club');
+    }
+
     // Get stored activities from the database
     let query = supabase
       .from('activities')
       .select('*, teams(name)')
+      .eq('club_id', clubId)
       .or(`start_time.gte.${startDate},repeat_until.gte.${startDate}`)
       .order('start_time', { ascending: true });
 
@@ -289,6 +354,12 @@ export const getActivitiesByDateRange = async (startDate: string, endDate: strin
  */
 export const getActivityById = async (id: string): Promise<ActivityResponse> => {
   try {
+    // Get user's club_id
+    const clubId = await getUserClubId();
+    if (!clubId) {
+      throw new Error('User not associated with a club');
+    }
+
     // Handle virtual recurring instances
     if (id.includes('-')) {
       // Check if this is a standard UUID
@@ -300,6 +371,7 @@ export const getActivityById = async (id: string): Promise<ActivityResponse> => 
           .from('activities')
           .select('*')
           .eq('id', id)
+          .eq('club_id', clubId)
           .single();
 
         if (error) throw error;
@@ -322,6 +394,7 @@ export const getActivityById = async (id: string): Promise<ActivityResponse> => 
         .from('activities')
         .select('*')
         .eq('id', parentId)
+        .eq('club_id', clubId)
         .single();
         
       if (parentError) throw parentError;
@@ -330,59 +403,39 @@ export const getActivityById = async (id: string): Promise<ActivityResponse> => 
       // Extract the date portion (should be after the UUID)
       const datePortion = id.substring(parentId.length + 1);
       
-      try {
-        // Try to parse the date part as yyyyMMdd
-        if (datePortion.length < 8) {
-          throw new Error(`Invalid date format in ID: ${datePortion}`);
-        }
-        
-        const year = parseInt(datePortion.substring(0, 4));
-        const month = parseInt(datePortion.substring(4, 6)) - 1; // JS months are 0-indexed
-        const day = parseInt(datePortion.substring(6, 8));
-        
-        if (isNaN(year) || isNaN(month) || isNaN(day)) {
-          throw new Error(`Invalid date components: year=${year}, month=${month}, day=${day}`);
-        }
-        
-        const originalDate = parseISO(parentActivity.start_time);
-        const instanceDate = new Date(year, month, day, 
-          originalDate.getHours(), 
-          originalDate.getMinutes(), 
-          originalDate.getSeconds());
-        
-        // Calculate time difference
-        const timeDiff = instanceDate.getTime() - originalDate.getTime();
-        
-        const instance: Activity = {
-          ...parentActivity,
-          id: id,
-          start_time: new Date(parseISO(parentActivity.start_time).getTime() + timeDiff).toISOString(),
-          parent_activity_id: parentId,
-          is_recurring_instance: true
-        };
-        
-        // If end_time exists, adjust it too
-        if (parentActivity.end_time) {
-          instance.end_time = new Date(parseISO(parentActivity.end_time).getTime() + timeDiff).toISOString();
-        }
-        
-        return { data: instance, error: null };
-      } catch (dateError) {
-        console.error('Error parsing recurring instance date:', dateError);
-        throw new Error(`Invalid recurring instance ID format: ${id}`);
-      }
+      // Convert the date portion to a Date
+      const year = parseInt(datePortion.substring(0, 4));
+      const month = parseInt(datePortion.substring(4, 6)) - 1; // JS months are 0-indexed
+      const day = parseInt(datePortion.substring(6, 8));
+      
+      const instanceDate = new Date(year, month, day);
+      
+      // Calculate how many recurrences from the start date
+      const startDate = new Date(parentActivity.start_time);
+      
+      // Create a specific instance for this date
+      let activityInstance = { ...parentActivity };
+      
+      // Adjust the start time for this instance
+      const newStartTime = new Date(instanceDate);
+      newStartTime.setHours(startDate.getHours(), startDate.getMinutes(), 0, 0);
+      
+      activityInstance.start_time = newStartTime.toISOString();
+      activityInstance.id = id; // Set the composite ID
+      
+      return { data: activityInstance, error: null };
+    } else {
+      // Standard activity lookup
+      const { data, error } = await supabase
+        .from('activities')
+        .select('*')
+        .eq('id', id)
+        .eq('club_id', clubId)
+        .single();
+
+      if (error) throw error;
+      return { data, error: null };
     }
-    
-    // Regular activity lookup for non-recurring instances
-    const { data, error } = await supabase
-      .from('activities')
-      .select('*')
-      .eq('id', id)
-      .single();
-
-    if (error) throw error;
-
-    return { data, error: null };
   } catch (error) {
     console.error('Error fetching activity:', error);
     return { data: null, error: error as Error };
@@ -394,10 +447,17 @@ export const getActivityById = async (id: string): Promise<ActivityResponse> => 
  */
 export const getPlayersByTeamId = async (teamId: string): Promise<{ data: any[] | null; error: Error | null }> => {
   try {
+    // Get user's club_id
+    const clubId = await getUserClubId();
+    if (!clubId) {
+      throw new Error('User not associated with a club');
+    }
+
     const { data, error } = await supabase
       .from('players')
       .select('id, name')
       .eq('team_id', teamId)
+      .eq('club_id', clubId)
       .eq('is_active', true)
       .order('name');
 

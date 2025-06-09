@@ -9,21 +9,22 @@ import type { RootStackParamList } from '../types/navigation';
 import { format } from 'date-fns';
 import { supabase } from '@/lib/supabase';
 
+// Utility function to extract the base UUID from a recurring activity ID
+// NOTE: We're keeping this function for reference, but we'll now use the FULL activity ID
+// to ensure each recurring instance has its own independent attendance data
+const extractBaseActivityId = (id: string): string => {
+  // Check if the ID has a date suffix (format: uuid-date)
+  if (id.includes('-2025') || id.includes('-2024')) {
+    // Extract the base UUID part (first 36 characters which is a standard UUID)
+    return id.substring(0, 36);
+  }
+  return id;
+};
+
 // Helper function to capitalize first letter
 const capitalize = (str: string | null | undefined) => {
   if (!str) return '';
   return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
-};
-
-// Helper function to extract base UUID from activity ID
-const extractBaseActivityId = (activityId: string) => {
-  // If the ID contains a date suffix (after the last hyphen), remove it
-  const parts = activityId.split('-');
-  if (parts.length > 5) {
-    // Return just the UUID part (first 5 segments)
-    return parts.slice(0, 5).join('-');
-  }
-  return activityId;
 };
 
 // Add helper functions for icon and color
@@ -89,7 +90,6 @@ export const AttendanceReportDetailsScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<{ params: AttendanceReportDetailsRouteParams }, 'params'>>();
   const activityId = (route.params && (route.params as any).activityId) || '';
-  const baseActivityId = extractBaseActivityId(activityId);
 
   const [isLoading, setIsLoading] = useState(true);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
@@ -103,13 +103,51 @@ export const AttendanceReportDetailsScreen = () => {
       setIsLoading(true);
       setError(null);
       try {
-        // 1. Fetch activity info
-        const { data: activityData, error: activityError } = await supabase
+        // Use the FULL activity ID to ensure we're loading attendance for this specific instance
+        console.log('Loading attendance report for specific activity instance:', activityId);
+        
+        // 1. Fetch activity info - first try with the exact ID
+        let activityData;
+        let activityError;
+        
+        // Try to get the activity directly - for recurring instances this might be virtual
+        const { data, error } = await supabase
           .from('activities')
           .select('id, title, type, start_time, team_id')
-          .eq('id', baseActivityId)
+          .eq('id', activityId.substring(0, 36)) // Use base ID for activity lookup
+          .maybeSingle();
+          
+        if (data) {
+          // We found the activity directly
+          activityData = data;
+          
+          // For recurring instances, override the ID with the full instance ID
+          if (activityId.includes('-2025') || activityId.includes('-2024')) {
+            activityData = {
+              ...data,
+              id: activityId
+            };
+          }
+        } else if (activityId.includes('-')) {
+          // This might be a recurring instance ID, try to get the parent activity
+          const parentId = activityId.split('-').slice(0, 5).join('-');
+          const { data: parentData, error: parentError } = await supabase
+            .from('activities')
+            .select('id, title, type, start_time, team_id')
+            .eq('id', parentId)
           .single();
-        if (activityError) throw activityError;
+            
+          if (parentError) throw parentError;
+          
+          // Use parent data but keep the instance ID
+          activityData = {
+            ...parentData,
+            id: activityId
+          };
+        } else {
+          throw error || new Error('Activity not found');
+        }
+        
         setActivity(activityData);
 
         // 2. Fetch team info
@@ -125,11 +163,11 @@ export const AttendanceReportDetailsScreen = () => {
           setTeam(teamResult);
         }
 
-        // 3. Fetch attendance records
+        // 3. Fetch attendance records - use the FULL activity ID
         const { data: attendanceData, error: attendanceError } = await supabase
           .from('activity_attendance')
           .select('*')
-          .eq('activity_id', baseActivityId);
+          .eq('activity_id', activityId);
         if (attendanceError) throw attendanceError;
         setAttendance(attendanceData || []);
 
@@ -157,8 +195,9 @@ export const AttendanceReportDetailsScreen = () => {
         setIsLoading(false);
       }
     };
-    if (baseActivityId) fetchAll();
-  }, [baseActivityId]);
+    
+    if (activityId) fetchAll();
+  }, [activityId]);
 
   const presentCount = attendance.filter((r) => r.status === 'present').length;
   const absentCount = attendance.filter((r) => r.status === 'absent').length;
@@ -236,7 +275,10 @@ export const AttendanceReportDetailsScreen = () => {
               style={styles.createAttendanceButton}
               onPress={() => {
                 if (activity) {
-                  navigation.navigate('AddAttendance', { activityId: activity.id, teamId: activity.team_id });
+                  navigation.navigate('AddAttendance', { 
+                    activityId: activity.id, 
+                    teamId: activity.team_id 
+                  });
                 }
               }}
             >

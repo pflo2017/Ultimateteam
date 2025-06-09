@@ -1,0 +1,1292 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { View, StyleSheet, TextInput, ScrollView, TouchableOpacity, Modal, Alert, SafeAreaView, Dimensions } from 'react-native';
+import { Text, ActivityIndicator } from 'react-native-paper';
+import { COLORS, SPACING } from '../../constants/theme';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { supabase } from '../../lib/supabase';
+import { useDataRefresh } from '../../utils/useDataRefresh';
+
+interface Player {
+  id: string;
+  player_id: string;
+  player_name: string;
+  team_id: string;
+  team_name: string;
+  payment_status: 'paid' | 'unpaid';
+  payment_updated_at?: string | null; // When the payment status was last updated
+  payment_updated_by?: string | null; // Who updated the payment status
+  attendance?: {
+    attended: number;
+    total: number;
+  };
+}
+
+interface Team {
+  id: string;
+  name: string;
+}
+
+interface PaymentStats {
+  totalPlayers: number;
+  paidPlayers: number;
+  unpaidPlayers: number;
+}
+
+export const AdminPaymentsScreen = () => {
+  // Refs
+  const monthScrollViewRef = useRef<ScrollView>(null);
+  
+  // Basic state
+  const [isLoading, setIsLoading] = useState(true);
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  // Filter state
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [isTeamModalVisible, setIsTeamModalVisible] = useState(false);
+  
+  // Month selection state
+  const [months, setMonths] = useState<{name: string, value: number, year: number}[]>([]);
+  const [selectedMonth, setSelectedMonth] = useState<{name: string, value: number, year: number} | null>(null);
+  const [currentMonthIndex, setCurrentMonthIndex] = useState(0);
+  
+  // Payment statistics
+  const [stats, setStats] = useState<PaymentStats>({
+    totalPlayers: 0,
+    paidPlayers: 0,
+    unpaidPlayers: 0,
+  });
+  
+  // 1. Add state for monthStatusMap
+  const [monthStatusMap, setMonthStatusMap] = useState<{ [key: string]: 'all_paid' | 'not_all_paid' | undefined }>({});
+  
+  // Add state for modal month picker
+  const [isMonthPickerVisible, setIsMonthPickerVisible] = useState(false);
+  
+  // Initialize on mount
+  useEffect(() => {
+    initializeMonths();
+    fetchTeams();
+  }, []);
+  
+  // Add a useEffect to ensure scroll happens after render
+  useEffect(() => {
+    if (months.length > 0 && currentMonthIndex > 0) {
+      // Delay to ensure the component is fully rendered
+      const timer = setTimeout(() => {
+        scrollToMonth(currentMonthIndex);
+      }, 300);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [months, currentMonthIndex]);
+  
+  // Add a useEffect to handle initial screen focus and centering
+  useEffect(() => {
+    const centerCurrentMonth = () => {
+      if (months.length > 0 && currentMonthIndex >= 0) {
+        // Use a sequence of timeouts to ensure reliable centering
+        const timers = [100, 300, 600, 1000].map(delay => 
+          setTimeout(() => {
+            console.log(`[DEBUG] Centering month at ${delay}ms delay`);
+            scrollToMonth(currentMonthIndex);
+          }, delay)
+        );
+        
+        return () => timers.forEach(clearTimeout);
+      }
+    };
+
+    // Center on mount and when months/currentMonthIndex changes
+    centerCurrentMonth();
+  }, [months, currentMonthIndex]);
+  
+  // Add a useEffect to load initial data when months are initialized
+  useEffect(() => {
+    if (selectedMonth && months.length > 0) {
+      console.log("Initial data loading with selectedMonth:", selectedMonth);
+      // Load all teams data by default when the page first loads
+      fetchAllTeamsPayments(selectedMonth.year, selectedMonth.value);
+    }
+  }, [selectedMonth, months.length]);
+  
+  // Use data refresh hook to refresh when payment status changes
+  useDataRefresh('payments', () => {
+    console.log("Payment status change detected - refreshing payment data");
+    if (selectedMonth && selectedTeamId) {
+      fetchMonthlyPayments(selectedMonth.year, selectedMonth.value, selectedTeamId);
+    } else if (selectedMonth) {
+      fetchAllTeamsPayments(selectedMonth.year, selectedMonth.value);
+    }
+  });
+  
+  // Initialize months for the selector
+  const initializeMonths = () => {
+    const currentDate = new Date();
+    const currentMonth = currentDate.getMonth();
+    const currentYear = currentDate.getFullYear();
+    
+    console.log(`Initializing months. Current month: ${currentMonth + 1}, year: ${currentYear}`);
+    
+    // Create an array of all months for the current year
+    const monthsArray = [];
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
+    // Add all months
+    for (let i = 0; i < 12; i++) {
+      monthsArray.push({
+        name: monthNames[i],
+        value: i + 1, // 1-based month value
+        year: currentYear
+      });
+    }
+    
+    // Current month index
+    const currentMonthIdx = currentMonth;
+    
+    console.log(`Setting months array with ${monthsArray.length} months. Current month index: ${currentMonthIdx}`);
+    console.log(`Current month: ${monthsArray[currentMonthIdx].name} ${monthsArray[currentMonthIdx].year}`);
+    
+    setMonths(monthsArray);
+    setSelectedMonth(monthsArray[currentMonthIdx]);
+    setCurrentMonthIndex(currentMonthIdx);
+    
+    // Ensure we scroll to center the current month after render
+    setTimeout(() => {
+      scrollToMonth(currentMonthIdx);
+    }, 500);
+  };
+  
+  // Function to scroll to a specific month by index
+  const scrollToMonth = (index: number) => {
+    if (monthScrollViewRef.current) {
+      // Calculate the position to scroll to
+      const itemWidth = 70; // Width of each month item including margins
+      const screenWidth = Dimensions.get('window').width;
+      
+      // Account for container padding and margins
+      const containerPadding = SPACING.lg * 2; // Left and right padding
+      const itemMargin = 8; // Horizontal margin between items (4px on each side)
+      const availableWidth = screenWidth - containerPadding;
+      
+      // Calculate the position to perfectly center the selected month
+      // This formula ensures the selected month is centered in the available space
+      const scrollPosition = Math.max(0, (index * (itemWidth + itemMargin)) - (availableWidth / 2) + (itemWidth / 2));
+      
+      console.log(`[DEBUG] Scrolling to month index ${index}`, {
+        position: scrollPosition,
+        screenWidth,
+        availableWidth,
+        itemWidth,
+        itemMargin,
+        containerPadding
+      });
+      
+      // Use requestAnimationFrame to ensure smooth scrolling after layout
+      requestAnimationFrame(() => {
+        monthScrollViewRef.current?.scrollTo({ 
+          x: scrollPosition, 
+          animated: true 
+        });
+      });
+    }
+  };
+  
+  // Handler for selecting a month
+  const handleMonthSelect = (month: {name: string, value: number, year: number}, index: number) => {
+    setSelectedMonth(month);
+    setCurrentMonthIndex(index);
+    
+    // Scroll to center the selected month with a slight delay to ensure state is updated
+    setTimeout(() => {
+      scrollToMonth(index);
+    }, 50);
+    
+    // Fetch data for the selected month
+    if (selectedTeamId) {
+      fetchMonthlyPayments(month.year, month.value, selectedTeamId);
+    } else {
+      fetchAllTeamsPayments(month.year, month.value);
+    }
+  };
+  
+  // Fetch all teams
+  const fetchTeams = async () => {
+    try {
+      setIsLoading(true);
+      
+      console.log("Fetching all teams");
+      
+      // Fetch all teams
+      const { data: teamsData, error: teamsError } = await supabase
+        .from('teams')
+        .select('id, name')
+        .eq('is_active', true)
+        .order('name');
+      
+      if (teamsError) {
+        console.error("Error fetching teams:", teamsError);
+        throw teamsError;
+      }
+      
+      console.log(`Found ${teamsData?.length || 0} teams`);
+      setTeams(teamsData || []);
+      
+      // We don't fetch payment data here anymore - that's handled by the useEffect
+      
+    } catch (error) {
+      console.error('Error fetching teams:', error);
+      Alert.alert('Error', 'Failed to load teams data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Fetch monthly payments for all teams
+  const fetchAllTeamsPayments = async (year: number, month: number) => {
+    try {
+      setIsLoading(true);
+      
+      console.log("Fetching payments for all teams");
+      
+      // Fetch all active players with their teams, regardless of team selection
+      const { data: playersData, error: playersError } = await supabase
+        .from('players')
+        .select(`
+          id,
+          name,
+          team_id,
+          teams:team_id(name)
+        `)
+        .eq('is_active', true);
+      
+      if (playersError) {
+        console.error("Error fetching players:", playersError);
+        throw playersError;
+      }
+      
+      console.log(`Found ${playersData?.length || 0} active players across all teams`);
+      
+      if (!playersData || playersData.length === 0) {
+        setPlayers([]);
+        setStats({
+          totalPlayers: 0,
+          paidPlayers: 0,
+          unpaidPlayers: 0
+        });
+        setIsLoading(false);
+        return;
+      }
+      
+      // Get current date info for comparing months
+      const currentDate = new Date();
+      const currentMonth = currentDate.getMonth() + 1; // 1-based month
+      const currentYear = currentDate.getFullYear();
+      const isFutureMonth = (year > currentYear) || (year === currentYear && month > currentMonth);
+      
+      console.log(`Current date: ${currentMonth}/${currentYear}, Selected: ${month}/${year}, isFutureMonth: ${isFutureMonth}`);
+      
+      // For future months, set all players to 'unpaid' without querying the database
+      if (isFutureMonth) {
+        console.log("Future month selected - setting all players to unpaid by default");
+        const transformedPlayers = playersData.map((player: any) => ({
+          id: player.id,
+          player_id: player.id,
+          player_name: player.name,
+          team_id: player.team_id,
+          team_name: player.teams?.name || 'Unknown Team',
+          payment_status: 'unpaid' as 'paid' | 'unpaid',
+          payment_updated_at: null,
+          payment_updated_by: null
+        }));
+        
+        setPlayers(transformedPlayers);
+        
+        // All unpaid for future months
+        setStats({
+          totalPlayers: transformedPlayers.length,
+          paidPlayers: 0,
+          unpaidPlayers: transformedPlayers.length
+        });
+        
+        // Fetch attendance data for these players across all teams
+        fetchAttendanceData(year, month, transformedPlayers);
+        setIsLoading(false);
+        return;
+      }
+      
+      // For current or past months, fetch actual payment data
+      // Fetch monthly payments for these players
+      const playerIds = playersData.map((p: any) => p.id);
+      
+      const { data: paymentsData, error: paymentsError } = await supabase
+        .from('monthly_payments')
+        .select('*')
+        .eq('year', year)
+        .eq('month', month)
+        .in('player_id', playerIds);
+      
+      if (paymentsError) {
+        console.error("Error fetching payments:", paymentsError);
+        throw paymentsError;
+      }
+      
+      console.log(`Found ${paymentsData?.length || 0} payment records for the selected month`);
+      
+      // Build a map: { 'YYYY-M': { paid: X, total: Y } }
+      const statusMap: { [key: string]: { paid: number; total: number } } = {};
+      playersData.forEach((player: any) => {
+        for (let m = 1; m <= 12; m++) {
+          const key = `${year}-${m}`;
+          if (!statusMap[key]) statusMap[key] = { paid: 0, total: 0 };
+          statusMap[key].total++;
+        }
+      });
+      (paymentsData || []).forEach((payment: any) => {
+        const key = `${payment.year}-${payment.month}`;
+        if (statusMap[key]) {
+          if (payment.status === 'paid') statusMap[key].paid++;
+        }
+      });
+      
+      // Now build monthStatusMap
+      const newMonthStatusMap: { [key: string]: 'all_paid' | 'not_all_paid' } = {};
+      Object.entries(statusMap).forEach(([key, val]) => {
+        if (val.total > 0) {
+          newMonthStatusMap[key] = val.paid === val.total ? 'all_paid' : 'not_all_paid';
+        }
+      });
+      setMonthStatusMap(newMonthStatusMap);
+      console.log('[DEBUG] monthStatusMap:', newMonthStatusMap);
+      
+      // Transform player data with payment status
+      const transformedPlayers = (playersData || []).map((player: any) => {
+        // Find payment record for this player for the selected month
+        const paymentInfo = (paymentsData || []).find((p: any) => p.player_id === player.id) || { status: 'unpaid', updated_at: null, updated_by: null };
+        return {
+          id: player.id,
+          player_id: player.id,
+          player_name: player.name,
+          team_id: player.team_id,
+          team_name: player.teams?.name || 'Unknown Team',
+          payment_status: paymentInfo.status as 'paid' | 'unpaid',
+          payment_updated_at: paymentInfo.updated_at,
+          payment_updated_by: paymentInfo.updated_by
+        };
+      });
+      
+      setPlayers(transformedPlayers);
+      
+      // Calculate stats
+      const totalPlayers = transformedPlayers.length;
+      const paidPlayers = transformedPlayers.filter(p => p.payment_status === 'paid').length;
+      const unpaidPlayers = totalPlayers - paidPlayers;
+      
+      setStats({
+        totalPlayers,
+        paidPlayers,
+        unpaidPlayers
+      });
+      
+      // Fetch attendance data for these players across all teams
+      fetchAttendanceData(year, month, transformedPlayers);
+      
+    } catch (error) {
+      console.error('Error fetching monthly payments:', error);
+      Alert.alert('Error', 'Failed to load payment data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Fetch monthly payments for a specific team
+  const fetchMonthlyPayments = async (year: number, month: number, teamId: string) => {
+    try {
+      setIsLoading(true);
+      
+      // Fetch players for the selected team
+      const { data: playersData, error: playersError } = await supabase
+        .from('players')
+        .select(`
+          id,
+          name,
+          team_id,
+          teams:team_id(name)
+        `)
+        .eq('team_id', teamId)
+        .eq('is_active', true);
+      
+      if (playersError) throw playersError;
+      
+      if (!playersData || playersData.length === 0) {
+        setPlayers([]);
+        setStats({
+          totalPlayers: 0,
+          paidPlayers: 0,
+          unpaidPlayers: 0
+        });
+        setIsLoading(false);
+        return;
+      }
+      
+      // Get current date info for comparing months
+      const currentDate = new Date();
+      const currentMonth = currentDate.getMonth() + 1; // 1-based month
+      const currentYear = currentDate.getFullYear();
+      const isFutureMonth = (year > currentYear) || (year === currentYear && month > currentMonth);
+      
+      console.log(`Current date: ${currentMonth}/${currentYear}, Selected: ${month}/${year}, isFutureMonth: ${isFutureMonth}`);
+      
+      // For future months, set all players to 'unpaid' without querying the database
+      if (isFutureMonth) {
+        console.log("Future month selected - setting all players to unpaid by default");
+        const transformedPlayers = playersData.map((player: any) => ({
+          id: player.id,
+          player_id: player.id,
+          player_name: player.name,
+          team_id: player.team_id,
+          team_name: player.teams?.name || 'Unknown Team',
+          payment_status: 'unpaid' as 'paid' | 'unpaid',
+          payment_updated_at: null,
+          payment_updated_by: null
+        }));
+        
+        setPlayers(transformedPlayers);
+        
+        // All unpaid for future months
+        setStats({
+          totalPlayers: transformedPlayers.length,
+          paidPlayers: 0,
+          unpaidPlayers: transformedPlayers.length
+        });
+        
+        // Fetch attendance data for this team
+        fetchAttendanceData(year, month, transformedPlayers, teamId);
+        setIsLoading(false);
+        return;
+      }
+      
+      // For current or past months, fetch actual payment data
+      // Fetch monthly payments for these players
+      const { data: paymentsData, error: paymentsError } = await supabase
+        .from('monthly_payments')
+        .select('*')
+        .eq('year', year)
+        .eq('month', month)
+        .in('player_id', playersData.map((p: any) => p.id));
+      
+      if (paymentsError) throw paymentsError;
+      
+      // Fetch all months' payment data for these players
+      const { data: allPayments, error: allPaymentsError } = await supabase
+        .from('monthly_payments')
+        .select('player_id, year, month, status')
+        .in('player_id', playersData.map((p: any) => p.id));
+      if (allPaymentsError) throw allPaymentsError;
+      
+      // Build a map: { 'YYYY-M': { paid: X, total: Y } }
+      const statusMap: { [key: string]: { paid: number; total: number } } = {};
+      playersData.forEach((player: any) => {
+        for (let m = 1; m <= 12; m++) {
+          const key = `${year}-${m}`;
+          if (!statusMap[key]) statusMap[key] = { paid: 0, total: 0 };
+          statusMap[key].total++;
+        }
+      });
+      (allPayments || []).forEach((payment: any) => {
+        const key = `${payment.year}-${payment.month}`;
+        if (statusMap[key]) {
+          if (payment.status === 'paid') statusMap[key].paid++;
+        }
+      });
+      
+      // Now build monthStatusMap
+      const newMonthStatusMap: { [key: string]: 'all_paid' | 'not_all_paid' } = {};
+      Object.entries(statusMap).forEach(([key, val]) => {
+        if (val.total > 0) {
+          newMonthStatusMap[key] = val.paid === val.total ? 'all_paid' : 'not_all_paid';
+        }
+      });
+      setMonthStatusMap(newMonthStatusMap);
+      console.log('[DEBUG] monthStatusMap:', newMonthStatusMap);
+      
+      // Transform player data with payment status
+      const transformedPlayers = (playersData || []).map((player: any) => {
+        // Find payment record for this player for the selected month
+        const paymentInfo = (paymentsData || []).find((p: any) => p.player_id === player.id) || { status: 'unpaid', updated_at: null, updated_by: null };
+        return {
+          id: player.id,
+          player_id: player.id,
+          player_name: player.name,
+          team_id: player.team_id,
+          team_name: player.teams?.name || 'Unknown Team',
+          payment_status: paymentInfo.status as 'paid' | 'unpaid',
+          payment_updated_at: paymentInfo.updated_at,
+          payment_updated_by: paymentInfo.updated_by
+        };
+      });
+      
+      setPlayers(transformedPlayers);
+      
+      // Calculate stats
+      const totalPlayers = transformedPlayers.length;
+      const paidPlayers = transformedPlayers.filter(p => p.payment_status === 'paid').length;
+      const unpaidPlayers = totalPlayers - paidPlayers;
+      
+      setStats({
+        totalPlayers,
+        paidPlayers,
+        unpaidPlayers
+      });
+      
+      // Fetch attendance data for this team
+      fetchAttendanceData(year, month, transformedPlayers, teamId);
+      
+    } catch (error) {
+      console.error('Error fetching monthly payments:', error);
+      Alert.alert('Error', 'Failed to load payment data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // New function to fetch attendance data
+  const fetchAttendanceData = async (year: number, month: number, playersList: Player[], teamId?: string) => {
+    try {
+      // Calculate the start and end dates for the selected month
+      const monthIndex = month - 1; // Convert to 0-based month
+      const startDate = new Date(year, monthIndex, 1);
+      const endDate = new Date(year, monthIndex + 1, 0); // Last day of the month
+      
+      // Format dates for the query
+      const startDateStr = startDate.toISOString().split('T')[0];
+      const endDateStr = endDate.toISOString().split('T')[0];
+      
+      console.log(`Fetching attendance data from ${startDateStr} to ${endDateStr}`);
+      
+      // Prepare query for activities
+      let activitiesQuery = supabase
+        .from('activities')
+        .select('id, start_time')
+        .gte('start_time', startDateStr)
+        .lte('start_time', endDateStr);
+      
+      // If teamId is provided, filter by team
+      if (teamId) {
+        activitiesQuery = activitiesQuery.eq('team_id', teamId);
+      }
+      
+      // Fetch activities
+      const { data: activitiesData, error: activitiesError } = await activitiesQuery;
+      
+      if (activitiesError) {
+        console.error("Error fetching activities:", activitiesError);
+        throw activitiesError;
+      }
+      
+      console.log(`Found ${activitiesData?.length || 0} activities for this period`);
+      
+      // If no activities, set empty attendance data
+      if (!activitiesData || activitiesData.length === 0) {
+        const emptyAttendance: {[playerId: string]: {attended: number, total: number}} = {};
+        playersList.forEach(player => {
+          emptyAttendance[player.id] = { attended: 0, total: 0 };
+        });
+        
+        // Update players with attendance data
+        setPlayers(playersList.map(player => ({
+          ...player,
+          attendance: { attended: 0, total: 0 }
+        })));
+        
+        return;
+      }
+      
+      // Get activity IDs
+      const activityIds = activitiesData.map((a: any) => a.id);
+      
+      // Fetch attendance records for these activities
+      const { data: attendanceData, error: attendanceError } = await supabase
+        .from('activity_attendance')
+        .select('activity_id, player_id, status')
+        .in('activity_id', activityIds);
+      
+      if (attendanceError) {
+        console.error("Error fetching attendance:", attendanceError);
+        throw attendanceError;
+      }
+      
+      console.log(`Found ${attendanceData?.length || 0} attendance records`);
+      
+      // Calculate attendance for each player
+      const attendance: {[playerId: string]: {attended: number, total: number}} = {};
+      
+      playersList.forEach(player => {
+        const playerAttendance = (attendanceData || []).filter((a: any) => a.player_id === player.id);
+        const attended = playerAttendance.filter((a: any) => a.status === 'present').length;
+        const total = activityIds.length;
+        
+        attendance[player.id] = { attended, total };
+      });
+      
+      // Update players with attendance data
+      setPlayers(playersList.map(player => ({
+        ...player,
+        attendance: attendance[player.id] || { attended: 0, total: 0 }
+      })));
+      
+    } catch (error) {
+      console.error('Error fetching attendance data:', error);
+    }
+  };
+  
+  // Handle team selection
+  const handleTeamSelect = (teamId: string | null) => {
+    setSelectedTeamId(teamId);
+    setIsTeamModalVisible(false);
+    
+    // Fetch data for the new team selection
+    if (selectedMonth) {
+      if (teamId) {
+        // If a specific team is selected, fetch data for that team
+        fetchMonthlyPayments(selectedMonth.year, selectedMonth.value, teamId);
+      } else {
+        // If "All Teams" is selected, fetch data for all teams
+        fetchAllTeamsPayments(selectedMonth.year, selectedMonth.value);
+      }
+      
+      // Ensure the month selector stays centered on the current month after team selection
+      // Using multiple timeouts at different intervals for more reliable centering
+      const currentIndex = currentMonthIndex;
+      setTimeout(() => {
+        if (currentIndex > 0) scrollToMonth(currentIndex);
+      }, 100);
+      
+      setTimeout(() => {
+        if (currentIndex > 0) scrollToMonth(currentIndex);
+      }, 300);
+      
+      setTimeout(() => {
+        if (currentIndex > 0) scrollToMonth(currentIndex);
+      }, 600);
+    }
+  };
+  
+  // Handle search input
+  const handleSearchChange = (text: string) => {
+    setSearchQuery(text);
+  };
+  
+  // Filter players based on search query
+  const filteredPlayers = players.filter(player => {
+    const matchesSearch = !searchQuery || 
+      player.player_name.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    return matchesSearch;
+  });
+
+  // Helper function to format date
+  const formatDate = (dateString: string) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return dateString; // Return as-is if not a valid date
+    return date.toLocaleDateString('en-GB');
+  };
+
+  if (isLoading) {
+    return <ActivityIndicator style={styles.loader} color={COLORS.primary} />;
+  }
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.container}>
+        {/* Fixed Month Selector - REPLACE the old horizontal chip selector with the new stepper/modal UI */}
+        <View style={styles.monthStepperContainer}>
+          <TouchableOpacity
+            onPress={() => {
+              if (!months.length || !selectedMonth) return;
+              const idx = months.findIndex(m => m.value === selectedMonth.value && m.year === selectedMonth.year);
+              if (idx > 0) {
+                handleMonthSelect(months[idx - 1], idx - 1);
+              }
+            }}
+            style={styles.monthArrowButton}
+            disabled={!months.length || !selectedMonth || months.findIndex(m => m.value === selectedMonth.value && m.year === selectedMonth.year) === 0}
+          >
+            <MaterialCommunityIcons name="chevron-left" size={28} color={COLORS.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setIsMonthPickerVisible(true)} style={styles.monthStepperLabelContainer} activeOpacity={0.7}>
+            <Text style={styles.monthStepperLabel}>
+              {selectedMonth ? `${selectedMonth.name} ${selectedMonth.year}` : ''}
+                    </Text>
+            {selectedTeamId && monthStatusMap[`${selectedMonth?.year}-${selectedMonth?.value}`] === 'all_paid' && (
+              <MaterialCommunityIcons name="check-circle" size={20} color={COLORS.success} style={{ marginLeft: 8 }} />
+            )}
+            {selectedTeamId && monthStatusMap[`${selectedMonth?.year}-${selectedMonth?.value}`] === 'not_all_paid' && (
+              <MaterialCommunityIcons name="flag" size={20} color={COLORS.error} style={{ marginLeft: 8 }} />
+                    )}
+                  </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => {
+              if (!months.length || !selectedMonth) return;
+              const idx = months.findIndex(m => m.value === selectedMonth.value && m.year === selectedMonth.year);
+              if (idx < months.length - 1) {
+                handleMonthSelect(months[idx + 1], idx + 1);
+              }
+            }}
+            style={styles.monthArrowButton}
+            disabled={!months.length || !selectedMonth || months.findIndex(m => m.value === selectedMonth.value && m.year === selectedMonth.year) === months.length - 1}
+          >
+            <MaterialCommunityIcons name="chevron-right" size={28} color={COLORS.primary} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Scrollable Content */}
+        <ScrollView 
+          style={styles.mainScrollView}
+          contentContainerStyle={styles.mainScrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Team Selector */}
+          <TouchableOpacity
+            style={styles.teamSelectorButton}
+            onPress={() => setIsTeamModalVisible(true)}
+          >
+            <MaterialCommunityIcons 
+              name={selectedTeamId ? "account-group" : "view-grid"} 
+              size={20} 
+              color={COLORS.primary} 
+              style={styles.teamSelectorIcon} 
+            />
+            <Text style={styles.teamSelectorText} numberOfLines={1}>
+              {selectedTeamId ? teams.find(t => t.id === selectedTeamId)?.name : 'All Teams'}
+            </Text>
+            <MaterialCommunityIcons name="chevron-down" size={20} color={COLORS.grey[400]} />
+          </TouchableOpacity>
+          
+          {/* Search Bar */}
+          <View style={styles.searchContainer}>
+            <MaterialCommunityIcons name="magnify" size={20} color={COLORS.grey[400]} style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search player"
+              placeholderTextColor={COLORS.grey[400]}
+              value={searchQuery}
+              onChangeText={handleSearchChange}
+            />
+          </View>
+          
+          {/* Stats Summary */}
+          <View style={styles.statsContainer}>
+            <View style={styles.statItem}>
+              <MaterialCommunityIcons name="check-circle" size={24} color={COLORS.success} />
+              <Text style={styles.statLabel}>Paid</Text>
+              <Text style={styles.statValue}>{stats.paidPlayers}</Text>
+            </View>
+            
+            <View style={styles.statDivider} />
+            
+            <View style={styles.statItem}>
+              <MaterialCommunityIcons name="close-circle" size={24} color={COLORS.error} />
+              <Text style={styles.statLabel}>Not Paid</Text>
+              <Text style={styles.statValue}>{stats.unpaidPlayers}</Text>
+            </View>
+            
+            <View style={styles.statDivider} />
+            
+            <View style={styles.statItem}>
+              <MaterialCommunityIcons name="account-group" size={24} color={COLORS.primary} />
+              <Text style={styles.statLabel}>Total</Text>
+              <Text style={styles.statValue}>{stats.totalPlayers}</Text>
+            </View>
+          </View>
+          
+          {/* Player List */}
+          <View style={styles.playersContainer}>
+            {filteredPlayers.length === 0 ? (
+              <View style={styles.emptyState}>
+                <MaterialCommunityIcons name="account-off" size={48} color={COLORS.grey[400]} />
+                <Text style={styles.emptyStateText}>No players found</Text>
+              </View>
+            ) : (
+              filteredPlayers.map(player => (
+                <View key={player.id} style={styles.playerCard}>
+                  <View 
+                    style={[
+                      styles.playerCardContent,
+                      { 
+                        borderLeftWidth: 4,
+                        borderLeftColor: player.payment_status === 'paid' ? COLORS.success : COLORS.error,
+                        borderTopWidth: 1,
+                        borderRightWidth: 1,
+                        borderBottomWidth: 1,
+                        borderTopColor: COLORS.grey[200],
+                        borderRightColor: COLORS.grey[200],
+                        borderBottomColor: COLORS.grey[200]
+                      }
+                    ]}
+                  >
+                    {/* Player Name and Team */}
+                    <View style={styles.playerHeader}>
+                      <View style={styles.playerInfo}>
+                        <MaterialCommunityIcons name="account" size={24} color={COLORS.text} style={styles.playerIcon} />
+                        <View>
+                          <Text style={styles.playerName}>{player.player_name}</Text>
+                          <Text style={styles.teamName}>{player.team_name}</Text>
+                        </View>
+                      </View>
+                      
+                      <View style={[
+                        styles.statusBadge,
+                        { backgroundColor: player.payment_status === 'paid' ? COLORS.success + '20' : COLORS.error + '20' }
+                      ]}>
+                        <MaterialCommunityIcons 
+                          name={player.payment_status === 'paid' ? 'check' : 'close'} 
+                          size={14} 
+                          color={player.payment_status === 'paid' ? COLORS.success : COLORS.error} 
+                        />
+                        <Text style={[
+                          styles.statusText,
+                          { color: player.payment_status === 'paid' ? COLORS.success : COLORS.error }
+                        ]}>
+                          {player.payment_status === 'paid' ? 'Paid' : 'Not Paid'}
+                        </Text>
+                      </View>
+                    </View>
+                    
+                    {/* Payment Update Info - Show only for paid payments */}
+                    {player.payment_status === 'paid' && player.payment_updated_at && (
+                      <View style={styles.paymentUpdateContainer}>
+                        <MaterialCommunityIcons name="clock-outline" size={16} color={COLORS.grey[600]} />
+                        <Text style={styles.paymentUpdateText}>
+                          Marked as paid on {formatDate(player.payment_updated_at)}
+                        </Text>
+                      </View>
+                    )}
+                    
+                    {/* Attendance Info */}
+                    {player.attendance && (
+                      <View style={styles.attendanceContainer}>
+                        <MaterialCommunityIcons name="calendar-check" size={16} color={COLORS.grey[600]} />
+                        <Text style={styles.attendanceText}>
+                          Attendance: {player.attendance.attended} / {player.attendance.total} sessions
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              ))
+            )}
+            
+            {/* Add extra padding at bottom for better scrolling */}
+            <View style={{ height: 24 }} />
+          </View>
+        </ScrollView>
+
+        {/* Team Selection Modal */}
+        <Modal
+          visible={isTeamModalVisible}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setIsTeamModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Select Team</Text>
+                <TouchableOpacity 
+                  onPress={() => setIsTeamModalVisible(false)}
+                >
+                  <MaterialCommunityIcons name="close" size={24} color={COLORS.text} />
+                </TouchableOpacity>
+              </View>
+              
+              {/* All Teams option */}
+              <TouchableOpacity
+                style={[styles.teamOption, selectedTeamId === null && styles.teamOptionSelected]}
+                onPress={() => handleTeamSelect(null)}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <MaterialCommunityIcons name="view-grid" size={20} color={COLORS.primary} style={{ marginRight: 8 }} />
+                  <Text style={[styles.teamOptionText, selectedTeamId === null && styles.teamOptionTextSelected]}>
+                    All Teams
+                  </Text>
+                </View>
+                {selectedTeamId === null && (
+                  <MaterialCommunityIcons name="check" size={20} color={COLORS.primary} />
+                )}
+              </TouchableOpacity>
+              
+              {/* Team options */}
+              {teams.map(team => (
+                <TouchableOpacity
+                  key={team.id}
+                  style={[styles.teamOption, selectedTeamId === team.id && styles.teamOptionSelected]}
+                  onPress={() => handleTeamSelect(team.id)}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <MaterialCommunityIcons name="account-group" size={20} color={COLORS.primary} style={{ marginRight: 8 }} />
+                    <Text style={[styles.teamOptionText, selectedTeamId === team.id && styles.teamOptionTextSelected]}>
+                      {team.name}
+                    </Text>
+                  </View>
+                  {selectedTeamId === team.id && (
+                    <MaterialCommunityIcons name="check" size={20} color={COLORS.primary} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </Modal>
+
+        {/* Month Picker Modal - Add after the main view, before SafeAreaView close */}
+        <Modal
+          visible={isMonthPickerVisible}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setIsMonthPickerVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalContent, { borderRadius: 0, padding: 24, width: '100%', maxWidth: undefined, alignSelf: undefined, margin: 0 }]}> 
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <Text style={{ fontSize: 20, fontWeight: 'bold', textAlign: 'center', flex: 1 }}>Select Month</Text>
+                <TouchableOpacity onPress={() => setIsMonthPickerVisible(false)} style={{ marginLeft: 8 }}>
+                  <MaterialCommunityIcons name="close" size={28} color={COLORS.grey[600]} />
+                </TouchableOpacity>
+              </View>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' }}>
+                {months.map((month, idx) => {
+                  const isSelected = selectedMonth && selectedMonth.value === month.value && selectedMonth.year === month.year;
+                  const monthKey = `${month.year}-${month.value}`;
+                  return (
+                    <TouchableOpacity
+                      key={monthKey}
+                      style={[
+                        styles.monthGridItem,
+                        isSelected && styles.monthGridItemSelected,
+                        { width: '30%', maxWidth: 110, minWidth: 90, height: 56, margin: '1.5%' }
+                      ]}
+                      onPress={() => {
+                        handleMonthSelect(month, idx);
+                        setIsMonthPickerVisible(false);
+                      }}
+                    >
+                      <Text style={[
+                        styles.monthGridItemText,
+                        isSelected && styles.monthGridItemTextSelected
+                      ]}>
+                        {month.name}
+                      </Text>
+                      {selectedTeamId && monthStatusMap[monthKey] === 'all_paid' && (
+                        <MaterialCommunityIcons name="check-circle" size={16} color={COLORS.success} style={{ position: 'absolute', top: 6, right: 6, zIndex: 2 }} />
+                      )}
+                      {selectedTeamId && monthStatusMap[monthKey] === 'not_all_paid' && (
+                        <MaterialCommunityIcons name="flag" size={16} color={COLORS.error} style={{ position: 'absolute', top: 6, right: 6, zIndex: 2 }} />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          </View>
+        </Modal>
+      </View>
+    </SafeAreaView>
+  );
+};
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  loader: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  // Month selector styles
+  monthStepperContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: SPACING.md,
+    paddingTop: SPACING.xl, // Add more top padding for distance from account area
+  },
+  monthArrowButton: {
+    padding: 8,
+  },
+  monthStepperLabelContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 120,
+    marginHorizontal: 12,
+  },
+  monthStepperLabel: {
+    fontSize: 24, // Make the month name bigger
+    fontWeight: 'bold',
+    color: COLORS.text,
+  },
+  // Team selector styles
+  teamSelectorButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.white,
+    marginHorizontal: SPACING.lg,
+    marginVertical: SPACING.md,
+    padding: SPACING.md,
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 1,
+    elevation: 1,
+  },
+  teamSelectorIcon: {
+    marginRight: SPACING.sm,
+  },
+  teamSelectorText: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '500',
+    color: COLORS.text,
+  },
+  // Search styles
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.grey[100],
+    marginHorizontal: SPACING.lg,
+    marginVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    borderRadius: 8,
+  },
+  searchIcon: {
+    marginRight: SPACING.sm,
+  },
+  searchInput: {
+    flex: 1,
+    height: 44,
+    color: COLORS.text,
+    fontSize: 16,
+  },
+  // Stats summary styles
+  statsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    marginHorizontal: SPACING.lg,
+    marginVertical: SPACING.md,
+    padding: SPACING.md,
+    borderRadius: 12, // Slightly increased for a card look
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 1,
+    elevation: 1,
+    borderWidth: 1, // Add border
+    borderColor: COLORS.grey[200], // Subtle border color
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statLabel: {
+    fontSize: 14,
+    color: COLORS.grey[600],
+    marginTop: 4,
+  },
+  statValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.text,
+  },
+  statDivider: {
+    width: 1,
+    height: '70%',
+    backgroundColor: COLORS.grey[200],
+  },
+  // Player list styles
+  playersContainer: {
+    paddingHorizontal: 12,
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.xl,
+  },
+  emptyStateText: {
+    marginTop: SPACING.md,
+    color: COLORS.grey[600],
+    fontSize: 16,
+  },
+  // Player card styles
+  playerCard: {
+    marginBottom: SPACING.sm,
+    borderRadius: 8,
+    overflow: 'hidden',
+    marginHorizontal: 6,
+  },
+  playerCardContent: {
+    padding: SPACING.md,
+    paddingVertical: SPACING.sm,
+    backgroundColor: COLORS.white,
+    borderRadius: 8,
+    borderTopLeftRadius: 0,
+    borderBottomLeftRadius: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  playerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.xs,
+  },
+  playerInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  playerIcon: {
+    marginRight: SPACING.sm,
+  },
+  playerName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.text,
+    marginBottom: 2,
+  },
+  teamName: {
+    fontSize: 14,
+    color: COLORS.grey[600],
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 4,
+    borderRadius: 20,
+    marginLeft: SPACING.sm,
+  },
+  statusText: {
+    fontSize: 13,
+    fontWeight: '500',
+    marginLeft: 3,
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: SPACING.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.grey[200],
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.text,
+  },
+  teamOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: SPACING.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.grey[200],
+  },
+  teamOptionSelected: {
+    backgroundColor: COLORS.primary + '10',
+  },
+  teamOptionText: {
+    fontSize: 16,
+    color: COLORS.text,
+  },
+  teamOptionTextSelected: {
+    color: COLORS.primary,
+    fontWeight: '500',
+  },
+  // Payment update styles
+  paymentUpdateContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: SPACING.sm,
+    marginBottom: SPACING.xs,
+    paddingHorizontal: SPACING.xs,
+  },
+  paymentUpdateText: {
+    fontSize: 14,
+    color: COLORS.grey[600],
+    marginLeft: SPACING.xs,
+    fontStyle: 'italic',
+  },
+  // Attendance styles
+  attendanceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: SPACING.xs,
+    marginBottom: SPACING.md,
+    paddingHorizontal: SPACING.xs,
+  },
+  attendanceText: {
+    fontSize: 14,
+    color: COLORS.grey[600],
+    marginLeft: SPACING.xs,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: COLORS.grey[700],
+    marginBottom: SPACING.sm,
+  },
+  mainScrollView: {
+    flex: 1,
+  },
+  mainScrollContent: {
+    paddingBottom: SPACING.lg,
+  },
+  monthGridItem: {
+    position: 'relative',
+    padding: SPACING.sm,
+    borderRadius: 8,
+    backgroundColor: COLORS.grey[100],
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  monthGridItemSelected: {
+    backgroundColor: COLORS.primary + '15',
+  },
+  monthGridItemText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: COLORS.grey[600],
+  },
+  monthGridItemTextSelected: {
+    color: COLORS.primary,
+    fontWeight: 'bold',
+  },
+}); 

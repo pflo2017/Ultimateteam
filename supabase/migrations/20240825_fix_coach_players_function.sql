@@ -28,7 +28,7 @@ BEGIN
         p.name as player_name,
         t.id as team_id,
         t.name as team_name,
-        COALESCE(pc.medical_visa_status, 'unknown') as medical_visa_status,
+        COALESCE(p.medical_visa_status, pc.medical_visa_status, 'pending') as medical_visa_status,
         COALESCE(p.payment_status, 'pending') as payment_status,
         p.parent_id,
         p.last_payment_date::DATE  -- Cast to DATE type

@@ -9,6 +9,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { registerEventListener } from '../../utils/events';
 import { useDataRefresh } from '../../utils/useDataRefresh';
+import { getPlayerPaymentStatus, getPlayerPaymentHistory, getPaymentStatusText, getPaymentStatusColor, getCurrentMonthPaymentStatus } from '../../services/paymentStatusService';
+import { PaymentHistoryModal } from '../../components/PaymentHistoryModal';
 
 interface Child {
   id: string;
@@ -27,7 +29,7 @@ interface PaymentHistory {
   year: number;
   month: number;
   status: string;
-  updated_at?: string;
+  updated_at: string;
 }
 
 interface HistoryMonth {
@@ -217,29 +219,6 @@ export const ParentPaymentsScreen = () => {
       console.log("[ParentPaymentsScreen] Filtered parent players:", parentPlayers.length);
       setDebugInfo(prev => prev + `\nFiltered to ${parentPlayers.length} players for this parent`);
       
-      // Create a map of player names to player details for efficient lookup
-      const playerMap = new Map();
-      
-      // First try to add players with the correct parent_id
-      if (parentPlayers.length > 0) {
-        parentPlayers.forEach((player: Player) => {
-          console.log(`[ParentPaymentsScreen] Using player with correct parent_id: ${player.name}`);
-          setDebugInfo(prev => prev + `\nFound player by parent_id: ${player.name}`);
-          
-          // Determine the most accurate status
-          const status = player.payment_status || player.player_status || 'pending';
-          
-          console.log(`[ParentPaymentsScreen] Status for ${player.name}: ${status}`);
-          
-          playerMap.set(player.name.toLowerCase(), {
-            player_id: player.id,
-            payment_status: status,
-            last_payment_date: player.last_payment_date,
-            team_id: player.team_id
-          });
-        });
-      }
-      
       // Get teams info
       const teamIds = [...new Set(childrenData.map(child => child.team_id))];
       const { data: teamsData, error: teamsError } = await supabase
@@ -255,26 +234,44 @@ export const ParentPaymentsScreen = () => {
         teamMap.set(team.id, team.name);
       });
       
-      // Combine all data - now using the playerMap we created earlier
-      const enhancedChildren = childrenData.map(child => {
-        // Look up player by name (case insensitive)
-        const playerDetails = playerMap.get(child.full_name.toLowerCase());
+      // Process all children with player details
+      const enhancedChildren = await Promise.all(childrenData.map(async (child) => {
+        // Find matching player by name
+        const player = parentPlayers.find(p => 
+          p.name?.toLowerCase() === child.full_name.toLowerCase()
+        );
         
-        const childWithPlayerDetails = {
-          ...child,
-          team_name: teamMap.get(child.team_id) || 'No Team',
-          player_id: playerDetails?.player_id,
-          payment_status: playerDetails?.payment_status || 'pending',
-          last_payment_date: playerDetails?.last_payment_date
-        };
-        
+        if (player) {
+          console.log(`[ParentPaymentsScreen] Processing player: ${player.name}`);
+          
+          // IMPORTANT: Get the CURRENT MONTH payment status specifically
+          const currentMonthStatus = await getCurrentMonthPaymentStatus(player.id);
+          console.log(`[ParentPaymentsScreen] Current month status for ${player.name}: ${currentMonthStatus}`);
+          
+          return {
+            ...child,
+            team_name: teamMap.get(child.team_id) || 'No Team',
+            player_id: player.id,
+            payment_status: currentMonthStatus, // Use current month status for the card
+            last_payment_date: player.last_payment_date
+          };
+        } else {
+          // No matching player found
+          return {
+            ...child,
+            team_name: teamMap.get(child.team_id) || 'No Team',
+            payment_status: 'unpaid',
+            last_payment_date: null
+          };
+        }
+      }));
+      
+      enhancedChildren.forEach(child => {
         console.log(`[ParentPaymentsScreen] Enhanced child:`, JSON.stringify({
           name: child.full_name,
-          player_id: childWithPlayerDetails.player_id,
-          payment_status: childWithPlayerDetails.payment_status
+          player_id: child.player_id,
+          payment_status: child.payment_status
         }, null, 2));
-        
-        return childWithPlayerDetails;
       });
       
       setChildren(enhancedChildren);
@@ -310,20 +307,13 @@ export const ParentPaymentsScreen = () => {
       // Get current date info
       const currentDate = new Date();
       const currentYear = currentDate.getFullYear();
-      const currentMonth = currentDate.getMonth(); // 0-11
+      const currentMonth = currentDate.getMonth() + 1; // 1-12
       
-      // Create array of months for the current year only (January to current month)
+      // Generate all months for the current year up to and including the current month
       const months = [];
-      // Start from January (month 0) and go up to the current month
-      for (let i = 0; i <= currentMonth; i++) {
-        months.push({
-          year: currentYear,
-          month: i + 1, // Convert to 1-12 format
-          date: new Date(currentYear, i, 1)
-        });
+      for (let m = 1; m <= currentMonth; m++) {
+        months.push({ year: currentYear, month: m, date: new Date(currentYear, m - 1, 1) });
       }
-      
-      // Reverse the order to show most recent month first
       months.reverse();
       setHistoryMonths(months);
       
@@ -362,7 +352,7 @@ export const ParentPaymentsScreen = () => {
             id: `virtual-${Date.now()}`,
             player_id: child.player_id,
             year: currentYear,
-            month: currentMonth + 1,
+            month: currentMonth,
             status: child.payment_status,
             updated_at: new Date().toISOString()
           };
@@ -400,11 +390,11 @@ export const ParentPaymentsScreen = () => {
       setDebugInfo(prev => prev + `\nFetching history for: ${child.full_name}`);
       
       // First check if we're using a hardcoded player ID
-      if (!child.player_id || child.player_id.startsWith('hdcoded-')) {
+      if (!child.player_id || (child.player_id && child.player_id.startsWith('hdcoded-'))) {
         console.log("[ParentPaymentsScreen] Using hardcoded data for payment history");
         setDebugInfo(prev => prev + `\nUsing hardcoded data for payment history`);
         
-        // If we're using hardcoded data, create a simplified payment history
+        // If we're using hardcoded data, create a complete payment history for all months
         const currentDate = new Date();
         const currentYear = currentDate.getFullYear();
         const currentMonth = currentDate.getMonth() + 1; // 1-12 format
@@ -423,19 +413,21 @@ export const ParentPaymentsScreen = () => {
         months.reverse();
         setHistoryMonths(months);
         
-        // Generate payment history - ONLY for current month
-        const historyRecords = [
-          {
-            id: `virtual-current-${Date.now()}`,
-            player_id: child.player_id || `hdcoded-${child.full_name.toLowerCase().replace(/\s/g, '-')}-id`,
-            year: currentYear,
-            month: currentMonth, // CRITICAL: Only create for current month
-            status: child.payment_status || 'pending',
-            updated_at: new Date().toISOString()
-          }
-        ];
+        // Generate payment history for ALL months with the current status
+        const playerId = child.player_id || `hdcoded-${child.full_name.toLowerCase().replace(/\s/g, '-')}-id`;
+        const currentStatus = child.payment_status === 'paid' ? 'paid' : 'not_paid';
         
-        console.log("[ParentPaymentsScreen] Hardcoded payment history:", JSON.stringify(historyRecords, null, 2));
+        const historyRecords: PaymentHistory[] = months.map(({ year, month }) => ({
+          id: `virtual-${Date.now()}-${month}`,
+          player_id: playerId,
+          year: year,
+          month: month,
+          status: currentStatus,
+          updated_at: new Date().toISOString()
+        }));
+        
+        console.log("[ParentPaymentsScreen] Hardcoded payment history for all months:", 
+          JSON.stringify(historyRecords, null, 2));
         setPaymentHistory(historyRecords);
         setHistoryLoading(false);
         setIsPaymentHistoryModalVisible(true);
@@ -452,244 +444,64 @@ export const ParentPaymentsScreen = () => {
     }
   };
   
-  // Separated the payment history loading logic
+  // Updated loadPaymentHistory function to ensure consistent display
   const loadPaymentHistory = async (child: Child) => {
     if (!child.player_id) {
       setHistoryLoading(false);
       return;
     }
-    
-    console.log("[ParentPaymentsScreen] Loading payment history for:", child.full_name, 
-      "Status:", child.payment_status, "Player ID:", child.player_id);
-    
-    // Get current date info
     const currentDate = new Date();
     const currentYear = currentDate.getFullYear();
-    const currentMonth = currentDate.getMonth(); // 0-11
-    
-    // Create array of months for the current year only (January to current month)
+    const currentMonth = currentDate.getMonth() + 1; // 1-12
+    // Generate all months for the current year up to the current month
     const months = [];
-    // Start from January (month 0) and go up to the current month
-    for (let i = 0; i <= currentMonth; i++) {
-      months.push({
-        year: currentYear,
-        month: i + 1, // Convert to 1-12 format
-        date: new Date(currentYear, i, 1)
-      });
+    for (let m = 1; m <= currentMonth; m++) {
+      months.push({ year: currentYear, month: m, date: new Date(currentYear, m - 1, 1) });
     }
-    
-    // Reverse the order to show most recent month first
     months.reverse();
     setHistoryMonths(months);
-    
-    // Check if we're using a hardcoded player ID
-    if (child.player_id.startsWith('hdcoded-')) {
-      console.log("[ParentPaymentsScreen] Using hardcoded payment history for:", child.full_name);
-      
-      // Create hardcoded payment history based on the current status - ONLY for current month
-      const historyRecords: PaymentHistory[] = [
-        {
-          id: `hardcoded-${Date.now()}-${currentMonth + 1}`,
-          player_id: child.player_id,
-          year: currentYear,
-          month: currentMonth + 1,
-          status: child.payment_status || 'pending',
-          updated_at: new Date().toISOString()
-        }
-      ];
-      
-      console.log("[ParentPaymentsScreen] Generated hardcoded history with only current month:", 
-        JSON.stringify(historyRecords, null, 2));
-      
-      setPaymentHistory(historyRecords);
-      setHistoryLoading(false);
-      setIsPaymentHistoryModalVisible(true);
-      return;
-    }
-    
-    // Get the LATEST player data first - we need the most up-to-date status
     try {
-      // Fetch the latest player data with the correct status
-      const { data: latestPlayerData, error: playerError } = await supabase
-        .from('players')
-        .select('id, payment_status, player_status, last_payment_date')
-        .eq('id', child.player_id)
-        .maybeSingle();
-        
-      if (playerError) {
-        console.error('Error fetching latest player data:', playerError);
-      } else if (latestPlayerData) {
-        console.log("[ParentPaymentsScreen] Latest player data:", JSON.stringify(latestPlayerData, null, 2));
-        
-        // Use the freshest status - prefer payment_status, fallback to player_status
-        const freshStatus = latestPlayerData.payment_status || latestPlayerData.player_status || 'pending';
-        console.log("[ParentPaymentsScreen] Fresh status:", freshStatus);
-        
-        // Update our local references with this freshest data
-        child = {
-          ...child,
-          payment_status: freshStatus,
-          last_payment_date: latestPlayerData.last_payment_date
-        };
-        
-        setSelectedChild(child);
-        
-        // Also update the child in the children array
-        setChildren(prev => prev.map(c => 
-          c.player_id === child.player_id 
-            ? {...c, payment_status: freshStatus, last_payment_date: latestPlayerData.last_payment_date}
-            : c
-        ));
-      }
-      
-      // Fetch payment history data for the current year only
+      // Fetch all payment records for this player for the current year
       const { data, error } = await supabase
-        .from('player_payments')
-        .select('id, player_id, year, month, status, updated_at')
+        .from('monthly_payments')
+        .select('*')
         .eq('player_id', child.player_id)
-        .eq('year', currentYear) // Only get current year
-        .order('month', { ascending: false });
-      
-      if (error) {
-        console.error('Error fetching player_payments:', error);
-        throw error;
-      }
-      
-      console.log("[ParentPaymentsScreen] Raw payment history data:", JSON.stringify(data || [], null, 2));
-      console.log("[ParentPaymentsScreen] Payment history data (count):", data?.length || 0);
-      
-      // Get the history records as they are (no modifications initially)
-      let historyRecords = data || [];
-      
-      // If no payment records found at all, create a virtual one for the current month
-      // based on the player's current payment status
-      if (historyRecords.length === 0 && child.payment_status && child.player_id) {
-        console.log("[ParentPaymentsScreen] No payment records found in database. Using current status:", child.payment_status);
-        
-        // Create a virtual payment record for the current month
-        const virtualRecord: PaymentHistory = {
-          id: `virtual-${Date.now()}`,
-          player_id: child.player_id,
-          year: currentYear,
-          month: currentMonth + 1,
-          status: child.payment_status,
-          updated_at: new Date().toISOString()
-        };
-        
-        historyRecords = [virtualRecord];
-        console.log("[ParentPaymentsScreen] Created virtual payment record:", JSON.stringify(virtualRecord, null, 2));
-      }
-      
-      // CRITICAL DEBUG: Log all records to see what months they're for
-      historyRecords.forEach(record => {
-        console.log(`[ParentPaymentsScreen] Found history record for ${record.year}-${record.month}: ${record.status}`);
+        .eq('year', currentYear);
+      if (error) throw error;
+      const recordsByMonth: Record<string, any> = {};
+      (data || []).forEach(record => {
+        recordsByMonth[`${record.year}-${record.month}`] = record;
       });
-      
-      // Check if we have a record for the current month
-      const currentMonthRecord = historyRecords.find(
-        r => r.year === currentYear && r.month === currentMonth + 1
-      );
-      
-      console.log("[ParentPaymentsScreen] Current month record from DB:", 
-        currentMonthRecord ? JSON.stringify(currentMonthRecord, null, 2) : "Not found");
-      console.log("[ParentPaymentsScreen] Current player status:", child.payment_status);
-      
-      // If no current month record exists, create a VIRTUAL record ONLY for the current month
-      if (!currentMonthRecord) {
-        console.log("[ParentPaymentsScreen] Creating virtual current month record with status:", child.payment_status);
-        
-        // Create a new record for the current month ONLY
-        const newCurrentMonthRecord = { 
-          id: `virtual-${Date.now()}`, // Temporary ID marked as virtual
-          player_id: child.player_id,
-          year: currentYear, 
-          month: currentMonth + 1, 
-          status: child.payment_status,
-          updated_at: new Date().toISOString() 
-        };
-        
-        // Add to the beginning of the array
-        historyRecords = [newCurrentMonthRecord, ...historyRecords];
-        
-        console.log("[ParentPaymentsScreen] Added virtual record for current month only");
-      }
-      
-      console.log("[ParentPaymentsScreen] Final history records:", JSON.stringify(historyRecords, null, 2));
-      console.log("[ParentPaymentsScreen] History months to display:", JSON.stringify(historyMonths, null, 2));
-      
-      // Double check we don't have duplicate records for any month
-      const monthsWithRecords = new Set();
-      const cleanedRecords = historyRecords.filter(record => {
-        const key = `${record.year}-${record.month}`;
-        if (monthsWithRecords.has(key)) {
-          console.log(`[ParentPaymentsScreen] WARNING: Duplicate record found for ${key}, filtering it out`);
-          return false;
+      // Build the history for each month
+      const processedHistory: PaymentHistory[] = months.map(({ year, month }) => {
+        const key = `${year}-${month}`;
+        if (recordsByMonth[key]) {
+          return {
+            id: `${year}-${month}`,
+            player_id: child.player_id as string,
+            year,
+            month,
+            status: recordsByMonth[key].status,
+            updated_at: recordsByMonth[key].updated_at
+          };
+        } else {
+          return {
+            id: `virtual-${year}-${month}`,
+            player_id: child.player_id as string,
+            year,
+            month,
+            status: 'not_paid',
+            updated_at: null
+          };
         }
-        monthsWithRecords.add(key);
-        return true;
       });
-      
-      if (cleanedRecords.length !== historyRecords.length) {
-        console.log("[ParentPaymentsScreen] Removed duplicate records, new count:", cleanedRecords.length);
-        historyRecords = cleanedRecords;
-      }
-      
-      if (historyRecords.length > 0) {
-        setPaymentHistory(historyRecords);
-      } else {
-        console.log("[ParentPaymentsScreen] No payment history records found");
-      }
+      setPaymentHistory(processedHistory);
     } catch (error) {
       console.error('Error fetching payment history:', error);
       Alert.alert('Error', 'Failed to load payment history');
     } finally {
       setHistoryLoading(false);
       setIsPaymentHistoryModalVisible(true);
-    }
-  };
-  
-  // Helper function to get payment status color
-  const getPaymentStatusColor = (status: string) => {
-    // Normalize the status by converting underscores to spaces and making lowercase
-    const normalizedStatus = status?.toLowerCase()?.replace(/_/g, ' ');
-    
-    switch (normalizedStatus) {
-      case 'paid': return COLORS.success;
-      case 'pending': return '#FFA500'; // Orange
-      case 'unpaid': return COLORS.error;
-      case 'on trial': 
-      case 'on_trial': return COLORS.primary;
-      case 'trial ended': 
-      case 'trial_ended': return COLORS.grey[800];
-      case 'select status': return COLORS.grey[400];
-      default: 
-        console.log(`[ParentPaymentsScreen] Unhandled status color for: "${status}"`);
-        return COLORS.grey[600];
-    }
-  };
-  
-  // Helper function to get payment status text
-  const getPaymentStatusText = (status: string) => {
-    if (!status) return 'Unknown';
-    
-    // Normalize the status by converting underscores to spaces and making lowercase
-    const normalizedStatus = status.toLowerCase().replace(/_/g, ' ');
-    
-    switch (normalizedStatus) {
-      case 'paid': return 'Paid';
-      case 'pending': return 'Pending';
-      case 'unpaid': return 'Unpaid';
-      case 'on trial': 
-      case 'on_trial': return 'On Trial';
-      case 'trial ended': 
-      case 'trial_ended': return 'Trial Ended';
-      case 'select status': return 'Select Status';
-      default: 
-        // Format any unhandled status by capitalizing each word
-        console.log(`[ParentPaymentsScreen] Unhandled status text for: "${status}"`);
-        return status.split('_')
-          .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-          .join(' ');
     }
   };
   
@@ -791,7 +603,10 @@ export const ParentPaymentsScreen = () => {
                     
                     <TouchableOpacity 
                       style={styles.viewHistoryButton}
-                      onPress={() => fetchPaymentHistory(child)}
+                      onPress={() => {
+                        setSelectedChild(child);
+                        setIsPaymentHistoryModalVisible(true);
+                      }}
                     >
                       <MaterialCommunityIcons name="history" size={20} color={COLORS.white} />
                       <Text style={styles.viewHistoryText}>View Payment History</Text>
@@ -804,118 +619,14 @@ export const ParentPaymentsScreen = () => {
         )}
       </ScrollView>
       
-      {/* Payment History Modal */}
-      <Modal
+      {/* Payment History Modal (shared) */}
+      <PaymentHistoryModal
         visible={isPaymentHistoryModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={closePaymentHistoryModal}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Payment History</Text>
-              <TouchableOpacity 
-                onPress={closePaymentHistoryModal}
-                style={styles.closeButton}
-              >
-                <MaterialCommunityIcons name="close" size={24} color={COLORS.text} />
-              </TouchableOpacity>
-            </View>
-            
-            {selectedChild && (
-              <ScrollView>
-                <View style={styles.detailsContainer}>
-                  <View style={styles.paymentHistoryHeader}>
-                    <Text style={styles.playerDetailName}>{selectedChild.full_name}</Text>
-                    <Text style={styles.teamDetailName}>{selectedChild.team_name}</Text>
-                    
-                    {/* Payment status badge */}
-                    <View style={[styles.headerStatusBadge, { 
-                      backgroundColor: getPaymentStatusColor(selectedChild.payment_status || 'pending') + '20',
-                      marginTop: SPACING.md
-                    }]}>
-                      <Text style={[styles.statusText, { 
-                        color: getPaymentStatusColor(selectedChild.payment_status || 'pending'),
-                        fontSize: 14
-                      }]}>
-                        {getPaymentStatusText(selectedChild.payment_status || 'pending')}
-                      </Text>
-                    </View>
-                  </View>
-                  
-                  <View style={styles.detailsSection}>
-                    <Text style={styles.modalSectionTitle}>Monthly Status</Text>
-                    {historyLoading ? (
-                      <ActivityIndicator size="small" color={COLORS.primary} style={styles.loader} />
-                    ) : historyMonths.length === 0 ? (
-                      <Text style={styles.emptyHistoryText}>No payment history available</Text>
-                    ) : (
-                      historyMonths.map(({ year, month, date }) => {
-                        // Try to find a payment record for this specific month/year
-                        // Make sure we're using EXACT matching only
-                        const payment = paymentHistory.find(p => 
-                          p.year === year && 
-                          p.month === month
-                        );
-                        
-                        const currentDate = new Date();
-                        const currentMonth = currentDate.getMonth() + 1; // Convert to 1-12 format
-                        const currentYear = currentDate.getFullYear();
-                        const isCurrentMonth = month === currentMonth && year === currentYear;
-                        
-                        // For debugging, log every month's data
-                        console.log(`[ParentPaymentsScreen] Rendering month: ${month}/${year}, isCurrentMonth: ${isCurrentMonth}, ` +
-                          `has payment record: ${payment ? 'yes' : 'no'}, ` + 
-                          `payment: ${JSON.stringify(payment || {})}`);
-                        
-                        // CRITICAL: Only use the status if we have an exact match for the month/year
-                        // DO NOT provide any default value that could be used
-                        let status = payment ? payment.status : null;
-                        
-                        // Format month name
-                        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                        const shortMonth = monthNames[date.getMonth()];
-                        
-                        return (
-                          <View key={`${year}-${month}`} style={styles.paymentHistoryRow}>
-                            {/* Month and year */}
-                            <View style={styles.monthYearContainer}>
-                              <Text style={styles.monthText}>{shortMonth}</Text>
-                              <Text style={styles.yearText}>{year}</Text>
-                            </View>
-                            
-                            {/* Status pill - read-only for parents */}
-                            <View style={styles.statusContainer}>
-                              {status !== null ? (
-                                <View style={[
-                                  styles.statusPill,
-                                  { backgroundColor: getPaymentStatusColor(status) + '20' }
-                                ]}>
-                                  <Text style={[
-                                    styles.statusText,
-                                    { color: getPaymentStatusColor(status) }
-                                  ]}>
-                                    {getPaymentStatusText(status)}
-                                  </Text>
-                                </View>
-                              ) : (
-                                <View style={[styles.statusPill, { backgroundColor: COLORS.grey[200] }]}>
-                                  <Text style={[styles.statusText, { color: COLORS.grey[600] }]}>No data</Text>
-                                </View>
-                              )}
-                            </View>
-                          </View>
-                        );
-                      })
-                    )}
-                  </View>
-                </View>
-              </ScrollView>
-            )}
-          </View>
-        </View>
-      </Modal>
+        onClose={closePaymentHistoryModal}
+        playerId={selectedChild?.player_id || ''}
+        playerName={selectedChild?.full_name || ''}
+        teamName={selectedChild?.team_name}
+      />
     </View>
   );
 };

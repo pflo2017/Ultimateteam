@@ -21,6 +21,7 @@ export type AdminStackParamList = {
     isAdmin?: boolean;
     onSave?: () => void;
   };
+  PlayerDetails: { playerId: string; role: 'admin' };
 };
 
 export type AdminTabParamList = {
@@ -41,6 +42,7 @@ export type CoachTabParamList = {
   Chat: undefined;
   News: undefined;
   Attendance: undefined;
+  PlayerDetails: { playerId: string; role: 'coach' };
 };
 
 export type ParentTabParamList = {
@@ -99,7 +101,8 @@ export type RootStackParamList = {
   EditActivity: { activityId: string };
   AttendanceReportDetails: { activityId: string };
   AddAttendance: { activityId?: string; teamId?: string };
-  AttendanceStatistics: undefined;
+  PlayerDetails: { playerId: string; role: 'admin' | 'coach' | 'parent' };
+  StatisticsScreen: undefined;
 };
 
 export type ParentStackParamList = {
@@ -110,4 +113,5 @@ export type ParentStackParamList = {
   ActivityDetails: { activityId: string };
   EditActivity: { activityId: string };
   PostEditor: undefined;
+  PlayerDetails: { playerId: string; role: 'parent' };
 }; 

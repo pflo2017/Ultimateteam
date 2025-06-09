@@ -21,6 +21,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PostEditorScreen } from '../screens/admin/PostEditorScreen';
+import { PlayerDetailsScreen } from '../screens/PlayerDetailsScreen';
 
 export type CoachStackParamList = {
   CoachTabs: undefined;
@@ -34,6 +35,7 @@ export type CoachStackParamList = {
     isAdmin?: boolean;
     onSave?: () => void;
   };
+  PlayerDetails: { playerId: string; role: 'coach' };
 };
 
 export type CoachTabParamList = {
@@ -327,6 +329,11 @@ export const CoachNavigator = () => {
           <Stack.Screen
             name="PostEditor"
             component={PostEditorScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="PlayerDetails"
+            component={PlayerDetailsScreen}
             options={{ headerShown: false }}
           />
         </Stack.Navigator>

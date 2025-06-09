@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, TextInput, RefreshControl, Modal, Pressable, Alert, TouchableWithoutFeedback } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, TextInput, RefreshControl, Modal, Pressable, Alert } from 'react-native';
 import { Text, ActivityIndicator, Card, IconButton, Divider } from 'react-native-paper';
 import { COLORS, SPACING, FONT_SIZES } from '../../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { AdminStackParamList } from '../../types/navigation';
+import type { AdminStackParamList } from '../../navigation/AdminTabNavigator';
 import { supabase } from '../../lib/supabase';
 import { useDataRefresh } from '../../utils/useDataRefresh';
+import { registerEventListener } from '../../utils/events';
+import { getUserClubId } from '../../services/activitiesService';
 
 interface Team {
   id: string;
@@ -30,6 +32,7 @@ interface Player {
   birth_date?: string | null;
   parent_id?: string;
   medicalVisaIssueDate?: string;
+  medical_visa_issue_date?: string;
 }
 
 interface ManagePlayersScreenProps {
@@ -52,8 +55,8 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
   onSearchChange,
 }) => {
   const navigation = useNavigation<NativeStackNavigationProp<AdminStackParamList>>();
-  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>(teams.map(t => t.id));
-  const [selectedMedicalStatuses, setSelectedMedicalStatuses] = useState<string[]>([]);
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [isTeamModalVisible, setIsTeamModalVisible] = useState(false);
   const [isPlayerDetailsModalVisible, setIsPlayerDetailsModalVisible] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [parentDetails, setParentDetails] = useState<{ name: string; phone_number: string; email?: string } | null>(null);
@@ -61,12 +64,23 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
   const [isUpdatingPayment, setIsUpdatingPayment] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [playerMenuVisible, setPlayerMenuVisible] = useState<string | null>(null);
-  const [showFilterModal, setShowFilterModal] = useState(false);
+  const [selectedMedicalStatus, setSelectedMedicalStatus] = useState<string | null>(null);
+  const [isMedicalModalVisible, setIsMedicalModalVisible] = useState(false);
+  const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
+  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
+  const medicalStatusOptions = [
+    { value: null, label: 'All Medical' },
+    { value: 'valid', label: 'Valid' },
+    { value: 'pending', label: 'Pending' },
+    { value: 'expired', label: 'Expired' },
+  ];
+
+  const selectedTeam = teams.find(team => team.id === selectedTeamId);
 
   const filteredPlayers = players.filter(player => {
     const matchesSearch = player.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesTeam = selectedTeamIds.length === 0 || (player.team_id && selectedTeamIds.includes(player.team_id));
-    const matchesMedical = selectedMedicalStatuses.length === 0 || selectedMedicalStatuses.includes(player.medicalVisaStatus);
+    const matchesTeam = !selectedTeamId || player.team_id === selectedTeamId;
+    const matchesMedical = !selectedMedicalStatus || player.medicalVisaStatus === selectedMedicalStatus;
     return matchesSearch && matchesTeam && matchesMedical;
   });
 
@@ -74,79 +88,14 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
     try {
       console.log("Opening player details for:", player.id);
       
-      // Fetch fresh player data to ensure we have the latest information
-      const { data: freshPlayerData, error: freshPlayerError } = await supabase
-        .from('players')
-        .select('payment_status, player_status, last_payment_date')
-        .eq('id', player.id)
-        .single();
-        
-      if (!freshPlayerError && freshPlayerData) {
-        console.log("[AdminManagePlayersScreen] Got fresh data for player:", {
-          id: player.id,
-          name: player.name,
-          oldStatus: player.paymentStatus || player.payment_status,
-          newStatus: freshPlayerData.player_status || freshPlayerData.payment_status,
-          lastPaymentDate: freshPlayerData.last_payment_date
-        });
-        
-        // Use the payment_status directly - no mapping needed
-        let freshStatus = freshPlayerData.payment_status;
-        
-        // Format the last payment date if it exists
-        let formattedDate = 'No payment';
-        if (freshPlayerData.last_payment_date) {
-          try {
-            const date = new Date(freshPlayerData.last_payment_date);
-            if (!isNaN(date.getTime())) { // Check if date is valid
-              formattedDate = date.toLocaleDateString('en-GB');
-            }
-          } catch (e) {
-            console.error("Error formatting date:", e);
-          }
-        }
-        
-        // Create updated player object with fresh data
-        const updatedPlayer = {
-          ...player,
-          paymentStatus: freshStatus,
-          payment_status: freshStatus,
-          last_payment_date: formattedDate
-        };
-        
-        setSelectedPlayer(updatedPlayer);
-      } else {
-        // Use existing player data if fetch fails
-        console.log("Using existing player data");
-        setSelectedPlayer(player);
-      }
-      
-      setPaymentStatus(player.paymentStatus || player.payment_status || 'pending');
-      
-      // Fetch parent details if player has parent_id
-      if (player.parent_id) {
-        try {
-          const { data, error } = await supabase
-            .from('parents')
-            .select('name, phone_number, email')
-            .eq('id', player.parent_id)
-            .single();
-            
-          if (error) throw error;
-          setParentDetails(data);
-        } catch (error) {
-          console.error('Error fetching parent details:', error);
-          setParentDetails(null);
-        }
-      } else {
-        setParentDetails(null);
-      }
-      
-      setIsPlayerDetailsModalVisible(true);
+      // Navigate to the player details screen
+      navigation.navigate('PlayerDetails', {
+        playerId: player.id,
+        role: 'admin'
+      });
     } catch (error) {
       console.error('Error opening player details:', error);
-      setSelectedPlayer(player);
-      setIsPlayerDetailsModalVisible(true);
+      Alert.alert('Error', 'Could not open player details');
     }
   };
   
@@ -231,51 +180,26 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
   };
 
   const getMedicalVisaStatusColor = (status: string) => {
-    switch (status) {
+    switch (status.toLowerCase()) {
       case 'valid':
         return COLORS.success;
       case 'pending':
-        return '#FFA500'; // Orange color for pending from PaymentsScreen
+        return COLORS.warning;
       case 'expired':
         return COLORS.error;
+      case 'no_status':
+        return COLORS.grey[600];
       default:
         return COLORS.grey[600];
     }
   };
 
   const getPaymentStatusColor = (status: string) => {
-    switch (status?.toLowerCase()) {
-      case 'paid':
-        return COLORS.success;
-      case 'pending':
-        return '#FFA500'; // Orange color for pending from PaymentsScreen
-      case 'overdue':
-      case 'missed':
-      case 'unpaid':
-        return COLORS.error;
-      case 'on_trial':
-        return COLORS.primary;
-      case 'trial_ended':
-        return COLORS.grey[800];
-      default:
-        return COLORS.grey[600];
-    }
+    return status?.toLowerCase() === 'paid' ? COLORS.success : COLORS.error;
   };
 
   const getPaymentStatusText = (status: string) => {
-    switch (status?.toLowerCase()) {
-      case 'paid':
-        return 'Paid';
-      case 'pending':
-        return 'Pending';
-      case 'overdue':
-      case 'missed':
-        return 'Overdue';
-      case 'on_trial':
-        return 'On Trial';
-      default:
-        return status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Unknown';
-    }
+    return status?.toLowerCase() === 'paid' ? 'Paid' : 'Not Paid';
   };
 
   const getPlayerPaymentStatus = (player: Player): string => {
@@ -287,53 +211,108 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
     onRefresh();
   }, []);
   
+  // Listen for medical visa status changes
+  useEffect(() => {
+    console.log("[AdminManagePlayersScreen] Setting up medical visa status change listener");
+    
+    const handleMedicalVisaStatusChange = () => {
+      console.log("[AdminManagePlayersScreen] Medical visa status change detected - refreshing player data");
+      onRefresh();
+    };
+    
+    const unregister = registerEventListener('medical_visa_status_changed', handleMedicalVisaStatusChange);
+    
+    return () => {
+      unregister();
+    };
+  }, [onRefresh]);
+  
   // Use data refresh hook to refresh player data when status changes
   useDataRefresh('players', () => {
     console.log("[ManagePlayersScreen] Payment status change detected - refreshing player data");
     onRefresh();
   });
 
+  // Listen for payment status changes from PaymentsScreen
+  useEffect(() => {
+    const handlePaymentStatusChange = () => {
+      console.log('[ManagePlayersScreen] Payment status changed, refreshing player data');
+      onRefresh();
+    };
+    const unregister = registerEventListener('payment_status_changed', handlePaymentStatusChange);
+    return () => unregister();
+  }, [onRefresh]);
+
   // Create a PlayerCard component that fetches fresh status data
   const PlayerCardWithFreshStatus = ({ player }: { player: Player }) => {
     const [freshStatus, setFreshStatus] = useState<string | null>(null);
+    const [freshPaidDate, setFreshPaidDate] = useState<string | null>(null);
+    const [freshMedicalVisaStatus, setFreshMedicalVisaStatus] = useState<string | null>(null);
+    const [freshMedicalVisaIssueDate, setFreshMedicalVisaIssueDate] = useState<string | null>(null);
     
-    // Fetch fresh payment status when card renders
     useEffect(() => {
       const getFreshStatus = async () => {
         try {
-          // Fetch fresh data without logging each attempt
+          // Get current year and month
+          const now = new Date();
+          const year = now.getFullYear();
+          const month = now.getMonth() + 1;
+          
+          // Fetch payment status and updated_at for this month from player_payments
+          // Force a network request by adding a random param to bypass cache
+          const random = Math.random();
+          console.log(`[DEBUG] Fetching payment status for player ${player.id} (admin) for ${year}-${month}, random=${random}`);
+          
           const { data, error } = await supabase
+            .from('monthly_payments')
+            .select('status, updated_at')
+            .eq('player_id', player.id)
+            .eq('year', year)
+            .eq('month', month)
+            .single();
+            
+          console.log('[DEBUG] Raw payment status fetch result:', { data, error });
+          
+          if (!error && data && data.status) {
+            console.log(`[DEBUG] Setting fresh payment status for ${player.name}: ${data.status}`);
+            setFreshStatus(data.status);
+            if (data.status === 'paid' && data.updated_at) {
+              const paidDate = new Date(data.updated_at).toLocaleDateString('en-GB');
+              setFreshPaidDate(paidDate);
+            } else {
+              setFreshPaidDate(null);
+            }
+          } else {
+            console.log(`[DEBUG] No payment data found for ${player.name}, setting to unpaid`);
+            setFreshStatus('unpaid');
+            setFreshPaidDate(null);
+          }
+          
+          // Also fetch fresh medical visa status
+          const { data: playerData, error: playerError } = await supabase
             .from('players')
-            .select('payment_status, player_status')
+            .select('medical_visa_status, medical_visa_issue_date')
             .eq('id', player.id)
             .single();
             
-          if (!error && data) {
-            // Use payment_status directly - no mapping needed
-            const newStatus = data.payment_status;
-            
-            const oldStatus = player.paymentStatus || player.payment_status;
-            
-            // Only log if there's an actual difference in the status
-            if (newStatus !== oldStatus) {
-              console.log(`[PlayerCard] Status change for ${player.name}:`, {
-                old: oldStatus,
-                new: newStatus
-              });
-            }
-            
-            setFreshStatus(newStatus);
+          if (!playerError && playerData) {
+            setFreshMedicalVisaStatus(playerData.medical_visa_status);
+            setFreshMedicalVisaIssueDate(playerData.medical_visa_issue_date);
           }
         } catch (err) {
-          console.error("Error fetching fresh status:", err);
+          console.error(`[ERROR] Error fetching fresh status for player ${player.name}:`, err);
+          setFreshStatus('unpaid');
+          setFreshPaidDate(null);
         }
       };
       
       getFreshStatus();
-    }, [player.id]);
+    }, [player.id, player.name]);
     
-    // Use refreshed status if available, otherwise fall back to passed-in status
-    const displayStatus = freshStatus || player.paymentStatus || player.payment_status || 'pending';
+    // Use freshStatus if available, otherwise fall back to player.payment_status
+    const displayStatus = freshStatus || player.payment_status;
+    const displayMedicalVisaStatus = freshMedicalVisaStatus || player.medicalVisaStatus || 'pending';
+    const displayMedicalVisaIssueDate = freshMedicalVisaIssueDate || player.medicalVisaIssueDate || player.medical_visa_issue_date;
     
     // Format the date if it exists
     let formattedBirthDate = 'Not available';
@@ -394,7 +373,7 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
               Medical Visa
             </Text>
             <View style={{
-              backgroundColor: getMedicalVisaStatusColor(player.medicalVisaStatus) + '20',
+              backgroundColor: getMedicalVisaStatusColor(displayMedicalVisaStatus) + '20',
               borderRadius: 12,
               paddingHorizontal: SPACING.md,
               paddingVertical: 4,
@@ -405,25 +384,64 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
               <Text style={{
                 fontSize: FONT_SIZES.xs,
                 fontWeight: '600',
-                color: getMedicalVisaStatusColor(player.medicalVisaStatus)
+                color: getMedicalVisaStatusColor(displayMedicalVisaStatus)
               }}>
-                {player.medicalVisaStatus.charAt(0).toUpperCase() + player.medicalVisaStatus.slice(1)}
+                {displayMedicalVisaStatus === 'no_status' 
+                  ? 'No Status' 
+                  : displayMedicalVisaStatus.charAt(0).toUpperCase() + displayMedicalVisaStatus.slice(1)}
               </Text>
             </View>
             <View style={{ alignItems: 'flex-end', marginLeft: 'auto' }}>
               <Text style={{ fontSize: FONT_SIZES.xs, color: COLORS.grey[600], fontWeight: '500' }}>Until</Text>
               <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '600' }}>
-                {player.medicalVisaStatus === 'valid' && player.medicalVisaIssueDate ?
+                {displayMedicalVisaStatus === 'valid' && displayMedicalVisaIssueDate ?
                   (() => {
-                    const issueDate = new Date(player.medicalVisaIssueDate);
+                    try {
+                      const issueDate = new Date(displayMedicalVisaIssueDate);
                     if (isNaN(issueDate.getTime())) return 'N/A';
                     const expiryDate = new Date(issueDate);
                     expiryDate.setMonth(expiryDate.getMonth() + 6);
                     return expiryDate.toLocaleDateString('en-GB');
+                    } catch (e) {
+                      console.error("Error calculating expiry date:", e);
+                      return 'N/A';
+                    }
                   })()
                   : 'N/A'}
               </Text>
             </View>
+          </View>
+          
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: SPACING.md }}>
+            <MaterialCommunityIcons name="credit-card-outline" size={20} color={COLORS.primary} />
+            <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500' }}>
+              Payment Status
+            </Text>
+            <View style={{
+              backgroundColor: getPaymentStatusColor(displayStatus || '') + '20',
+              borderRadius: 12,
+              paddingHorizontal: SPACING.md,
+              paddingVertical: 4,
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginLeft: 4,
+            }}>
+              <Text style={{
+                fontSize: FONT_SIZES.xs,
+                fontWeight: '600',
+                color: getPaymentStatusColor(displayStatus || '')
+              }}>
+                {getPaymentStatusText(displayStatus || '')}
+              </Text>
+            </View>
+            {displayStatus === 'paid' && freshPaidDate && (
+              <View style={{ alignItems: 'flex-end', marginLeft: 'auto' }}>
+                <Text style={{ fontSize: FONT_SIZES.xs, color: COLORS.grey[600], fontWeight: '500' }}>Marked as paid on</Text>
+                <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '600' }}>
+                  {freshPaidDate}
+                </Text>
+              </View>
+            )}
           </View>
           
           <View style={styles.actionButtons}>
@@ -451,15 +469,13 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
   return (
     <View style={styles.content}>
       <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <View>
-            <Text style={styles.headerTitle}>Players</Text>
-            <Text style={styles.totalCount}>Total: {filteredPlayers.length} players</Text>
-          </View>
-          <TouchableOpacity style={styles.filterIconButton} onPress={() => setShowFilterModal(true)}>
-            <MaterialCommunityIcons name="filter" size={24} color={COLORS.primary} />
-          </TouchableOpacity>
+        <View>
+          <Text style={styles.headerTitle}>Players</Text>
+          <Text style={styles.totalCount}>Total: {filteredPlayers.length} players</Text>
         </View>
+        <TouchableOpacity onPress={() => setIsFilterModalVisible(true)}>
+          <MaterialCommunityIcons name="filter" size={24} color={COLORS.primary} />
+        </TouchableOpacity>
       </View>
 
       <View style={styles.searchContainer}>
@@ -489,17 +505,17 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
       </ScrollView>
 
       <Modal
-        visible={isPlayerDetailsModalVisible}
+        visible={isTeamModalVisible}
         animationType="slide"
         transparent={true}
-        onRequestClose={() => setIsPlayerDetailsModalVisible(false)}
+        onRequestClose={() => setIsTeamModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Player Details</Text>
-              <TouchableOpacity 
-                onPress={() => setIsPlayerDetailsModalVisible(false)}
+              <Text style={styles.modalTitle}>Select Team</Text>
+              <Pressable 
+                onPress={() => setIsTeamModalVisible(false)}
                 style={styles.closeButton}
               >
                 <MaterialCommunityIcons
@@ -507,202 +523,250 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
                   size={24}
                   color={COLORS.text}
                 />
-              </TouchableOpacity>
+              </Pressable>
             </View>
-            
-            {selectedPlayer && (
-              <ScrollView>
-                <View style={styles.detailsContainer}>
-                  <View style={styles.avatarContainer}>
-                    <MaterialCommunityIcons name="account-circle" size={80} color={COLORS.primary} />
-                    <Text style={styles.playerDetailName}>{selectedPlayer.name}</Text>
-                    <Text style={styles.teamDetailName}>{selectedPlayer.team ? selectedPlayer.team.name : 'No team assigned'}</Text>
-                  </View>
-                  
-                  <View style={styles.detailsSection}>
-                    <Text style={styles.sectionTitle}>Player Information</Text>
-                    <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Join Date:</Text>
-                      <Text style={styles.detailValue}>{selectedPlayer.created_at ? new Date(selectedPlayer.created_at).toLocaleDateString('en-GB') : 'Unknown'}</Text>
-                    </View>
-                    <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Birthdate:</Text>
-                      <Text style={styles.detailValue}>{selectedPlayer.birth_date ? new Date(selectedPlayer.birth_date).toLocaleDateString('en-GB') : 'Unknown'}</Text>
-                    </View>
-                  </View>
-                  
-                  <View style={styles.detailsSection}>
-                    <Text style={styles.sectionTitle}>Payment Information</Text>
-                    <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Status:</Text>
-                      <View style={[
-                        styles.statusBadge,
-                        { backgroundColor: getPaymentStatusColor(getPlayerPaymentStatus(selectedPlayer)) + '20' }
-                      ]}>
-                        <Text style={[
-                          styles.statusText,
-                          { color: getPaymentStatusColor(getPlayerPaymentStatus(selectedPlayer)) }
-                        ]}>
-                          {getPaymentStatusText(getPlayerPaymentStatus(selectedPlayer))}
-                        </Text>
-                      </View>
-                    </View>
-                    <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Last Payment:</Text>
-                      <Text style={styles.detailValue}>
-                        {selectedPlayer.last_payment_date && selectedPlayer.last_payment_date !== 'Invalid Date' 
-                          ? selectedPlayer.last_payment_date 
-                          : 'No payment recorded'}
-                      </Text>
-                    </View>
-                  </View>
-                  
-                  {parentDetails && (
-                    <View style={styles.detailsSection}>
-                      <Text style={styles.sectionTitle}>Parent Information</Text>
-                      <View style={styles.detailRow}>
-                        <Text style={styles.detailLabel}>Name:</Text>
-                        <Text style={styles.detailValue}>{parentDetails.name}</Text>
-                      </View>
-                      <View style={styles.detailRow}>
-                        <Text style={styles.detailLabel}>Phone:</Text>
-                        <Text style={styles.detailValue}>{parentDetails.phone_number}</Text>
-                      </View>
-                      {parentDetails.email && (
-                        <View style={styles.detailRow}>
-                          <Text style={styles.detailLabel}>Email:</Text>
-                          <Text style={styles.detailValue}>{parentDetails.email}</Text>
-                        </View>
-                      )}
-                    </View>
-                  )}
-                  
-                  <TouchableOpacity 
-                    onPress={() => handleDeletePlayer(selectedPlayer.id)}
-                    style={[styles.deleteButton, styles.modalDeleteButton]}
-                    disabled={isDeleting}
-                  >
-                    <MaterialCommunityIcons 
-                      name="delete" 
-                      size={20} 
-                      color={COLORS.white}
-                    />
-                    <Text style={styles.deleteButtonText}>
-                      {isDeleting ? "Deleting..." : "Delete Player"}
-                    </Text>
-                  </TouchableOpacity>
+
+            <ScrollView style={styles.teamsList}>
+              <Pressable
+                style={[
+                  styles.teamItem,
+                  selectedTeamId === null && styles.selectedTeamItem
+                ]}
+                onPress={() => {
+                  setSelectedTeamId(null);
+                  setIsTeamModalVisible(false);
+                }}
+              >
+                <View style={styles.teamItemContent}>
+                  <MaterialCommunityIcons
+                    name="account-group"
+                    size={24}
+                    color={COLORS.primary}
+                  />
+                  <Text style={styles.teamItemText}>All Teams</Text>
                 </View>
-              </ScrollView>
-            )}
+                {selectedTeamId === null && (
+                  <MaterialCommunityIcons
+                    name="check"
+                    size={24}
+                    color={COLORS.primary}
+                  />
+                )}
+              </Pressable>
+
+              {teams.map((team) => (
+                <Pressable
+                  key={team.id}
+                  style={[
+                    styles.teamItem,
+                    selectedTeamId === team.id && styles.selectedTeamItem
+                  ]}
+                  onPress={() => {
+                    setSelectedTeamId(team.id);
+                    setIsTeamModalVisible(false);
+                  }}
+                >
+                  <View style={styles.teamItemContent}>
+                    <MaterialCommunityIcons
+                      name="account-group"
+                      size={24}
+                      color={COLORS.primary}
+                    />
+                    <Text style={styles.teamItemText}>{team.name}</Text>
+                  </View>
+                  {selectedTeamId === team.id && (
+                    <MaterialCommunityIcons
+                      name="check"
+                      size={24}
+                      color={COLORS.primary}
+                    />
+                  )}
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+      
+      <Modal
+        visible={isMedicalModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setIsMedicalModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Medical Status</Text>
+              <Pressable 
+                onPress={() => setIsMedicalModalVisible(false)}
+                style={styles.closeButton}
+              >
+                <MaterialCommunityIcons
+                  name="close"
+                  size={24}
+                  color={COLORS.text}
+                />
+              </Pressable>
+            </View>
+            <ScrollView>
+              {medicalStatusOptions.map(option => (
+                <Pressable
+                  key={option.value ?? 'all'}
+                  style={[
+                    styles.teamItem,
+                    selectedMedicalStatus === option.value && styles.selectedTeamItem
+                  ]}
+                  onPress={() => {
+                    setSelectedMedicalStatus(option.value);
+                    setIsMedicalModalVisible(false);
+                  }}
+                >
+                  <View style={styles.teamItemContent}>
+                    <MaterialCommunityIcons
+                      name="medical-bag"
+                      size={20}
+                      color={option.value === 'valid' ? COLORS.success : option.value === 'pending' ? '#FFA500' : option.value === 'expired' ? COLORS.error : COLORS.primary}
+                      style={{ marginRight: 8 }}
+                    />
+                    <Text style={styles.teamItemText}>{option.label}</Text>
+                  </View>
+                  {selectedMedicalStatus === option.value && (
+                    <MaterialCommunityIcons
+                      name="check"
+                      size={24}
+                      color={COLORS.primary}
+                    />
+                  )}
+                </Pressable>
+              ))}
+            </ScrollView>
           </View>
         </View>
       </Modal>
 
       <Modal
-        visible={showFilterModal}
+        visible={isFilterModalVisible}
         animationType="slide"
         transparent={true}
-        onRequestClose={() => setShowFilterModal(false)}
+        onRequestClose={() => setIsFilterModalVisible(false)}
       >
-        <TouchableWithoutFeedback onPress={() => setShowFilterModal(false)}>
-          <View style={styles.modalOverlay}>
-            <TouchableWithoutFeedback onPress={() => {}}>
-              <View style={styles.filterModalContent}>
-                <ScrollView>
-                  <Text style={styles.filterModalTitle}>Filter Players</Text>
-                  <Text style={styles.filterModalSection}>Teams</Text>
-                  <View style={styles.filterChipRow}>
-                    <TouchableOpacity
-                      style={[
-                        styles.chip,
-                        selectedTeamIds.length === teams.length && { backgroundColor: COLORS.primary, borderColor: COLORS.primary }
-                      ]}
-                      onPress={() => setSelectedTeamIds(selectedTeamIds.length === teams.length ? [] : teams.map(t => t.id))}
-                    >
-                      <Text style={[
-                        styles.chipText,
-                        selectedTeamIds.length === teams.length && { color: '#fff' }
-                      ]}>All Teams</Text>
-                    </TouchableOpacity>
-                    {teams.map(team => {
-                      const isSelected = selectedTeamIds.includes(team.id);
-                      return (
-                        <TouchableOpacity
-                          key={team.id}
-                          style={[
-                            styles.chip,
-                            isSelected && { backgroundColor: COLORS.primary, borderColor: COLORS.primary }
-                          ]}
-                          onPress={() => {
-                            setSelectedTeamIds(prev =>
-                              prev.includes(team.id)
-                                ? prev.filter(id => id !== team.id)
-                                : [...prev, team.id]
-                            );
-                          }}
-                        >
-                          <Text style={[
-                            styles.chipText,
-                            isSelected && { color: '#fff' }
-                          ]}>{team.name}</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                  <Text style={styles.filterModalSection}>Medical Status</Text>
-                  <View style={styles.filterChipRow}>
-                    <TouchableOpacity
-                      style={[
-                        styles.chip,
-                        selectedMedicalStatuses.length === 0 && { backgroundColor: COLORS.primary, borderColor: COLORS.primary }
-                      ]}
-                      onPress={() => setSelectedMedicalStatuses([])}
-                    >
-                      <Text style={[
-                        styles.chipText,
-                        selectedMedicalStatuses.length === 0 && { color: '#fff' }
-                      ]}>All Medical</Text>
-                    </TouchableOpacity>
-                    {['valid', 'pending', 'expired'].map(status => {
-                      const isSelected = selectedMedicalStatuses.includes(status);
-                      const statusColor = getMedicalVisaStatusColor(status);
-                      return (
-                        <TouchableOpacity
-                          key={status}
-                          style={[
-                            styles.chip,
-                            isSelected && { 
-                              backgroundColor: statusColor + '20',
-                              borderColor: statusColor
-                            }
-                          ]}
-                          onPress={() => {
-                            setSelectedMedicalStatuses(prev =>
-                              prev.includes(status)
-                                ? prev.filter(s => s !== status)
-                                : [...prev, status]
-                            );
-                          }}
-                        >
-                          <Text style={[
-                            styles.chipText,
-                            isSelected && { color: statusColor }
-                          ]}>{status.charAt(0).toUpperCase() + status.slice(1)}</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { borderRadius: 16, padding: 24 }]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <Text style={{ fontSize: 24, fontWeight: 'bold' }}>Filter Players</Text>
+              <Pressable 
+                onPress={() => setIsFilterModalVisible(false)}
+              >
+                <MaterialCommunityIcons
+                  name="close"
+                  size={24}
+                  color="#000"
+                />
+              </Pressable>
+            </View>
+            
+            <ScrollView style={{ maxHeight: '80%' }}>
+              <Text style={{ fontSize: 18, fontWeight: 'bold', marginTop: 8, marginBottom: 16 }}>Teams</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                <TouchableOpacity
+                  style={{
+                    backgroundColor: selectedTeamId === null ? COLORS.primary : 'transparent',
+                    paddingVertical: 6,
+                    paddingHorizontal: 12,
+                    borderRadius: 16,
+                    borderWidth: 1,
+                    borderColor: selectedTeamId === null ? COLORS.primary : COLORS.grey[300],
+                    marginBottom: 8
+                  }}
+                  onPress={() => setSelectedTeamId(null)}
+                >
+                  <Text style={{ 
+                    color: selectedTeamId === null ? COLORS.white : COLORS.text,
+                    fontWeight: '500',
+                    fontSize: 14
+                  }}>
+                    All Teams
+                  </Text>
+                </TouchableOpacity>
+                
+                {teams.map(team => (
                   <TouchableOpacity
-                    style={[styles.filterApplyButton, { backgroundColor: COLORS.primary, borderRadius: 8, alignItems: 'center', padding: 12, marginTop: 16 }]}
-                    onPress={() => setShowFilterModal(false)}
+                    key={team.id}
+                    style={{
+                      backgroundColor: selectedTeamId === team.id ? COLORS.primary : 'transparent',
+                      paddingVertical: 6,
+                      paddingHorizontal: 12,
+                      borderRadius: 16,
+                      borderWidth: 1,
+                      borderColor: selectedTeamId === team.id ? COLORS.primary : COLORS.grey[300],
+                      marginBottom: 8
+                    }}
+                    onPress={() => setSelectedTeamId(team.id)}
                   >
-                    <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>Apply Filters</Text>
+                    <Text style={{ 
+                      color: selectedTeamId === team.id ? COLORS.white : COLORS.text,
+                      fontWeight: '500',
+                      fontSize: 14
+                    }}>
+                      {team.name}
+                    </Text>
                   </TouchableOpacity>
-                </ScrollView>
+                ))}
               </View>
-            </TouchableWithoutFeedback>
+              
+              <Text style={{ fontSize: 18, fontWeight: 'bold', marginTop: 8, marginBottom: 16 }}>Medical Status</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                {medicalStatusOptions.map(option => (
+                  <TouchableOpacity
+                    key={option.value ?? 'all'}
+                    style={{
+                      backgroundColor: selectedMedicalStatus === option.value ? 
+                        (option.value === 'valid' ? COLORS.success : 
+                         option.value === 'pending' ? COLORS.warning : 
+                         option.value === 'expired' ? COLORS.error : COLORS.primary) : 'transparent',
+                      paddingVertical: 6,
+                      paddingHorizontal: 12,
+                      borderRadius: 16,
+                      borderWidth: 1,
+                      borderColor: option.value === 'valid' ? COLORS.success : 
+                                   option.value === 'pending' ? COLORS.warning : 
+                                   option.value === 'expired' ? COLORS.error : COLORS.primary,
+                      marginBottom: 8
+                    }}
+                    onPress={() => setSelectedMedicalStatus(option.value)}
+                  >
+                    <Text style={{ 
+                      color: selectedMedicalStatus === option.value ? COLORS.white : 
+                            (option.value === 'valid' ? COLORS.success : 
+                             option.value === 'pending' ? COLORS.warning : 
+                             option.value === 'expired' ? COLORS.error : COLORS.primary),
+                      fontWeight: '500',
+                      fontSize: 14
+                    }}>
+                      {option.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+            
+            <TouchableOpacity
+              style={{
+                backgroundColor: COLORS.primary,
+                paddingVertical: 12,
+                borderRadius: 8,
+                alignItems: 'center',
+                marginTop: 16
+              }}
+              onPress={() => {
+                setIsFilterModalVisible(false);
+              }}
+            >
+              <Text style={{ color: COLORS.white, fontWeight: '600', fontSize: 16 }}>Apply Filters</Text>
+            </TouchableOpacity>
           </View>
-        </TouchableWithoutFeedback>
+        </View>
       </Modal>
     </View>
   );
@@ -715,12 +779,10 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   header: {
-    marginBottom: SPACING.lg,
-  },
-  headerContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    marginBottom: SPACING.lg,
   },
   headerTitle: {
     fontSize: 24,
@@ -774,8 +836,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginLeft: SPACING.xs,
   },
-  filterIconButton: {
-    padding: SPACING.xs,
+  filterIcon: {
+    marginRight: SPACING.xs,
   },
   scrollContent: {
     paddingBottom: SPACING.xl * 4,
@@ -828,11 +890,6 @@ const styles = StyleSheet.create({
   infoItem: {
     alignItems: 'center',
   },
-  infoLabel: {
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.grey[600],
-    marginBottom: 4,
-  },
   statusBadge: {
     paddingHorizontal: SPACING.md,
     paddingVertical: 4,
@@ -856,7 +913,7 @@ const styles = StyleSheet.create({
     color: COLORS.grey[600],
     marginLeft: SPACING.xs,
   },
-  infoValue: {
+  infoValueText: {
     fontSize: 14,
     color: COLORS.text,
     fontWeight: '500',
@@ -1004,14 +1061,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: SPACING.sm,
   },
-  detailLabel: {
-    fontSize: FONT_SIZES.sm,
+  ageContainer: {
+    alignItems: 'flex-end',
+  },
+  ageLabel: {
+    fontSize: FONT_SIZES.xs,
     color: COLORS.grey[600],
   },
-  detailValue: {
+  ageValue: {
     fontSize: FONT_SIZES.sm,
-    color: COLORS.text,
     fontWeight: '500',
+    color: COLORS.text,
   },
   menuButton: {
     padding: SPACING.xs,
@@ -1040,62 +1100,5 @@ const styles = StyleSheet.create({
     marginLeft: SPACING.sm,
     fontSize: 14,
     color: COLORS.text,
-  },
-  ageContainer: {
-    alignItems: 'flex-end',
-  },
-  ageLabel: {
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.grey[600],
-  },
-  ageValue: {
-    fontSize: FONT_SIZES.sm,
-    fontWeight: '500',
-    color: COLORS.text,
-  },
-  filterModalContent: {
-    backgroundColor: COLORS.white,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    padding: 24,
-    minHeight: 320,
-  },
-  filterModalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 16,
-  },
-  filterModalSection: {
-    fontSize: 15,
-    fontWeight: '600',
-    marginTop: 12,
-    marginBottom: 8,
-  },
-  filterChipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 8,
-  },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.white,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: COLORS.grey[300],
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    marginRight: 8,
-    marginBottom: 8,
-    minHeight: 32,
-  },
-  chipText: {
-    color: COLORS.text,
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  filterApplyButton: {
-    marginTop: 16,
   },
 }); 

@@ -12,6 +12,7 @@ import { ManageTeamsScreen } from './ManageTeamsScreen';
 import { ManageCoachesScreen } from './ManageCoachesScreen';
 import { ManagePlayersScreen } from './ManagePlayersScreen';
 import { registerEventListener } from '../../utils/events';
+import { getUserClubId } from '../../services/activitiesService';
 
 type CardType = 'teams' | 'coaches' | 'players' | 'payments';
 
@@ -52,6 +53,13 @@ interface Player {
   } | null;
   medicalVisaStatus: string;
   paymentStatus: string;
+  payment_status?: string;
+  last_payment_date?: string;
+  birth_date?: string | null;
+  parent_id?: string;
+  medical_visa_status?: string;
+  medical_visa_issue_date?: string;
+  medicalVisaIssueDate?: string;
 }
 
 interface ParentChild {
@@ -123,29 +131,35 @@ export const AdminManageScreen = () => {
     };
   }, []);
 
+  // Add event listener for medical_visa_status_changed events
+  useEffect(() => {
+    // Listen for medical_visa_status_changed events
+    const handleMedicalVisaStatusChange = () => {
+      console.log('Medical visa status changed, refreshing players data');
+      fetchPlayers();
+    };
+
+    // Add event listener and get the unregister function
+    const unregister = registerEventListener('medical_visa_status_changed', handleMedicalVisaStatusChange);
+
+    // Clean up the listener when component unmounts
+    return () => {
+      unregister();
+    };
+  }, []);
+
   const fetchTeams = async () => {
     try {
       console.log('Fetching teams...');
       
-      // Get the current user's club ID first
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        console.error('No user found');
-        return;
-      }
-
-      const { data: club } = await supabase
-        .from('clubs')
-        .select('id')
-        .eq('admin_id', user.id)
-        .single();
-
-      if (!club) {
+      // Get the current user's club ID
+      const clubId = await getUserClubId();
+      if (!clubId) {
         console.error('No club found for user');
         return;
       }
 
-      console.log('Fetching teams for club:', club.id);
+      console.log('Fetching teams for club:', clubId);
       
       // First get the teams with basic info
       const { data: teamsData, error: teamsError } = await supabase
@@ -159,7 +173,7 @@ export const AdminManageScreen = () => {
           coach_id,
           players(count)
         `)
-        .eq('club_id', club.id)
+        .eq('club_id', clubId)
         .eq('is_active', true)
         .order('name');
 
@@ -172,7 +186,7 @@ export const AdminManageScreen = () => {
       const { data: coachesData, error: coachesError } = await supabase
         .from('coaches')
         .select('id, name')
-        .eq('club_id', club.id)
+        .eq('club_id', clubId)
         .eq('is_active', true);
 
       if (coachesError) {
@@ -210,20 +224,9 @@ export const AdminManageScreen = () => {
 
   const fetchCoaches = async () => {
     try {
-      // Get the current user's club ID first
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        console.error('No user found');
-        return;
-      }
-
-      const { data: club } = await supabase
-        .from('clubs')
-        .select('id')
-        .eq('admin_id', user.id)
-        .single();
-
-      if (!club) {
+      // Get the current user's club ID
+      const clubId = await getUserClubId();
+      if (!clubId) {
         console.error('No club found for user');
         return;
       }
@@ -241,7 +244,7 @@ export const AdminManageScreen = () => {
             name
           )
         `)
-        .eq('club_id', club.id)
+        .eq('club_id', clubId)
         .eq('is_active', true);
 
       if (coachesError) throw coachesError;
@@ -253,6 +256,13 @@ export const AdminManageScreen = () => {
 
   const fetchPlayers = async () => {
     try {
+      // Get the current user's club ID first
+      const clubId = await getUserClubId();
+      if (!clubId) {
+        console.error('No club found for user');
+        return;
+      }
+
       // First get players data
       const { data: playersData, error: playersError } = await supabase
         .from('players')
@@ -266,8 +276,11 @@ export const AdminManageScreen = () => {
           birth_date,
           payment_status,
           last_payment_date,
+          medical_visa_status,
+          medical_visa_issue_date,
           teams:team_id(id, name)
         `)
+        .eq('club_id', clubId)
         .eq('is_active', true)
         .order('name');
 
@@ -275,7 +288,15 @@ export const AdminManageScreen = () => {
 
       console.log('Raw players data from DB:', JSON.stringify(playersData, null, 2));
       
-      // Fetch related parent_children data for medical visa status
+      // Log all players' medical visa status for debugging
+      console.log("Admin - All players medical visa status:", playersData.map(p => ({
+        id: p.id,
+        name: p.name,
+        medical_visa_status: p.medical_visa_status,
+        medical_visa_issue_date: p.medical_visa_issue_date
+      })));
+      
+      // Fetch related parent_children data for additional info
       const playerIds = playersData.map(player => player.id);
       const parentIds = playersData
         .filter(player => player.parent_id)
@@ -325,12 +346,16 @@ export const AdminManageScreen = () => {
 
       // Transform players data with parent_children data
       const transformedPlayers = playersData.map(player => {
-        let medicalVisaStatus = 'unknown';
+        // Use medical visa status directly from players table
+        let medicalVisaStatus = player.medical_visa_status;
+        console.log(`[DEBUG] Admin - Player ${player.name} raw medical visa status: ${medicalVisaStatus}`);
+        // Don't default to 'pending' - use the actual value from the database
         let paymentStatus = player.payment_status || 'pending';
         let teamId = player.team_id;
         let teamName = null;
         let birthDate = player.birth_date;
         let matchingChild = undefined;
+        
         // Check for recently joined players - set to on_trial ONLY if no status is set
         if (!player.payment_status) {
           const createdAt = new Date(player.created_at);
@@ -339,25 +364,30 @@ export const AdminManageScreen = () => {
           const isOnTrial = diff < 30 * 24 * 60 * 60 * 1000;
           if (isOnTrial) paymentStatus = 'on_trial';
         }
+        
+        // Still check parent_children for additional info
         if (player.parent_id && childrenMap.has(player.parent_id)) {
           const childrenForParent = childrenMap.get(player.parent_id);
           matchingChild = childrenForParent?.find(
             child => child.full_name.toLowerCase() === player.name.toLowerCase()
           );
+          
           if (matchingChild) {
-            medicalVisaStatus = matchingChild.medical_visa_status;
-            if (matchingChild.birth_date) {
+            // Only use birth_date and team info from parent_children if needed
+            if (!player.birth_date && matchingChild.birth_date) {
               birthDate = matchingChild.birth_date;
             }
-            if (matchingChild.team_id && teamsMap.has(matchingChild.team_id)) {
+            if (!player.team_id && matchingChild.team_id && teamsMap.has(matchingChild.team_id)) {
               teamId = matchingChild.team_id;
               teamName = teamsMap.get(matchingChild.team_id).name;
             }
           }
         }
+        
         if (!teamName && player.team_id && teamsMap.has(player.team_id)) {
           teamName = teamsMap.get(player.team_id).name;
         }
+        
         return {
           id: player.id,
           name: player.name,
@@ -365,13 +395,13 @@ export const AdminManageScreen = () => {
           is_active: player.is_active,
           team_id: teamId,
           team: teamName ? { name: teamName } : null,
-          medicalVisaStatus,
+          medicalVisaStatus: medicalVisaStatus,
           paymentStatus,
           payment_status: paymentStatus,
           parent_id: player.parent_id,
           birth_date: birthDate,
           last_payment_date: player.last_payment_date,
-          medicalVisaIssueDate: matchingChild?.medical_visa_issue_date || null,
+          medicalVisaIssueDate: player.medical_visa_issue_date,
         };
       });
 

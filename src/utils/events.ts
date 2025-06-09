@@ -4,8 +4,10 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { EventEmitter } from 'events';
 
 type EventCallback = (...args: any[]) => void;
+type TimeoutId = ReturnType<typeof setTimeout>;
 
 // Store for event listeners
 const listeners: Record<string, EventCallback[]> = {};
@@ -18,7 +20,7 @@ export const refreshTimestamps: Record<string, number> = {
 };
 
 // Debounce timers for refresh operations
-const refreshDebounceTimers: Record<string, NodeJS.Timeout | null> = {
+const refreshDebounceTimers: Record<string, TimeoutId | null> = {
   players: null,
   payments: null,
   teams: null,
@@ -43,12 +45,50 @@ export type EventType =
   | 'chat_messages'
   | 'payment_status_changed'
   | 'payment_collection_added'
-  | 'payment_collection_processed';
+  | 'payment_collection_processed'
+  | 'medical_visa_status_changed';
 
-interface EventListener {
+interface EventData {
   id: string;
   eventType: EventType;
   lastTriggered: number;
+}
+
+class EventManager {
+  private emitter: EventEmitter;
+  private listeners: Map<string, { callback: EventCallback; timeout: TimeoutId | null }>;
+
+  constructor() {
+    this.emitter = new EventEmitter();
+    this.listeners = new Map();
+  }
+
+  registerEventListener(event: string, callback: EventCallback, timeoutMs?: number): () => void {
+    console.log(`[Events] Registering listener for event: ${event}`);
+    
+    // Remove any existing listener for this event
+    this.unregisterEventListener(event);
+    
+    // Add the new listener
+    this.emitter.on(event, callback);
+    
+    // Store the listener with its timeout
+    const timeout = timeoutMs ? setTimeout(() => {
+      console.log(`[Events] Timeout reached for event: ${event}`);
+      this.unregisterEventListener(event);
+    }, timeoutMs) : null;
+    
+    this.listeners.set(event, { callback, timeout });
+    
+    // Return a function to unregister this listener
+    return () => this.unregisterEventListener(event);
+  }
+
+  unregisterEventListener(event: string): void {
+    console.log(`[Events] Unregistering listener for event: ${event}`);
+    this.emitter.removeAllListeners(event);
+    this.listeners.delete(event);
+  }
 }
 
 /**
@@ -115,6 +155,23 @@ export const triggerEvent = (event: string, ...args: any[]): void => {
     }, 300);
   }
 
+  // Handle medical visa status changes
+  if (event === 'medical_visa_status_changed') {
+    const playerData = args[0] || {};
+    console.log('[Events] Medical visa status changed - scheduling refresh for players', 
+      args.length > 0 ? {
+        player_id: playerData.id,
+        player_name: playerData.player_name || playerData.name,
+        new_status: playerData.medical_visa_status,
+        issue_date: playerData.medical_visa_issue_date
+      } : 'No player data provided');
+    
+    setTimeout(() => {
+      console.log('[Events] Executing deferred refresh for medical visa status change');
+      debouncedForceRefresh('players');
+    }, 300);
+  }
+
   // Handle payment collection events
   if (event === 'payment_collection_added') {
     console.log('[Events] Payment collection added - scheduling refresh for payments');
@@ -151,13 +208,14 @@ const debouncedForceRefresh = (dataType: string): void => {
     console.log(`[Events] Refresh already in progress for ${dataType}, postponing`);
     
     // Schedule another check after 500ms
+    // @ts-ignore - setTimeout return type mismatch
     refreshDebounceTimers[dataType] = setTimeout(() => {
       debouncedForceRefresh(dataType);
     }, 500);
     return;
   }
-  
   // Schedule the refresh with debounce
+  // @ts-ignore - setTimeout return type mismatch
   refreshDebounceTimers[dataType] = setTimeout(() => {
     // Set in-progress flag
     refreshInProgress[dataType] = true;

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Platform, Alert, Text } from 'react-native';
-import { SegmentedButtons } from 'react-native-paper';
+import { View, StyleSheet, Platform, Alert, Text, TouchableOpacity } from 'react-native';
 import { COLORS, SPACING } from '../../constants/theme';
 import { supabase } from '../../lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -15,6 +14,7 @@ interface Team {
   id: string;
   name: string;
   players_count: number;
+  access_code: string;
 }
 
 interface Player {
@@ -29,6 +29,7 @@ interface Player {
   created_at?: string;
   birth_date?: string;
   last_payment_date?: string;
+  medical_visa_issue_date?: string;
 }
 
 export const CoachManageScreen = () => {
@@ -86,13 +87,42 @@ export const CoachManageScreen = () => {
         Alert.alert('Error', 'Failed to load teams. Please try again.');
       } else {
         console.log('[DEBUG] Teams fetched:', teamsData);
-        const transformedTeams = (teamsData || []).map((team: { team_id: string; team_name: string; player_count?: number }) => ({
-          id: team.team_id,
-          name: team.team_name,
-          players_count: team.player_count || 0
-        }));
-        console.log('[DEBUG] Transformed teams:', transformedTeams);
-        setTeams(transformedTeams);
+        
+        // Get the team IDs
+        const teamIds = (teamsData || []).map((team: { team_id: string }) => team.team_id);
+        
+        // Fetch full team details including access_code
+        if (teamIds.length > 0) {
+          const { data: fullTeamsData, error: fullTeamsError } = await supabase
+            .from('teams')
+            .select('id, name, access_code')
+            .in('id', teamIds);
+            
+          if (fullTeamsError) {
+            console.error('[DEBUG] Error fetching full team details:', fullTeamsError);
+          } else {
+            console.log('[DEBUG] Full teams data:', fullTeamsData);
+            
+            // Create a map of player counts from the original data
+            const playerCountMap = new Map();
+            (teamsData || []).forEach((team: { team_id: string; player_count?: number }) => {
+              playerCountMap.set(team.team_id, team.player_count || 0);
+            });
+            
+            // Transform data with access_code
+            const transformedTeams = (fullTeamsData || []).map((team) => ({
+              id: team.id,
+              name: team.name,
+              access_code: team.access_code || '',
+              players_count: playerCountMap.get(team.id) || 0
+            }));
+            
+            console.log('[DEBUG] Transformed teams with access codes:', transformedTeams);
+            setTeams(transformedTeams);
+          }
+        } else {
+          setTeams([]);
+        }
       }
 
       // Load players using the get_coach_players function
@@ -142,6 +172,8 @@ export const CoachManageScreen = () => {
               birth_date,
               payment_status,
               last_payment_date,
+              medical_visa_status,
+              medical_visa_issue_date,
               team_id,
               parent_id
             `)
@@ -150,12 +182,13 @@ export const CoachManageScreen = () => {
           if (completePlayerError) {
             console.error("Error fetching complete player data:", completePlayerError);
           } else if (completePlayerData && completePlayerData.length > 0) {
-            console.log("QUERY - Raw results example:", {
-              id: completePlayerData[0].id,
-              name: completePlayerData[0].name,
-              payment_status: completePlayerData[0].payment_status,
-              last_payment_date: completePlayerData[0].last_payment_date
-            });
+            // Add debug logging for birthdates
+            console.log("QUERY - Birthdate data for players:", completePlayerData.map(p => ({
+              id: p.id,
+              name: p.name,
+              birth_date: p.birth_date,
+              parent_id: p.parent_id
+            })));
             
             // Map the complete data to the RPC data format
             const enhancedPlayers = playersData.map((rpcPlayer: any) => {
@@ -164,7 +197,12 @@ export const CoachManageScreen = () => {
               if (completePlayer) {
                 console.log("STEP 3 - Found matching complete player data:", {
                   id: completePlayer.id,
-                  raw_last_payment_date: completePlayer.last_payment_date
+                  name: completePlayer.name,
+                  birth_date: completePlayer.birth_date,
+                  parent_id: completePlayer.parent_id,
+                  raw_last_payment_date: completePlayer.last_payment_date,
+                  medical_visa_status: completePlayer.medical_visa_status,
+                  medical_visa_issue_date: completePlayer.medical_visa_issue_date
                 });
                 
                 // Format last_payment_date to match admin screen format
@@ -179,7 +217,9 @@ export const CoachManageScreen = () => {
                   id: rpcPlayer.player_id,
                   created_at: completePlayer.created_at,
                   birth_date: completePlayer.birth_date,
-                  last_payment_date: lastPaymentDate
+                  last_payment_date: lastPaymentDate,
+                  medical_visa_status: completePlayer.medical_visa_status,
+                  medical_visa_issue_date: completePlayer.medical_visa_issue_date
                 };
               }
               console.log("STEP 5 - No matching complete player data found");
@@ -192,7 +232,9 @@ export const CoachManageScreen = () => {
             
             console.log("STEP 6 - Final enhanced players:", enhancedPlayers.map((p: any) => ({
               player_id: p.player_id,
-              last_payment_date: p.last_payment_date
+              last_payment_date: p.last_payment_date,
+              medical_visa_status: p.medical_visa_status,
+              medical_visa_issue_date: p.medical_visa_issue_date
             })));
             
             setPlayers(enhancedPlayers);
@@ -211,7 +253,7 @@ export const CoachManageScreen = () => {
           // Fetch last payment dates directly
           const { data: paymentData, error: paymentError } = await supabase
             .from('players')
-            .select('id, last_payment_date')
+            .select('id, last_payment_date, medical_visa_status, medical_visa_issue_date')
             .in('id', playerIds);
             
           if (!paymentError && paymentData) {
@@ -233,12 +275,17 @@ export const CoachManageScreen = () => {
             // Create a map for quick lookup
             const paymentDateMap = new Map();
             paymentData.forEach(item => {
-              paymentDateMap.set(item.id, item.last_payment_date);
+              paymentDateMap.set(item.id, {
+                last_payment_date: item.last_payment_date,
+                medical_visa_status: item.medical_visa_status,
+                medical_visa_issue_date: item.medical_visa_issue_date
+              });
             });
             
             // Add last_payment_date to each player
             playersWithPaymentDates = playersData.map((player: any) => {
-              const rawLastPaymentDate = paymentDateMap.get(player.player_id);
+              const playerData = paymentDateMap.get(player.player_id);
+              const rawLastPaymentDate = playerData?.last_payment_date;
               const formattedLastPaymentDate = rawLastPaymentDate
                 ? new Date(rawLastPaymentDate).toLocaleDateString('en-GB')
                 : null;
@@ -246,7 +293,9 @@ export const CoachManageScreen = () => {
               return {
                 ...player,
                 id: player.player_id,
-                last_payment_date: formattedLastPaymentDate
+                last_payment_date: formattedLastPaymentDate,
+                medical_visa_status: playerData?.medical_visa_status,
+                medical_visa_issue_date: playerData?.medical_visa_issue_date
               };
             });
           } else {
@@ -262,6 +311,13 @@ export const CoachManageScreen = () => {
           
         if (parentChildrenError) {
           console.error('Error fetching parent children data:', parentChildrenError);
+        } else if (parentChildrenData) {
+          // Add debug logging for parent_children birthdates
+          console.log("QUERY - Birthdate data from parent_children:", parentChildrenData.map(pc => ({
+            parent_id: pc.parent_id,
+            full_name: pc.full_name,
+            birth_date: pc.birth_date
+          })));
         }
         
         // Fetch team creation dates for join date fallback
@@ -284,6 +340,16 @@ export const CoachManageScreen = () => {
                     child.full_name.toLowerCase() === player.player_name.toLowerCase()
           );
           
+          // Add debug logging for birthdate matching
+          console.log("STEP 7 - Processing birthdate for player:", {
+            player_id: player.player_id,
+            player_name: player.player_name,
+            parent_id: player.parent_id,
+            existing_birth_date: player.birth_date,
+            child_record_birth_date: childRecord?.birth_date,
+            final_birth_date: childRecord?.birth_date || player.birth_date
+          });
+          
           return {
             ...player,
             id: player.player_id,
@@ -291,8 +357,15 @@ export const CoachManageScreen = () => {
             created_at: player.created_at || teamCreationDate,
             // Use birthdate from parent_children if available
             birth_date: childRecord?.birth_date || player.birth_date,
-            // Always include last_payment_date if present
-            last_payment_date: player.last_payment_date || undefined
+            // Include last_payment_date if present
+            last_payment_date: player.last_payment_date || undefined,
+            // Include medical visa fields - log the value for debugging
+            medical_visa_status: (() => {
+              const status = player.medical_visa_status;
+              console.log(`[DEBUG] Player ${player.player_name} medical visa status: ${status}`);
+              return status;
+            })(),
+            medical_visa_issue_date: player.medical_visa_issue_date
           };
         });
         
@@ -317,43 +390,44 @@ export const CoachManageScreen = () => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.tabContainer}>
-        <SegmentedButtons
-          value={activeTab}
-          onValueChange={value => setActiveTab(value as 'teams' | 'players')}
-          buttons={[
-            { value: 'teams', label: 'My Teams' },
-            { value: 'players', label: 'My Players' }
-          ]}
-          style={styles.segmentedButtons}
-          theme={{
-            colors: {
-              primary: '#212121',
-              secondaryContainer: '#EEFBFF',
-              onSecondaryContainer: '#212121',
-              outline: '#E0E0E0',
-            }
-          }}
-        />
+      <View style={styles.horizontalTabsRow}>
+        <View style={styles.horizontalTabsContainer}>
+          <TouchableOpacity
+            style={styles.horizontalTabButton}
+            onPress={() => setActiveTab('teams')}
+          >
+            <Text style={[styles.horizontalTabText, activeTab === 'teams' && styles.horizontalTabTextActive]}>Teams</Text>
+            {activeTab === 'teams' && <View style={styles.horizontalTabUnderline} />}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.horizontalTabButton}
+            onPress={() => setActiveTab('players')}
+          >
+            <Text style={[styles.horizontalTabText, activeTab === 'players' && styles.horizontalTabTextActive]}>Players</Text>
+            {activeTab === 'players' && <View style={styles.horizontalTabUnderline} />}
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {activeTab === 'teams' ? (
+      {activeTab === 'teams' && (
         <CoachManageTeamsScreen
           teams={teams}
           isLoading={isLoading}
           onRefresh={handleRefresh}
           refreshing={refreshing}
         />
-      ) : (
+      )}
+
+      {activeTab === 'players' && (
         <CoachManagePlayersScreen
           players={players}
           teams={teams}
           isLoading={isLoading}
+          onRefresh={handleRefresh}
           refreshing={refreshing}
           searchQuery={searchQuery}
-          selectedTeamId={selectedTeamId}
-          onRefresh={handleRefresh}
           onSearchChange={setSearchQuery}
+          selectedTeamId={selectedTeamId}
           onTeamSelect={setSelectedTeamId}
         />
       )}
@@ -364,16 +438,43 @@ export const CoachManageScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  tabContainer: {
-    padding: SPACING.lg,
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
-  },
-  segmentedButtons: {
     backgroundColor: COLORS.white,
-    borderRadius: 8,
-    elevation: 0,
-    shadowColor: 'transparent',
+  },
+  horizontalTabsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: SPACING.lg,
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingBottom: SPACING.md,
+    backgroundColor: COLORS.white,
+  },
+  horizontalTabsContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+    justifyContent: 'center',
+    flex: 1,
+  },
+  horizontalTabButton: {
+    alignItems: 'center',
+    marginHorizontal: 8,
+    paddingHorizontal: 4,
+  },
+  horizontalTabText: {
+    fontSize: 16,
+    color: COLORS.grey[600],
+    fontWeight: '400',
+  },
+  horizontalTabTextActive: {
+    color: COLORS.text,
+    fontWeight: '700',
+  },
+  horizontalTabUnderline: {
+    marginTop: 2,
+    height: 4,
+    width: '100%',
+    backgroundColor: COLORS.primary,
+    borderRadius: 2,
   },
 }); 

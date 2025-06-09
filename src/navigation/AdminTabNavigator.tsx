@@ -6,7 +6,7 @@ import { COLORS } from '../constants/theme';
 import { AdminHomeScreen } from '../screens/admin/HomeScreen';
 import { AdminManageScreen } from '../screens/admin/ManageScreen';
 import { AdminScheduleScreen } from '../screens/admin/ScheduleScreen';
-import { PaymentsScreen } from '../screens/admin/PaymentsScreen';
+import { AdminPaymentsScreen } from '../screens/admin/AdminPaymentsScreen';
 import { AdminChatScreen } from '../screens/admin/ChatScreen';
 import { AdminNewsScreen } from '../screens/admin/NewsScreen';
 import { ClubSettingsScreen } from '../screens/admin/ClubSettingsScreen';
@@ -29,6 +29,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PostEditorScreen } from '../screens/admin/PostEditorScreen';
+import { PlayerDetailsScreen } from '../screens/PlayerDetailsScreen';
 
 const Tab = createBottomTabNavigator<AdminTabParamList>();
 const Stack = createNativeStackNavigator<AdminStackParamList>();
@@ -317,7 +318,7 @@ const TabNavigator = () => {
       />
       <Tab.Screen
         name="Payments"
-        component={PaymentsScreen}
+        component={AdminPaymentsScreen}
         options={{
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="credit-card-outline" size={size} color={color} />
@@ -347,6 +348,30 @@ const TabNavigator = () => {
       />
     </Tab.Navigator>
   );
+};
+
+export type AdminStackParamList = {
+  AdminTabs: undefined;
+  ClubSettings: undefined;
+  AdminManage: { refresh?: boolean };
+  AddTeam: undefined;
+  AddCoach: undefined;
+  AddPlayer: undefined;
+  EditCoach: { coachId: string };
+  EditTeam: { teamId: string };
+  EditPlayer: { playerId: string };
+  TeamDetails: { teamId: string };
+  Manage: { activeTab?: CardType; refresh?: boolean };
+  CreateActivity: { type: 'practice' | 'match' | 'event' };
+  ActivityDetails: { activityId: string };
+  PostEditor: {
+    mode: 'create' | 'edit';
+    post?: any;
+    availableTeams?: any[];
+    isAdmin?: boolean;
+    onSave?: () => void;
+  };
+  PlayerDetails: { playerId: string; role: 'admin' };
 };
 
 export const AdminNavigator = () => {
@@ -422,6 +447,11 @@ export const AdminNavigator = () => {
           <Stack.Screen
             name="PostEditor"
             component={PostEditorScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="PlayerDetails"
+            component={PlayerDetailsScreen}
             options={{ headerShown: false }}
           />
         </Stack.Navigator>

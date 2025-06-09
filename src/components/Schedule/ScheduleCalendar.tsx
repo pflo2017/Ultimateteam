@@ -6,12 +6,13 @@ import { COLORS, SPACING } from '../../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { getActivities, getActivitiesByDateRange, ActivityType as ServiceActivityType, Activity } from '../../services/activitiesService';
 import { format, parseISO, startOfMonth, endOfMonth, isSameDay, addMonths, subMonths, setMonth, 
-  addWeeks, subWeeks, startOfWeek, endOfWeek, eachDayOfInterval, addDays, getDate, isSameWeek } from 'date-fns';
+  addWeeks, subWeeks, startOfWeek, endOfWeek, eachDayOfInterval, addDays, getDate, isSameWeek, isAfter, isBefore } from 'date-fns';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../types/navigation';
 import { useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -85,6 +86,9 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
   const [teams, setTeams] = useState<{ id: string; name: string }[]>([]); // To be fetched
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]); // All selected by default
   
+  // Add state for coach's teams
+  const [coachTeamIds, setCoachTeamIds] = useState<string[]>([]);
+  
   // Use focus effect to reload activities when the screen comes into focus
   useFocusEffect(
     useCallback(() => {
@@ -93,18 +97,19 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
       return () => {
         // Cleanup if needed
       };
-    }, [viewMode === 'monthly' ? currentMonth : currentWeek])
+    }, [viewMode === 'monthly' ? currentMonth : currentWeek, coachTeamIds, selectedTeamIds])
   );
   
   // Initial load
   useEffect(() => {
     loadActivities();
-  }, [viewMode === 'monthly' ? currentMonth : currentWeek]);
+  }, [viewMode === 'monthly' ? currentMonth : currentWeek, coachTeamIds, selectedTeamIds]);
   
   useEffect(() => {
-    const fetchTeamsForAdmin = async () => {
-      if (userRole !== 'admin') return;
+    const fetchTeams = async () => {
       try {
+        if (userRole === 'admin') {
+          // Fetch all teams for admin
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
         const { data: club } = await supabase
@@ -121,12 +126,65 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
           .order('name');
         if (!error && teamsData) {
           setTeams(teamsData);
+          }
+        } else if (userRole === 'coach' && coachTeamIds.length > 0) {
+          // Fetch team details for coach's teams
+          const { data: teamsData, error } = await supabase
+            .from('teams')
+            .select('id, name')
+            .in('id', coachTeamIds)
+            .eq('is_active', true)
+            .order('name');
+          if (!error && teamsData) {
+            setTeams(teamsData);
+            // Also select all teams by default
+            setSelectedTeamIds(teamsData.map(team => team.id));
+          }
         }
       } catch (err) {
-        console.error('Error fetching teams for admin:', err);
+        console.error('Error fetching teams:', err);
       }
     };
-    fetchTeamsForAdmin();
+    
+    fetchTeams();
+  }, [userRole, coachTeamIds]);
+  
+  // Add useEffect to fetch coach's teams when userRole is "coach"
+  useEffect(() => {
+    const fetchCoachTeams = async () => {
+      if (userRole !== 'coach') return;
+      
+      try {
+        // Get coach data from AsyncStorage
+        const coachData = await AsyncStorage.getItem('coach_data');
+        if (!coachData) return;
+        
+        const coach = JSON.parse(coachData);
+        
+        // Get teams using the get_coach_teams function
+        const { data: teamsData, error: teamsError } = await supabase
+          .rpc('get_coach_teams', { p_coach_id: coach.id });
+          
+        if (teamsError) {
+          console.error('Error fetching coach teams:', teamsError);
+          return;
+        }
+        
+        if (!teamsData || teamsData.length === 0) {
+          console.log('No teams found for coach');
+          return;
+        }
+        
+        // Extract team IDs
+        const teamIds = teamsData.map((team: any) => team.team_id);
+        console.log('Coach teams fetched:', teamIds);
+        setCoachTeamIds(teamIds);
+      } catch (error) {
+        console.error('Error fetching coach teams:', error);
+      }
+    };
+    
+    fetchCoachTeams();
   }, [userRole]);
   
   const loadActivities = async () => {
@@ -143,12 +201,58 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
         end = endOfWeek(currentWeek, { weekStartsOn: 1 }).toISOString(); // Sunday
       }
       
+      // Different approach based on user role
+      if (userRole === 'coach' && coachTeamIds.length > 0) {
+        // For coaches: Only fetch activities for their teams, filtered by selectedTeamIds
+        const teamsToFetch = coachTeamIds.filter(teamId => 
+          selectedTeamIds.length === 0 || selectedTeamIds.includes(teamId)
+        );
+        
+        if (teamsToFetch.length === 0) {
+          // If no teams selected, show no activities
+          setActivities([]);
+          setIsLoading(false);
+          return;
+        }
+        
+        // Fetch activities for each selected team separately and combine them
+        const promises = teamsToFetch.map(teamId => 
+          getActivitiesByDateRange(start, end, teamId)
+        );
+        
+        const results = await Promise.all(promises);
+        
+        // Combine all activities
+        let allActivities: Activity[] = [];
+        results.forEach(result => {
+          if (result.data) {
+            allActivities = [...allActivities, ...result.data];
+          }
+        });
+        
+        // Sort by start_time
+        const sorted = [...allActivities].sort(
+          (a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
+        );
+        
+        setActivities(sorted);
+      } else {
+        // For admin: Fetch all activities first
       const { data, error } = await getActivitiesByDateRange(start, end);
       
       if (error) throw error;
       
       if (data) {
+          // Then filter by selected teams if any are selected
+          if (selectedTeamIds.length > 0) {
+            const filteredActivities = data.filter(activity => 
+              !activity.team_id || selectedTeamIds.includes(activity.team_id)
+            );
+            setActivities(filteredActivities);
+          } else {
         setActivities(data);
+          }
+        }
       }
     } catch (error) {
       console.error('Error loading activities:', error);
@@ -215,22 +319,38 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
     return markedDates;
   };
   
-  // Filter activities for selected date
+  // Get activities for the selected date
   const getActivitiesForSelectedDate = () => {
-    const filtered = activities
-      .filter(activity => {
+    // First filter by selected date
+    const dateActivities = activities.filter(activity => {
         const activityDate = activity.start_time.split('T')[0];
-        const matchesDate = viewMode === 'monthly' 
-          ? activityDate === selectedDate
-          : true; // In weekly view, show all activities for the week
-        const matchesType = selectedType === 'all' || activity.type === selectedType;
-        return matchesDate && matchesType;
-      });
-    // Sort chronologically in weekly view
-    if (viewMode === 'weekly') {
-      return filtered.sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
-    }
-    return filtered;
+      return activityDate === selectedDate;
+    });
+    
+    // Then filter by selected type if needed
+    return selectedType === 'all' 
+      ? dateActivities 
+      : dateActivities.filter(activity => activity.type === selectedType);
+  };
+  
+  // Get activities for the selected week (for weekly view)
+  const getActivitiesForSelectedWeek = () => {
+    const weekStart = startOfWeek(currentWeek, { weekStartsOn: 1 }); // Monday
+    const weekEnd = endOfWeek(currentWeek, { weekStartsOn: 1 }); // Sunday
+    
+    // Filter activities that fall within the selected week
+    const weekActivities = activities.filter(activity => {
+      const activityDate = parseISO(activity.start_time);
+      return (
+        (isAfter(activityDate, weekStart) || isSameDay(activityDate, weekStart)) &&
+        (isBefore(activityDate, weekEnd) || isSameDay(activityDate, weekEnd))
+      );
+    });
+    
+    // Then filter by selected type if needed
+    return selectedType === 'all' 
+      ? weekActivities 
+      : weekActivities.filter(activity => activity.type === selectedType);
   };
   
   const handleMonthChange = (month: DateData) => {
@@ -363,8 +483,8 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
             </View>
             
             <View style={styles.eventsContent}>
-              {!isLoading && getActivitiesForSelectedDate().length > 0 ? (
-                getActivitiesForSelectedDate().map(activity => (
+              {!isLoading && ((viewMode === 'monthly' ? getActivitiesForSelectedDate() : getActivitiesForSelectedWeek())).length > 0 ? (
+                (viewMode === 'monthly' ? getActivitiesForSelectedDate() : getActivitiesForSelectedWeek()).map(activity => (
                   <EventCard key={activity.id} activity={activity} isWeeklyView={viewMode === 'weekly'} />
                 ))
               ) : (

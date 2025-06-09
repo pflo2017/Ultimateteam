@@ -1,16 +1,18 @@
 import React from 'react';
-import { View, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
-import { Text, Card } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Alert } from 'react-native';
+import { Text, Card, IconButton } from 'react-native-paper';
 import { COLORS, SPACING } from '../../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { CoachTabParamList } from '../../navigation/CoachNavigator';
+import * as Clipboard from 'expo-clipboard';
 
 interface Team {
   id: string;
   name: string;
   players_count: number;
+  access_code: string;
 }
 
 interface CoachManageTeamsScreenProps {
@@ -20,26 +22,53 @@ interface CoachManageTeamsScreenProps {
   refreshing: boolean;
 }
 
-const TeamCard = ({ team, onPress }: { team: Team; onPress: () => void }) => (
-  <TouchableOpacity onPress={onPress}>
-    <Card style={styles.card}>
-      <Card.Content>
-        <View style={styles.cardHeader}>
-          <View style={styles.cardTitleContainer}>
-            <MaterialCommunityIcons name="account-group" size={24} color={COLORS.primary} />
-            <Text style={styles.cardTitle}>{team.name}</Text>
+const TeamCard = ({ team, onPress }: { team: Team; onPress: () => void }) => {
+  const handleCopyCode = async () => {
+    try {
+      await Clipboard.setStringAsync(team.access_code);
+      Alert.alert('Success', 'Team code copied to clipboard!');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to copy team code');
+    }
+  };
+
+  return (
+    <TouchableOpacity onPress={onPress}>
+      <Card style={styles.card}>
+        <Card.Content>
+          <View style={styles.cardHeader}>
+            <View style={styles.cardTitleContainer}>
+              <MaterialCommunityIcons name="account-group" size={24} color={COLORS.primary} />
+              <Text style={styles.cardTitle}>{team.name}</Text>
+            </View>
           </View>
-        </View>
-        <View style={styles.cardContent}>
-          <View style={styles.infoRow}>
-            <MaterialCommunityIcons name="run" size={20} color={COLORS.primary} />
-            <Text style={styles.infoLabel}>Players: <Text style={styles.infoValue}>{team.players_count}</Text></Text>
+          <View style={styles.cardContent}>
+            <View style={styles.infoRow}>
+              <MaterialCommunityIcons name="run" size={20} color={COLORS.primary} />
+              <Text style={styles.infoLabel}>Players: <Text style={styles.infoValue}>{team.players_count}</Text></Text>
+            </View>
+            <View style={styles.infoRow}>
+              <MaterialCommunityIcons name="key" size={20} color={COLORS.primary} />
+              <Text style={styles.infoLabel}>Team Code: <Text style={styles.infoValue}>{team.access_code ? team.access_code : '—'}</Text></Text>
+              {team.access_code ? (
+                <IconButton
+                  icon="content-copy"
+                  size={18}
+                  iconColor={COLORS.primary}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    handleCopyCode();
+                  }}
+                  style={styles.copyButton}
+                />
+              ) : null}
+            </View>
           </View>
-        </View>
-      </Card.Content>
-    </Card>
-  </TouchableOpacity>
-);
+        </Card.Content>
+      </Card>
+    </TouchableOpacity>
+  );
+};
 
 export const CoachManageTeamsScreen: React.FC<CoachManageTeamsScreenProps> = ({
   teams,
@@ -50,10 +79,9 @@ export const CoachManageTeamsScreen: React.FC<CoachManageTeamsScreenProps> = ({
   const navigation = useNavigation<NativeStackNavigationProp<CoachTabParamList>>();
 
   const handleTeamPress = (team: Team) => {
-    // Navigate to the Manage screen with players tab and filter by team
     navigation.navigate('Manage', { 
       activeTab: 'players',
-      teamId: team.id  // Pass the team ID to filter players
+      teamId: team.id
     });
   };
 
@@ -134,5 +162,9 @@ const styles = StyleSheet.create({
     color: COLORS.grey[400],
     fontSize: 16,
     marginTop: SPACING.xl,
+  },
+  copyButton: {
+    margin: 0,
+    backgroundColor: COLORS.primary + '15',
   },
 }); 
