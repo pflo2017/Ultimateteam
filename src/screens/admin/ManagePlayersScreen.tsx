@@ -9,6 +9,7 @@ import type { AdminStackParamList } from '../../navigation/AdminTabNavigator';
 import { supabase } from '../../lib/supabase';
 import { useDataRefresh } from '../../utils/useDataRefresh';
 import { registerEventListener } from '../../utils/events';
+import { getUserClubId } from '../../services/activitiesService';
 
 interface Team {
   id: string;

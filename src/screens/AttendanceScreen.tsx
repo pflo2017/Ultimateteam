@@ -172,7 +172,7 @@ export const AttendanceScreen = () => {
   }, [selectedActivity]);
 
   // Move fetchAttendanceRecords function above hooks and ensure it's only defined once
-  const fetchAttendanceRecords = async () => {
+  const fetchAttendanceRecords = async (activityId?: string) => {
     setIsLoadingAttendanceRecords(true);
     try {
       // 1. Get activities for the selected date, team, and type
@@ -379,6 +379,7 @@ export const AttendanceScreen = () => {
       console.log('Selected type:', selectedType);
       console.log('Selected team:', selectedTeam?.id);
       
+      // Always pass the selected team ID if available
       const { data, error } = await getActivitiesByDateRange(
         weekStart.toISOString(), 
         weekEnd.toISOString(),
@@ -389,46 +390,33 @@ export const AttendanceScreen = () => {
       
       console.log('Activities found:', data?.length || 0);
       
-      if (data) {
-        // Filter activities by type if needed
-        const filteredActivities = selectedType === 'all' 
-          ? data 
-          : data.filter(activity => activity.type === selectedType);
-        
-        console.log('After type filter:', filteredActivities.length);
-        
-        // Debug: log all activities with dates
-        filteredActivities.forEach(activity => {
-          const activityDate = new Date(activity.start_time);
-          console.log(
-            'Activity:', 
-            activity.id, 
-            activity.title, 
-            activity.type,
-            'Team:', activity.team_id,
-            'Date:', format(activityDate, 'yyyy-MM-dd'),
-            'Selected date:', format(selectedDate, 'yyyy-MM-dd'),
-            'Is same day:', isSameDay(activityDate, selectedDate)
-          );
-        });
-        
-        // Filter activities by date - ensure we compare dates properly
-        const activitiesForDate = filteredActivities.filter(activity => {
-          // Parse the activity date and normalize timezone issues
-          const activityDateStr = activity.start_time.split('T')[0]; // Get just the date part
-          const selectedDateStr = format(selectedDate, 'yyyy-MM-dd');
-          
-          // Compare date strings instead of Date objects to avoid timezone issues
+      // Filter activities by type if needed
+      const typeFilteredActivities = selectedType === 'all' 
+        ? (data || [])
+        : (data || []).filter(activity => activity.type === selectedType);
+      
+      console.log('Activities after type filtering:', typeFilteredActivities.length);
+      setActivities(typeFilteredActivities);
+      
+      // Set filtered activities based on selected date
+      if (selectedDate) {
+        const selectedDateStr = format(selectedDate, 'yyyy-MM-dd');
+        const activitiesForDate = typeFilteredActivities.filter(activity => {
+          const activityDateStr = activity.start_time.split('T')[0];
           return activityDateStr === selectedDateStr;
         });
         
-        console.log('After date filter:', activitiesForDate.length);
-        
+        console.log('Activities for selected date:', activitiesForDate.length);
+        // Update the filtered activities for the current date
         setActivities(activitiesForDate);
         
-        // If previously selected activity is no longer in the list, clear it
-        if (selectedActivity && !activitiesForDate.find(a => a.id === selectedActivity.id)) {
+        // If there are filtered activities, update the selectedActivity
+        if (activitiesForDate.length > 0 && !selectedActivity) {
+          setSelectedActivity(activitiesForDate[0]);
+          await fetchAttendanceRecords(activitiesForDate[0].id);
+        } else if (activitiesForDate.length === 0) {
           setSelectedActivity(null);
+          setAttendanceRecords([]);
         }
       }
     } catch (error) {

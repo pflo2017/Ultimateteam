@@ -12,6 +12,7 @@ import { ManageTeamsScreen } from './ManageTeamsScreen';
 import { ManageCoachesScreen } from './ManageCoachesScreen';
 import { ManagePlayersScreen } from './ManagePlayersScreen';
 import { registerEventListener } from '../../utils/events';
+import { getUserClubId } from '../../services/activitiesService';
 
 type CardType = 'teams' | 'coaches' | 'players' | 'payments';
 
@@ -151,25 +152,14 @@ export const AdminManageScreen = () => {
     try {
       console.log('Fetching teams...');
       
-      // Get the current user's club ID first
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        console.error('No user found');
-        return;
-      }
-
-      const { data: club } = await supabase
-        .from('clubs')
-        .select('id')
-        .eq('admin_id', user.id)
-        .single();
-
-      if (!club) {
+      // Get the current user's club ID
+      const clubId = await getUserClubId();
+      if (!clubId) {
         console.error('No club found for user');
         return;
       }
 
-      console.log('Fetching teams for club:', club.id);
+      console.log('Fetching teams for club:', clubId);
       
       // First get the teams with basic info
       const { data: teamsData, error: teamsError } = await supabase
@@ -183,7 +173,7 @@ export const AdminManageScreen = () => {
           coach_id,
           players(count)
         `)
-        .eq('club_id', club.id)
+        .eq('club_id', clubId)
         .eq('is_active', true)
         .order('name');
 
@@ -196,7 +186,7 @@ export const AdminManageScreen = () => {
       const { data: coachesData, error: coachesError } = await supabase
         .from('coaches')
         .select('id, name')
-        .eq('club_id', club.id)
+        .eq('club_id', clubId)
         .eq('is_active', true);
 
       if (coachesError) {
@@ -234,20 +224,9 @@ export const AdminManageScreen = () => {
 
   const fetchCoaches = async () => {
     try {
-      // Get the current user's club ID first
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        console.error('No user found');
-        return;
-      }
-
-      const { data: club } = await supabase
-        .from('clubs')
-        .select('id')
-        .eq('admin_id', user.id)
-        .single();
-
-      if (!club) {
+      // Get the current user's club ID
+      const clubId = await getUserClubId();
+      if (!clubId) {
         console.error('No club found for user');
         return;
       }
@@ -265,7 +244,7 @@ export const AdminManageScreen = () => {
             name
           )
         `)
-        .eq('club_id', club.id)
+        .eq('club_id', clubId)
         .eq('is_active', true);
 
       if (coachesError) throw coachesError;
@@ -277,6 +256,13 @@ export const AdminManageScreen = () => {
 
   const fetchPlayers = async () => {
     try {
+      // Get the current user's club ID first
+      const clubId = await getUserClubId();
+      if (!clubId) {
+        console.error('No club found for user');
+        return;
+      }
+
       // First get players data
       const { data: playersData, error: playersError } = await supabase
         .from('players')
@@ -294,6 +280,7 @@ export const AdminManageScreen = () => {
           medical_visa_issue_date,
           teams:team_id(id, name)
         `)
+        .eq('club_id', clubId)
         .eq('is_active', true)
         .order('name');
 
