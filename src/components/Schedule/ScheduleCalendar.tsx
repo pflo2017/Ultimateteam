@@ -277,7 +277,7 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
       : activities.filter(activity => activity.type === selectedType);
     
     filteredActivities.forEach(activity => {
-      const activityDate = activity.start_time.split('T')[0];
+      const activityDate = format(parseISO(activity.start_time), 'yyyy-MM-dd');
       
       if (!dateActivityMap[activityDate]) {
         dateActivityMap[activityDate] = [];
@@ -323,7 +323,7 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
   const getActivitiesForSelectedDate = () => {
     // First filter by selected date
     const dateActivities = activities.filter(activity => {
-        const activityDate = activity.start_time.split('T')[0];
+      const activityDate = format(parseISO(activity.start_time), 'yyyy-MM-dd');
       return activityDate === selectedDate;
     });
     

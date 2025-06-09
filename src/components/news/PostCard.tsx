@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Dimensions } from 'react-native';
 import { COLORS, SPACING, FONT_SIZES, SHADOWS } from '../../constants/theme';
 import { supabase } from '../../lib/supabase';
 import { useEffect, useState } from 'react';
@@ -20,11 +20,15 @@ export interface PostCardProps {
     comment_count?: number;
     reaction_count?: number;
     author_role?: string;
+    media_urls?: string[];
   };
   onPressComments: (postId: string) => void;
   onEdit?: (post: any) => void;
   onDelete?: (post: any) => void;
 }
+
+const { width: screenWidth } = Dimensions.get('window');
+const imageWidth = screenWidth - (SPACING.lg * 2) - (SPACING.lg * 2); // Account for card padding and screen padding
 
 export const PostCard: React.FC<PostCardProps> = ({ post, onPressComments, onEdit, onDelete }) => {
   const [isCreator, setIsCreator] = useState(false);
@@ -73,6 +77,21 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPressComments, onEdi
       >
         {post.content}
       </ParsedText>
+      
+      {/* Media Gallery */}
+      {post.media_urls && post.media_urls.length > 0 && (
+        <View style={styles.mediaContainer}>
+          {post.media_urls.map((url, index) => (
+            <Image
+              key={index}
+              source={{ uri: url }}
+              style={styles.mediaImage}
+              resizeMode="cover"
+            />
+          ))}
+        </View>
+      )}
+
       {post.teams && post.teams.length > 0 && (
         <View style={styles.teamsRow}>
           {post.teams.map(team => (
@@ -202,5 +221,14 @@ const styles = StyleSheet.create({
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  mediaContainer: {
+    marginVertical: SPACING.sm,
+  },
+  mediaImage: {
+    width: imageWidth,
+    height: imageWidth * 0.75, // 4:3 aspect ratio
+    borderRadius: 8,
+    marginBottom: SPACING.sm,
   },
 }); 

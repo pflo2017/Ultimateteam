@@ -16,33 +16,39 @@ const RESEND_COOLDOWN = 30; // 30 seconds
 
 export default function ParentVerificationScreen({ navigation, route }: Props) {
   const { phoneNumber, isRegistration } = route.params;
-  const [verificationCode, setVerificationCode] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [timeLeft, setTimeLeft] = useState(CODE_TIMEOUT);
-  const [resendCooldown, setResendCooldown] = useState(0);
-  const timerRef = useRef<ReturnType<typeof setInterval>>(undefined);
-  const cooldownRef = useRef<ReturnType<typeof setInterval>>(undefined);
-  const inputRef = useRef<any>(undefined);
+  const [verificationCode, setVerificationCode] = useState<string>('');
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string>('');
+  const [timeLeft, setTimeLeft] = useState<number>(CODE_TIMEOUT);
+  const [resendCooldown, setResendCooldown] = useState<number>(0);
+  const timerRef = useRef<NodeJS.Timeout | undefined>(undefined);
+  const cooldownRef = useRef<NodeJS.Timeout | undefined>(undefined);
+  const inputRef = useRef<any>(null);
 
   useEffect(() => {
     // Start countdown for code expiration
     timerRef.current = setInterval(() => {
       setTimeLeft(prev => {
         if (prev <= 1) {
-          clearInterval(timerRef.current);
+          if (timerRef.current) {
+            clearInterval(timerRef.current);
+          }
           return 0;
         }
         return prev - 1;
       });
-    }, 1000);
+    }, 1000) as unknown as NodeJS.Timeout;
 
     // Send initial SMS code
     sendVerificationCode();
 
     return () => {
-      clearInterval(timerRef.current);
-      clearInterval(cooldownRef.current);
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+      if (cooldownRef.current) {
+        clearInterval(cooldownRef.current);
+      }
     };
   }, []);
 
@@ -69,12 +75,14 @@ export default function ParentVerificationScreen({ navigation, route }: Props) {
       cooldownRef.current = setInterval(() => {
         setResendCooldown(prev => {
           if (prev <= 1) {
-            clearInterval(cooldownRef.current);
+            if (cooldownRef.current) {
+              clearInterval(cooldownRef.current);
+            }
             return 0;
           }
           return prev - 1;
         });
-      }, 1000);
+      }, 1000) as unknown as NodeJS.Timeout;
     } catch (error) {
       console.error('Failed to send SMS:', error);
       setError('Failed to send verification code. Please try again.');

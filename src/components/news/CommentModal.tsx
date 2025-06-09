@@ -38,7 +38,7 @@ export const CommentModal: React.FC<CommentModalProps> = ({ visible, onClose, po
         .select('id, author_id, author_name, author_role, content, created_at')
         .eq('post_id', post.id)
         .eq('is_active', true)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: true });
       if (error) throw error;
       setComments(data || []);
       console.log('fetchComments result:', data);

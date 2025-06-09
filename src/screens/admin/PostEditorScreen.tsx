@@ -74,16 +74,18 @@ export const PostEditorScreen = () => {
     }
     setLoading(true);
     try {
+      let uploadedUrls: string[] = [];
+      if (pickedMedia.length > 0) {
+        setIsUploading(true);
+        uploadedUrls = await Promise.all(pickedMedia.map(m => uploadMedia(m.uri, m.type)));
+        setIsUploading(false);
+      }
+
       if (mode === "edit") {
         const { error } = await updatePost(post.id, { title, content, media_urls: mediaUrls } as any);
         if (error) throw error;
+        Alert.alert('Success', 'Post updated successfully');
       } else {
-        let uploadedUrls: string[] = [];
-        if (pickedMedia.length > 0) {
-          setIsUploading(true);
-          uploadedUrls = await Promise.all(pickedMedia.map(m => uploadMedia(m.uri, m.type)));
-          setIsUploading(false);
-        }
         if (isAdmin) {
           const { data: { user } } = await supabase.auth.getUser();
           if (!user) throw new Error("Not authenticated");
@@ -108,9 +110,11 @@ export const PostEditorScreen = () => {
             if (ptError) throw ptError;
           }
         }
-        if (route.params?.onSave) route.params.onSave();
-        navigation.goBack();
+        Alert.alert('Success', 'Post created successfully');
       }
+
+      if (route.params?.onSave) route.params.onSave();
+      navigation.goBack();
     } catch (err) {
       console.error("Error saving post:", err);
       setError("Failed to save post.");
