@@ -9,7 +9,7 @@ export const fetchPosts = async (filters?: { team_ids?: string[] }) : Promise<Po
   let { data: generalPosts, error: generalError } = await supabase
     .from('posts')
     .select(`
-      id, title, content, author_id, author_name, author_role, created_at, is_general, club_id
+      id, title, content, author_id, author_name, author_role, created_at, is_general, club_id, media_urls
     `)
     .eq('is_general', true)
     .eq('is_active', true)
@@ -23,7 +23,7 @@ export const fetchPosts = async (filters?: { team_ids?: string[] }) : Promise<Po
     const { data, error } = await supabase
       .from('posts')
       .select(`
-        id, title, content, author_id, author_name, author_role, created_at, is_general, club_id,
+        id, title, content, author_id, author_name, author_role, created_at, is_general, club_id, media_urls,
         post_teams:post_teams!inner ( team_id, team:team_id ( id, name ) )
       `)
       .eq('is_general', false)
@@ -37,7 +37,7 @@ export const fetchPosts = async (filters?: { team_ids?: string[] }) : Promise<Po
     const { data, error } = await supabase
       .from('posts')
       .select(`
-        id, title, content, author_id, author_name, author_role, created_at, is_general, club_id,
+        id, title, content, author_id, author_name, author_role, created_at, is_general, club_id, media_urls,
         post_teams:post_teams ( team_id, team:team_id ( id, name ) )
       `)
       .eq('is_general', false)
@@ -96,7 +96,7 @@ export const fetchPosts = async (filters?: { team_ids?: string[] }) : Promise<Po
   parentProfiles.forEach((p: any) => { authorNameMap[p.id] = p.name; });
 
   // Format posts for UI
-  return uniquePosts.map((p: any) => ({
+  const formattedPosts = uniquePosts.map((p: any) => ({
     id: p.id,
     title: p.title,
     content: p.content,
@@ -106,7 +106,12 @@ export const fetchPosts = async (filters?: { team_ids?: string[] }) : Promise<Po
     created_at: p.created_at,
     teams: (p.post_teams || []).map((pt: any) => pt.team),
     comment_count: commentCounts[p.id] || 0,
+    media_urls: p.media_urls || [],
   }));
+
+  // Sort by created_at descending (most recent first)
+  formattedPosts.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  return formattedPosts;
 };
 
 export const updatePost = async (postId: string, updates: { title?: string; content?: string }) => {
