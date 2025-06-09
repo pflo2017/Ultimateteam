@@ -43,7 +43,6 @@ export default function App() {
         console.log('Error restoring Supabase session:', e);
       } finally {
         setSessionChecked(true);
-        setIsLoading(false);
       }
     };
     restoreSession();
@@ -58,8 +57,10 @@ export default function App() {
   }, []);
 
   const handleAnimationFinish = useCallback(() => {
-    setIsLoading(false);
-  }, []);
+    if (sessionChecked) {
+      setIsLoading(false);
+    }
+  }, [sessionChecked]);
 
   return (
     <SafeAreaProvider>
@@ -71,7 +72,7 @@ export default function App() {
       <PaperProvider theme={customTheme}>
         {isLoading || !sessionChecked ? (
           <View style={{ flex: 1, backgroundColor: '#ffffff' }}>
-            <SplashScreen onAnimationFinish={() => {}} />
+            <SplashScreen onAnimationFinish={handleAnimationFinish} />
           </View>
         ) : (
           <Navigation />

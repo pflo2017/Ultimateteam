@@ -294,8 +294,86 @@ const generateRecurringInstances = (activity: Activity, startDate: string, endDa
  */
 export const getActivitiesByDateRange = async (startDate: string, endDate: string, teamId?: string): Promise<ActivitiesResponse> => {
   try {
-    // Get user's club_id
-    const clubId = await getUserClubId();
+    // Try to get user's club_id as usual
+    let clubId = await getUserClubId();
+    let isParent = false;
+    let teamIds: string[] = [];
+
+    // If no clubId, check if user is a parent
+    if (!clubId) {
+      // Try to get parent data from AsyncStorage (React Native only)
+      let parentId: string | null = null;
+      try {
+        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+        const parentDataStr = await AsyncStorage.getItem('parent_data');
+        if (parentDataStr) {
+          const parentData = JSON.parse(parentDataStr);
+          parentId = parentData.id;
+          console.log('[activitiesService] Parent detected, id:', parentId);
+        } else {
+          console.log('[activitiesService] No parent_data found in AsyncStorage');
+        }
+      } catch (e) {
+        parentId = null;
+        console.log('[activitiesService] Error reading parent_data from AsyncStorage:', e);
+      }
+      if (parentId) {
+        isParent = true;
+        // Get all children for this parent
+        const { data: children, error: childrenError } = await supabase
+          .from('parent_children')
+          .select('team_id')
+          .eq('parent_id', parentId)
+          .eq('is_active', true);
+        if (!childrenError && children && children.length > 0) {
+          teamIds = Array.from(new Set(children.map((c: any) => c.team_id).filter(Boolean)));
+          console.log('[activitiesService] Parent teamIds:', teamIds);
+        } else {
+          console.log('[activitiesService] No teams found for parent:', parentId);
+        }
+      }
+    }
+
+    // If parent and has teamIds, fetch activities for those teams
+    if (isParent) {
+      if (teamIds.length === 0) {
+        console.log('[activitiesService] Parent has no teams, returning empty activities array');
+        return { data: [], error: null };
+      }
+      // Fetch activities for all teams in the date range
+      let allActivities: Activity[] = [];
+      for (const tId of teamIds) {
+        let query = supabase
+          .from('activities')
+          .select('*, teams(name)')
+          .eq('team_id', tId)
+          .or(`start_time.gte.${startDate},repeat_until.gte.${startDate}`)
+          .order('start_time', { ascending: true });
+        const { data, error } = await query;
+        if (!error && data) {
+          allActivities = [...allActivities, ...data];
+        }
+      }
+      // Process recurring activities
+      let expandedActivities: Activity[] = [...allActivities];
+      allActivities.forEach(activity => {
+        if (activity.is_repeating) {
+          const instances = generateRecurringInstances(activity, startDate, endDate);
+          expandedActivities = [...expandedActivities, ...instances];
+        }
+      });
+      // Filter to include only activities that fall within the date range
+      const filteredActivities = expandedActivities.filter(activity => {
+        const activityDate = parseISO(activity.start_time);
+        const start = parseISO(startDate);
+        const end = parseISO(endDate);
+        return (isBefore(activityDate, end) || isSameDay(activityDate, end)) && 
+               (isAfter(activityDate, start) || isSameDay(activityDate, start));
+      });
+      return { data: filteredActivities, error: null };
+    }
+
+    // Default: original logic for admin/coach
     if (!clubId) {
       throw new Error('User not associated with a club');
     }
@@ -354,88 +432,58 @@ export const getActivitiesByDateRange = async (startDate: string, endDate: strin
  */
 export const getActivityById = async (id: string): Promise<ActivityResponse> => {
   try {
-    // Get user's club_id
+    // Detect composite ID (UUID + date)
+    const compositeIdMatch = id.match(/^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-(\d{8})$/i);
+    if (compositeIdMatch) {
+      const baseUuid = compositeIdMatch[1];
+      const datePortion = compositeIdMatch[2];
+      // Fetch the parent activity by base UUID
+      const { data: parentActivity, error: parentError } = await supabase
+        .from('activities')
+        .select('*')
+        .eq('id', baseUuid)
+        .maybeSingle();
+      if (parentError) throw parentError;
+      if (!parentActivity) return { data: null, error: new Error('Parent activity not found') };
+      // Reconstruct the instance details
+      const year = parseInt(datePortion.substring(0, 4));
+      const month = parseInt(datePortion.substring(4, 6)) - 1;
+      const day = parseInt(datePortion.substring(6, 8));
+      const instanceDate = new Date(year, month, day);
+      const startDate = new Date(parentActivity.start_time);
+      let activityInstance = { ...parentActivity };
+      // Adjust the start time for this instance
+      const newStartTime = new Date(instanceDate);
+      newStartTime.setHours(startDate.getHours(), startDate.getMinutes(), 0, 0);
+      activityInstance.start_time = newStartTime.toISOString();
+      activityInstance.id = id; // Set the composite ID
+      activityInstance.parent_activity_id = baseUuid;
+      activityInstance.is_recurring_instance = true;
+      // Adjust end_time if present
+      if (parentActivity.end_time) {
+        const origStart = new Date(parentActivity.start_time);
+        const origEnd = new Date(parentActivity.end_time);
+        const durationMs = origEnd.getTime() - origStart.getTime();
+        const newEndTime = new Date(newStartTime.getTime() + durationMs);
+        activityInstance.end_time = newEndTime.toISOString();
+      }
+      return { data: activityInstance, error: null };
+    }
+
+    // Standard activity lookup
     const clubId = await getUserClubId();
     if (!clubId) {
       throw new Error('User not associated with a club');
     }
+    const { data, error } = await supabase
+      .from('activities')
+      .select('*')
+      .eq('id', id)
+      .eq('club_id', clubId)
+      .single();
 
-    // Handle virtual recurring instances
-    if (id.includes('-')) {
-      // Check if this is a standard UUID
-      const isStandardUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-      
-      if (isStandardUuid) {
-        // Regular activity lookup
-        const { data, error } = await supabase
-          .from('activities')
-          .select('*')
-          .eq('id', id)
-          .eq('club_id', clubId)
-          .single();
-
-        if (error) throw error;
-        return { data, error: null };
-      }
-      
-      // This is a composite ID for a recurring instance
-      // Format should be: {parentUUID}-{yyyyMMdd}
-      // Extract the parent UUID portion
-      const parentIdMatch = id.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
-      
-      if (!parentIdMatch || !parentIdMatch[1]) {
-        throw new Error(`Could not extract valid parent UUID from ID: ${id}`);
-      }
-      
-      const parentId = parentIdMatch[1];
-      
-      // Get the parent activity
-      const { data: parentActivity, error: parentError } = await supabase
-        .from('activities')
-        .select('*')
-        .eq('id', parentId)
-        .eq('club_id', clubId)
-        .single();
-        
-      if (parentError) throw parentError;
-      if (!parentActivity) throw new Error('Parent activity not found');
-      
-      // Extract the date portion (should be after the UUID)
-      const datePortion = id.substring(parentId.length + 1);
-      
-      // Convert the date portion to a Date
-      const year = parseInt(datePortion.substring(0, 4));
-      const month = parseInt(datePortion.substring(4, 6)) - 1; // JS months are 0-indexed
-      const day = parseInt(datePortion.substring(6, 8));
-      
-      const instanceDate = new Date(year, month, day);
-      
-      // Calculate how many recurrences from the start date
-      const startDate = new Date(parentActivity.start_time);
-      
-      // Create a specific instance for this date
-      let activityInstance = { ...parentActivity };
-      
-      // Adjust the start time for this instance
-      const newStartTime = new Date(instanceDate);
-      newStartTime.setHours(startDate.getHours(), startDate.getMinutes(), 0, 0);
-      
-      activityInstance.start_time = newStartTime.toISOString();
-      activityInstance.id = id; // Set the composite ID
-      
-      return { data: activityInstance, error: null };
-    } else {
-      // Standard activity lookup
-      const { data, error } = await supabase
-        .from('activities')
-        .select('*')
-        .eq('id', id)
-        .eq('club_id', clubId)
-        .single();
-
-      if (error) throw error;
-      return { data, error: null };
-    }
+    if (error) throw error;
+    return { data, error: null };
   } catch (error) {
     console.error('Error fetching activity:', error);
     return { data: null, error: error as Error };
