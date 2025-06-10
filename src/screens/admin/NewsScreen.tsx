@@ -106,6 +106,7 @@ export const AdminNewsScreen = () => {
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [availableTeams, setAvailableTeams] = useState<{ id: string; name: string }[]>([]);
   const [loadingTeams, setLoadingTeams] = useState(true);
+  const [clubId, setClubId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchTeams = async () => {
@@ -113,12 +114,25 @@ export const AdminNewsScreen = () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
+        console.log('DEBUG: Admin user ID:', user.id);
+        
         const { data: club } = await supabase
           .from('clubs')
           .select('id')
           .eq('admin_id', user.id)
           .single();
-        if (!club) return;
+          
+        console.log('DEBUG: Club data from query:', club);
+        
+        if (!club) {
+          console.warn('DEBUG: No club found for admin user:', user.id);
+          return;
+        }
+        
+        // Store the club ID
+        console.log('DEBUG: Setting clubId to:', club.id);
+        setClubId(club.id);
+        
         const { data: teamsData, error } = await supabase
           .from('teams')
           .select('id, name')
@@ -169,9 +183,13 @@ export const AdminNewsScreen = () => {
     <View style={styles.container}>
       <NewsFeed
         key={refreshKey}
+        filters={{ club_id: clubId || undefined }}
         onPressComments={handlePressComments}
         onEdit={handleEdit}
       />
+      <Text style={{ position: 'absolute', top: 0, right: 10, fontSize: 10, color: 'gray' }}>
+        Club ID: {clubId || 'none'}
+      </Text>
       <TouchableOpacity style={styles.fab} onPress={handleCreate}>
         <Text style={styles.fabText}>+</Text>
       </TouchableOpacity>
