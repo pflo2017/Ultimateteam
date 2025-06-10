@@ -189,9 +189,6 @@ export const AdminNewsScreen = () => {
             onPressComments={handlePressComments}
             onEdit={handleEdit}
           />
-          <Text style={{ position: 'absolute', top: 0, right: 10, fontSize: 10, color: 'gray' }}>
-            Club ID: {clubId || 'none'}
-          </Text>
           <TouchableOpacity style={styles.fab} onPress={handleCreate}>
             <Text style={styles.fabText}>+</Text>
           </TouchableOpacity>

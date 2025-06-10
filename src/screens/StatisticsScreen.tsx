@@ -131,17 +131,25 @@ export const StatisticsScreen = () => {
     try {
       console.log('Loading teams for role:', userRole);
       if (userRole === 'admin') {
-        // Admin sees all teams
+        // Get current admin's club
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data: club, error: clubError } = await supabase
+          .from('clubs')
+          .select('id')
+          .eq('admin_id', user.id)
+          .single();
+        if (clubError || !club) return;
+
+        // Fetch only teams from this club
         const { data, error } = await supabase
           .from('teams')
           .select('id, name')
+          .eq('club_id', club.id)
           .eq('is_active', true)
           .order('name');
-          
         if (error) throw error;
-        console.log('Admin teams loaded:', data?.length);
         setTeams(data || []);
-        
       } else if (userRole === 'coach' && coachId) {
         // Coach sees only their teams
         console.log('Loading teams for coach with internal ID:', coachId);
