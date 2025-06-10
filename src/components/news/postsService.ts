@@ -11,56 +11,35 @@ export const fetchPosts = async (filters?: { team_ids?: string[]; club_id?: stri
 
   if (!clubId) {
     console.warn('No club_id provided for fetchPosts, this may result in seeing posts from other clubs');
+    // Early return empty array if no club_id is provided - DON'T SHOW ANY POSTS
+    // This is necessary to prevent mixing data between clubs
+    return [];
   }
 
-  // 1. Fetch general posts
+  // 1. Fetch general posts with club_id filter
   let generalPosts: any[] = [];
-  let generalError = null;
-  
-  // Apply club_id filter directly in the query if provided
-  if (clubId) {
-    // Fetch only general posts for this club
-    const { data, error } = await supabase
-      .from('posts')
-      .select(`
-        id, title, content, author_id, author_name, author_role, created_at, is_general, club_id, media_urls
-      `)
-      .eq('is_general', true)
-      .eq('is_active', true)
-      .eq('club_id', clubId)
-      .order('created_at', { ascending: false });
+  const { data: generalData, error: generalError } = await supabase
+    .from('posts')
+    .select(`
+      id, title, content, author_id, author_name, author_role, created_at, is_general, club_id, media_urls
+    `)
+    .eq('is_general', true)
+    .eq('is_active', true)
+    .eq('club_id', clubId)
+    .order('created_at', { ascending: false });
     
-    generalError = error;
-    if (!error && data) {
-      generalPosts = data;
-    }
-    console.log(`Fetched general posts with club_id=${clubId}:`, generalPosts?.length || 0);
-  } else {
-    // If no club_id filter, fetch all general posts
-    const { data, error } = await supabase
-      .from('posts')
-      .select(`
-        id, title, content, author_id, author_name, author_role, created_at, is_general, club_id, media_urls
-      `)
-      .eq('is_general', true)
-      .eq('is_active', true)
-      .order('created_at', { ascending: false });
-      
-    generalError = error;
-    if (!error && data) {
-      generalPosts = data;
-    }
-    console.log('Original general posts:', generalPosts?.length || 0);
-    console.log('General posts club_ids:', generalPosts?.map(p => p.club_id) || []);
+  console.log(`Fetched general posts with club_id=${clubId}:`, generalData?.length || 0);
+  if (!generalError && generalData) {
+    generalPosts = generalData;
   }
     
   console.log('General posts:', generalPosts?.length || 0, 'Error:', generalError);
-  if (generalError) generalPosts = [];
 
   // 2. Fetch team posts if teamIds are provided
   let teamPosts: any[] = [];
   if (teamIds.length > 0) {
-    const query = supabase
+    console.log('Team posts query with teamIds:', teamIds);
+    const { data, error } = await supabase
       .from('posts')
       .select(`
         id, title, content, author_id, author_name, author_role, created_at, is_general, club_id, media_urls,
@@ -68,17 +47,10 @@ export const fetchPosts = async (filters?: { team_ids?: string[]; club_id?: stri
       `)
       .eq('is_general', false)
       .eq('is_active', true)
-      .in('post_teams.team_id', teamIds);
+      .eq('club_id', clubId)
+      .in('post_teams.team_id', teamIds)
+      .order('created_at', { ascending: false });
       
-    console.log('Team posts query with teamIds:', teamIds);
-    
-    // Add club_id filter if available
-    if (clubId) {
-      console.log('Adding club_id filter to team posts query:', clubId);
-      query.eq('club_id', clubId);
-    }
-    
-    const { data, error } = await query.order('created_at', { ascending: false });
     if (!error && data) {
       teamPosts = data;
       console.log('Team posts count:', teamPosts.length);
@@ -86,25 +58,19 @@ export const fetchPosts = async (filters?: { team_ids?: string[]; club_id?: stri
     }
     console.log('Team posts (with teamIds):', teamPosts.length, 'Error:', error);
   } else {
-    // If no teamIds, fetch all team posts (for admin/coach views)
-    const query = supabase
+    // If no teamIds, fetch all team posts for this club (for admin/coach views)
+    console.log('Team posts query without teamIds for club_id:', clubId);
+    const { data, error } = await supabase
       .from('posts')
       .select(`
         id, title, content, author_id, author_name, author_role, created_at, is_general, club_id, media_urls,
         post_teams:post_teams ( team_id, team:team_id ( id, name ) )
       `)
       .eq('is_general', false)
-      .eq('is_active', true);
+      .eq('is_active', true)
+      .eq('club_id', clubId)
+      .order('created_at', { ascending: false });
       
-    console.log('Team posts query without teamIds');
-    
-    // Add club_id filter if available
-    if (clubId) {
-      console.log('Adding club_id filter to team posts query:', clubId);
-      query.eq('club_id', clubId);
-    }
-    
-    const { data, error } = await query.order('created_at', { ascending: false });
     if (!error && data) {
       teamPosts = data;
       console.log('Team posts count:', teamPosts.length);
@@ -114,7 +80,7 @@ export const fetchPosts = async (filters?: { team_ids?: string[]; club_id?: stri
   }
 
   // Merge and format posts
-  const allPosts = [...(generalPosts || []), ...(teamPosts || [])];
+  const allPosts = [...generalPosts, ...teamPosts];
   console.log('Total posts after merging:', allPosts.length);
   
   // Remove duplicates (in case of overlap)

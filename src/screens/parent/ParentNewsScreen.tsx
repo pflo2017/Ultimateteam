@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Text } from 'react-native';
 import { NewsFeed } from '../../components/news/NewsFeed';
 import { Post } from '../../components/news/types';
 import { CommentModal } from '../../components/news/CommentModal';
@@ -41,13 +41,20 @@ export const ParentNewsScreen = () => {
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [teamIds, setTeamIds] = useState<string[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [clubId, setClubId] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchTeamIds = async () => {
+    const fetchParentInfo = async () => {
       try {
         const parentData = await AsyncStorage.getItem('parent_data');
         if (!parentData) return;
         const parent = JSON.parse(parentData);
+        
+        // Set the club_id if available
+        if (parent.club_id) {
+          setClubId(parent.club_id);
+        }
+        
         // Get all children for this parent
         const { data: children, error } = await supabase
           .from('parent_children')
@@ -58,11 +65,24 @@ export const ParentNewsScreen = () => {
         const ids = Array.from(new Set((children || []).map((c: any) => c.team_id).filter(Boolean)));
         setTeamIds(ids);
         console.log('Parent teamIds:', ids);
+        
+        // If no club_id in parent data, try to get it from team
+        if (!parent.club_id && ids.length > 0) {
+          const { data: teamData } = await supabase
+            .from('teams')
+            .select('club_id')
+            .eq('id', ids[0])
+            .single();
+          
+          if (teamData?.club_id) {
+            setClubId(teamData.club_id);
+          }
+        }
       } catch (err) {
         setTeamIds([]);
       }
     };
-    fetchTeamIds();
+    fetchParentInfo();
   }, []);
 
   const handlePressComments = (post: Post) => {
@@ -70,10 +90,21 @@ export const ParentNewsScreen = () => {
     setShowCommentModal(true);
   };
 
-  console.log('Rendering NewsFeed with teamIds:', teamIds);
+  console.log('Rendering NewsFeed with teamIds:', teamIds, 'clubId:', clubId);
   return (
     <View style={styles.container}>
-      <NewsFeed key={refreshKey} filters={{ team_ids: teamIds }} onPressComments={handlePressComments} />
+      {clubId ? (
+        <NewsFeed 
+          key={refreshKey} 
+          filters={{ team_ids: teamIds, club_id: clubId }} 
+          onPressComments={handlePressComments} 
+        />
+      ) : (
+        <View style={styles.centered}>
+          <Text>Loading club information...</Text>
+        </View>
+      )}
+      
       {selectedPost && (
         <CommentModal
           visible={showCommentModal}
@@ -94,5 +125,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.white,
     paddingTop: 24,
+  },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 }); 

@@ -181,18 +181,26 @@ export const AdminNewsScreen = () => {
 
   return (
     <View style={styles.container}>
-      <NewsFeed
-        key={refreshKey}
-        filters={{ club_id: clubId || undefined }}
-        onPressComments={handlePressComments}
-        onEdit={handleEdit}
-      />
-      <Text style={{ position: 'absolute', top: 0, right: 10, fontSize: 10, color: 'gray' }}>
-        Club ID: {clubId || 'none'}
-      </Text>
-      <TouchableOpacity style={styles.fab} onPress={handleCreate}>
-        <Text style={styles.fabText}>+</Text>
-      </TouchableOpacity>
+      {clubId ? (
+        <>
+          <NewsFeed
+            key={refreshKey}
+            filters={{ club_id: clubId }}
+            onPressComments={handlePressComments}
+            onEdit={handleEdit}
+          />
+          <Text style={{ position: 'absolute', top: 0, right: 10, fontSize: 10, color: 'gray' }}>
+            Club ID: {clubId || 'none'}
+          </Text>
+          <TouchableOpacity style={styles.fab} onPress={handleCreate}>
+            <Text style={styles.fabText}>+</Text>
+          </TouchableOpacity>
+        </>
+      ) : (
+        <View style={styles.centered}>
+          <Text>Loading club information...</Text>
+        </View>
+      )}
       {loadingTeams && (
         <View style={{ position: 'absolute', top: 100, left: 0, right: 0, alignItems: 'center' }}>
           <Text>Loading teams...</Text>
@@ -240,5 +248,10 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: 'bold',
     marginBottom: 2,
+  },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 }); 

@@ -96,26 +96,35 @@ export const AdminHomeScreen = () => {
         .eq('club_id', club.id)
         .eq('is_active', true)
         .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
-
-      if (error) throw error;
-      if (posts) {
-        // Format the post to match the Post type
+        .limit(1);
+        
+      if (error) {
+        console.error('Error fetching latest post:', error);
+        return;
+      }
+      
+      // Check if we have any posts
+      if (posts && posts.length > 0) {
+        // Format the first post to match the Post type
         const formattedPost: Post = {
-          id: posts.id,
-          title: posts.title,
-          content: posts.content,
-          author_id: posts.author_id,
-          author_name: posts.author_name,
-          author_role: posts.author_role,
-          created_at: posts.created_at,
-          teams: posts.post_teams?.map((pt: any) => pt.team) || [],
+          id: posts[0].id,
+          title: posts[0].title,
+          content: posts[0].content,
+          author_id: posts[0].author_id,
+          author_name: posts[0].author_name,
+          author_role: posts[0].author_role,
+          created_at: posts[0].created_at,
+          teams: posts[0].post_teams?.map((pt: any) => pt.team) || [],
         };
         setLatestPost(formattedPost);
+      } else {
+        // No posts found, set latestPost to null
+        setLatestPost(null);
       }
     } catch (error) {
       console.error('Error loading latest post:', error);
+      // Make sure we don't leave latestPost in an undefined state
+      setLatestPost(null);
     }
   };
 
