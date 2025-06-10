@@ -9,6 +9,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRoute, RouteProp } from '@react-navigation/native';
 import type { CoachTabParamList } from '../../navigation/CoachNavigator';
 import { useDataRefresh } from '../../utils/useDataRefresh';
+import { registerEventListener } from '../../utils/events';
 
 interface Team {
   id: string;
@@ -57,6 +58,27 @@ export const CoachManageScreen = () => {
     console.log("Payment status change detected - refreshing players data");
     loadData();
   });
+
+  useEffect(() => {
+    // Listen for payment status changes
+    const handlePaymentStatusChange = () => {
+      console.log('[CoachManageScreen] Payment status changed, refreshing player data');
+      loadData();
+    };
+    const unregisterPayment = registerEventListener('payment_status_changed', handlePaymentStatusChange);
+    
+    // Listen for player deletion events
+    const handlePlayerDeleted = () => {
+      console.log('[CoachManageScreen] Player deleted, refreshing player data');
+      loadData();
+    };
+    const unregisterPlayerDelete = registerEventListener('player_deleted', handlePlayerDeleted);
+    
+    return () => {
+      unregisterPayment();
+      unregisterPlayerDelete();
+    };
+  }, []);
 
   const loadData = async () => {
     try {
