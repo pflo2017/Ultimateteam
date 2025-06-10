@@ -106,6 +106,7 @@ export const AdminNewsScreen = () => {
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [availableTeams, setAvailableTeams] = useState<{ id: string; name: string }[]>([]);
   const [loadingTeams, setLoadingTeams] = useState(true);
+  const [clubId, setClubId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchTeams = async () => {
@@ -113,12 +114,25 @@ export const AdminNewsScreen = () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
+        console.log('DEBUG: Admin user ID:', user.id);
+        
         const { data: club } = await supabase
           .from('clubs')
           .select('id')
           .eq('admin_id', user.id)
           .single();
-        if (!club) return;
+          
+        console.log('DEBUG: Club data from query:', club);
+        
+        if (!club) {
+          console.warn('DEBUG: No club found for admin user:', user.id);
+          return;
+        }
+        
+        // Store the club ID
+        console.log('DEBUG: Setting clubId to:', club.id);
+        setClubId(club.id);
+        
         const { data: teamsData, error } = await supabase
           .from('teams')
           .select('id, name')
@@ -167,14 +181,23 @@ export const AdminNewsScreen = () => {
 
   return (
     <View style={styles.container}>
-      <NewsFeed
-        key={refreshKey}
-        onPressComments={handlePressComments}
-        onEdit={handleEdit}
-      />
-      <TouchableOpacity style={styles.fab} onPress={handleCreate}>
-        <Text style={styles.fabText}>+</Text>
-      </TouchableOpacity>
+      {clubId ? (
+        <>
+          <NewsFeed
+            key={refreshKey}
+            filters={{ club_id: clubId }}
+            onPressComments={handlePressComments}
+            onEdit={handleEdit}
+          />
+          <TouchableOpacity style={styles.fab} onPress={handleCreate}>
+            <Text style={styles.fabText}>+</Text>
+          </TouchableOpacity>
+        </>
+      ) : (
+        <View style={styles.centered}>
+          <Text>Loading club information...</Text>
+        </View>
+      )}
       {loadingTeams && (
         <View style={{ position: 'absolute', top: 100, left: 0, right: 0, alignItems: 'center' }}>
           <Text>Loading teams...</Text>
@@ -222,5 +245,10 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: 'bold',
     marginBottom: 2,
+  },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 }); 

@@ -8,6 +8,9 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../types/navigation';
 import { format } from 'date-fns';
 import { supabase } from '@/lib/supabase';
+import { Activity, getActivityById } from '../services/activitiesService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { CommonActions } from '@react-navigation/native';
 
 // Utility function to extract the base UUID from a recurring activity ID
 // NOTE: We're keeping this function for reference, but we'll now use the FULL activity ID
@@ -74,7 +77,7 @@ type ActivityInfo = {
   title: string;
   type: string;
   start_time: string;
-  team_id: string;
+  team_id?: string;
 };
 
 type TeamInfo = {
@@ -84,12 +87,14 @@ type TeamInfo = {
 
 type AttendanceReportDetailsRouteParams = {
   activityId: string;
+  selectedDate?: string;
 };
 
 export const AttendanceReportDetailsScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<{ params: AttendanceReportDetailsRouteParams }, 'params'>>();
   const activityId = (route.params && (route.params as any).activityId) || '';
+  const [userRole, setUserRole] = useState<'admin' | 'coach' | 'parent' | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
@@ -99,56 +104,22 @@ export const AttendanceReportDetailsScreen = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const loadUserRole = async () => {
+      const role = await AsyncStorage.getItem('userRole');
+      setUserRole(role as 'admin' | 'coach' | 'parent' | null);
+    };
+    loadUserRole();
+  }, []);
+
+  useEffect(() => {
     const fetchAll = async () => {
       setIsLoading(true);
       setError(null);
       try {
-        // Use the FULL activity ID to ensure we're loading attendance for this specific instance
-        console.log('Loading attendance report for specific activity instance:', activityId);
-        
-        // 1. Fetch activity info - first try with the exact ID
-        let activityData;
-        let activityError;
-        
-        // Try to get the activity directly - for recurring instances this might be virtual
-        const { data, error } = await supabase
-          .from('activities')
-          .select('id, title, type, start_time, team_id')
-          .eq('id', activityId.substring(0, 36)) // Use base ID for activity lookup
-          .maybeSingle();
-          
-        if (data) {
-          // We found the activity directly
-          activityData = data;
-          
-          // For recurring instances, override the ID with the full instance ID
-          if (activityId.includes('-2025') || activityId.includes('-2024')) {
-            activityData = {
-              ...data,
-              id: activityId
-            };
-          }
-        } else if (activityId.includes('-')) {
-          // This might be a recurring instance ID, try to get the parent activity
-          const parentId = activityId.split('-').slice(0, 5).join('-');
-          const { data: parentData, error: parentError } = await supabase
-            .from('activities')
-            .select('id, title, type, start_time, team_id')
-            .eq('id', parentId)
-          .single();
-            
-          if (parentError) throw parentError;
-          
-          // Use parent data but keep the instance ID
-          activityData = {
-            ...parentData,
-            id: activityId
-          };
-        } else {
-          throw error || new Error('Activity not found');
-        }
-        
-        setActivity(activityData);
+        // Use getActivityById to fetch the correct instance (handles recurring logic)
+        const { data: activityData, error: activityError } = await getActivityById(activityId);
+        if (activityError || !activityData) throw activityError || new Error('Activity not found');
+        setActivity(activityData as ActivityInfo);
 
         // 2. Fetch team info
         let teamData = null;
@@ -207,7 +178,53 @@ export const AttendanceReportDetailsScreen = () => {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => {
+          if (route.params?.selectedDate) {
+            if (userRole === 'admin') {
+              navigation.dispatch(
+                CommonActions.reset({
+                  index: 0,
+                  routes: [
+                    { 
+                      name: 'AdminRoot',
+                      params: {
+                        screen: 'Attendance',
+                        params: { 
+                          restoreDate: route.params.selectedDate,
+                          activityId: route.params.activityId
+                        }
+                      }
+                    }
+                  ],
+                })
+              );
+            } else if (userRole === 'coach') {
+              navigation.dispatch(
+                CommonActions.reset({
+                  index: 0,
+                  routes: [
+                    { 
+                      name: 'Coach',
+                      params: {
+                        screen: 'Attendance',
+                        params: { 
+                          restoreDate: route.params.selectedDate,
+                          activityId: route.params.activityId
+                        }
+                      }
+                    }
+                  ],
+                })
+              );
+            } else if (userRole === 'parent') {
+              navigation.navigate('ParentNavigator', { screen: 'Events' });
+            } else {
+              navigation.goBack();
+            }
+          } else {
+            navigation.goBack();
+          }
+        }} style={styles.backButton}>
           <MaterialCommunityIcons name="arrow-left" size={24} color={COLORS.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Attendance Details</Text>

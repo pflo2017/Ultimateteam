@@ -107,7 +107,11 @@ export const CoachDashboardScreen = () => {
       const { data: teamsData, error: teamsError } = await supabase
         .rpc('get_coach_teams', { p_coach_id: coach.id });
         
-      if (teamsError) throw teamsError;
+      if (teamsError) {
+        console.error('Error fetching coach teams:', teamsError);
+        return;
+      }
+      
       if (!teamsData || teamsData.length === 0) return;
       
       // Extract team IDs
@@ -120,7 +124,11 @@ export const CoachDashboardScreen = () => {
         .eq('id', teamIds[0])
         .single();
 
-      if (clubError) throw clubError;
+      if (clubError) {
+        console.error('Error fetching club data:', clubError);
+        return;
+      }
+      
       if (!clubData) return;
 
       // Fetch the latest post for this club
@@ -133,26 +141,35 @@ export const CoachDashboardScreen = () => {
         .eq('club_id', clubData.club_id)
         .eq('is_active', true)
         .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
+        .limit(1);
 
-      if (error) throw error;
-      if (posts) {
-        // Format the post to match the Post type
+      if (error) {
+        console.error('Error fetching latest post:', error);
+        return;
+      }
+      
+      // Check if we have any posts
+      if (posts && posts.length > 0) {
+        // Format the first post to match the Post type
         const formattedPost: Post = {
-          id: posts.id,
-          title: posts.title,
-          content: posts.content,
-          author_id: posts.author_id,
-          author_name: posts.author_name,
-          author_role: posts.author_role,
-          created_at: posts.created_at,
-          teams: posts.post_teams?.map((pt: any) => pt.team) || [],
+          id: posts[0].id,
+          title: posts[0].title,
+          content: posts[0].content,
+          author_id: posts[0].author_id,
+          author_name: posts[0].author_name,
+          author_role: posts[0].author_role,
+          created_at: posts[0].created_at,
+          teams: posts[0].post_teams?.map((pt: any) => pt.team) || [],
         };
         setLatestPost(formattedPost);
+      } else {
+        // No posts found, set latestPost to null
+        setLatestPost(null);
       }
     } catch (error) {
       console.error('Error loading latest post:', error);
+      // Make sure we don't leave latestPost in an undefined state
+      setLatestPost(null);
     }
   };
 
@@ -182,6 +199,11 @@ export const CoachDashboardScreen = () => {
         <View style={styles.divider} />
         <View style={styles.carouselHeaderRow}>
           <Text style={styles.carouselTitle}>Future activities</Text>
+          {activities.length > 3 && (
+            <TouchableOpacity onPress={handleSeeAll} style={styles.seeAllButton} activeOpacity={0.7}>
+              <Text style={styles.seeAllText}>See all &gt;</Text>
+            </TouchableOpacity>
+          )}
         </View>
         <View style={styles.carouselContainer}>
           <FlatList
@@ -198,13 +220,8 @@ export const CoachDashboardScreen = () => {
                 <EventCard activity={item} />
               </TouchableOpacity>
             )}
-                  />
-                </View>
-        {activities.length > 3 && (
-          <TouchableOpacity onPress={handleSeeAll} style={styles.seeAllActionWrapper} activeOpacity={0.7}>
-            <Text style={styles.seeAllActionText}>See all &gt;</Text>
-          </TouchableOpacity>
-        )}
+          />
+        </View>
       </>
     );
   };
@@ -314,8 +331,8 @@ const styles = StyleSheet.create({
   carouselHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-start',
-    paddingLeft: SPACING.lg,
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.lg,
     marginBottom: 16,
   },
   carouselTitle: {

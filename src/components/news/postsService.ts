@@ -1,25 +1,44 @@
 import { Post } from './types';
 import { supabase } from '../../lib/supabase';
 
-export const fetchPosts = async (filters?: { team_ids?: string[] }) : Promise<Post[]> => {
+export const fetchPosts = async (filters?: { team_ids?: string[]; club_id?: string }) : Promise<Post[]> => {
   // If no filters, fetch all general posts and all team posts for the user's teams
   let teamIds = filters?.team_ids || [];
+  let clubId = filters?.club_id;
 
-  // 1. Fetch general posts
-  let { data: generalPosts, error: generalError } = await supabase
+  console.log('=== FETCH POSTS DEBUGGING ===');
+  console.log('Filters provided:', { teamIds, clubId });
+
+  if (!clubId) {
+    console.warn('No club_id provided for fetchPosts, this may result in seeing posts from other clubs');
+    // Early return empty array if no club_id is provided - DON'T SHOW ANY POSTS
+    // This is necessary to prevent mixing data between clubs
+    return [];
+  }
+
+  // 1. Fetch general posts with club_id filter
+  let generalPosts: any[] = [];
+  const { data: generalData, error: generalError } = await supabase
     .from('posts')
     .select(`
       id, title, content, author_id, author_name, author_role, created_at, is_general, club_id, media_urls
     `)
     .eq('is_general', true)
     .eq('is_active', true)
+    .eq('club_id', clubId)
     .order('created_at', { ascending: false });
-  console.log('General posts:', generalPosts, 'Error:', generalError);
-  if (generalError) generalPosts = [];
+    
+  console.log(`Fetched general posts with club_id=${clubId}:`, generalData?.length || 0);
+  if (!generalError && generalData) {
+    generalPosts = generalData;
+  }
+    
+  console.log('General posts:', generalPosts?.length || 0, 'Error:', generalError);
 
   // 2. Fetch team posts if teamIds are provided
   let teamPosts: any[] = [];
   if (teamIds.length > 0) {
+    console.log('Team posts query with teamIds:', teamIds);
     const { data, error } = await supabase
       .from('posts')
       .select(`
@@ -28,12 +47,19 @@ export const fetchPosts = async (filters?: { team_ids?: string[] }) : Promise<Po
       `)
       .eq('is_general', false)
       .eq('is_active', true)
+      .eq('club_id', clubId)
       .in('post_teams.team_id', teamIds)
       .order('created_at', { ascending: false });
-    if (!error && data) teamPosts = data;
-    console.log('Team posts (with teamIds):', teamPosts, 'Error:', error);
+      
+    if (!error && data) {
+      teamPosts = data;
+      console.log('Team posts count:', teamPosts.length);
+      console.log('Team posts club_ids:', teamPosts.map(p => p.club_id));
+    }
+    console.log('Team posts (with teamIds):', teamPosts.length, 'Error:', error);
   } else {
-    // If no teamIds, fetch all team posts (for admin/coach views)
+    // If no teamIds, fetch all team posts for this club (for admin/coach views)
+    console.log('Team posts query without teamIds for club_id:', clubId);
     const { data, error } = await supabase
       .from('posts')
       .select(`
@@ -42,16 +68,26 @@ export const fetchPosts = async (filters?: { team_ids?: string[] }) : Promise<Po
       `)
       .eq('is_general', false)
       .eq('is_active', true)
+      .eq('club_id', clubId)
       .order('created_at', { ascending: false });
-    if (!error && data) teamPosts = data;
-    console.log('Team posts (no teamIds):', teamPosts, 'Error:', error);
+      
+    if (!error && data) {
+      teamPosts = data;
+      console.log('Team posts count:', teamPosts.length);
+      console.log('Team posts club_ids:', teamPosts.map(p => p.club_id));
+    }
+    console.log('Team posts (no teamIds):', teamPosts.length, 'Error:', error);
   }
 
   // Merge and format posts
-  const allPosts = [...(generalPosts || []), ...(teamPosts || [])];
+  const allPosts = [...generalPosts, ...teamPosts];
+  console.log('Total posts after merging:', allPosts.length);
+  
   // Remove duplicates (in case of overlap)
   const uniquePosts = Array.from(new Map(allPosts.map(p => [p.id, p])).values());
-  console.log('All posts merged:', uniquePosts);
+  console.log('Total posts after removing duplicates:', uniquePosts.length);
+  console.log('Final posts club_ids:', uniquePosts.map(p => p.club_id));
+  console.log('=== END DEBUGGING ===');
 
   // Fetch comment counts for all post ids
   const postIds = uniquePosts.map((p: any) => p.id);

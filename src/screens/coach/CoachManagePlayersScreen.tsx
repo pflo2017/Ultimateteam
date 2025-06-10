@@ -191,6 +191,19 @@ const PlayerCard = ({ player, onDetailsPress, onDelete, onUpdateMedicalVisa }: {
     return () => unregister();
   }, [player.id]);
 
+  // Listen for medical visa status changes
+  useEffect(() => {
+    const handleMedicalVisaStatusChange = (updatedPlayer: Player) => {
+      if (updatedPlayer.id === player.id) {
+        console.log(`[DEBUG] Medical visa status change detected for player ${player.id}, refreshing data`);
+        getLatestData();
+      }
+    };
+    
+    const unregister = registerEventListener('medical_visa_status_changed', handleMedicalVisaStatusChange);
+    return () => unregister();
+  }, [player.id]);
+
   // Also listen for general payment data changes
   useDataRefresh('payments', () => {
     console.log(`[DEBUG] Payment data change detected, refreshing data for player ${player.id}`);

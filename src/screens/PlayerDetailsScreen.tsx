@@ -5,6 +5,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { RouteProp } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { registerEventListener, triggerEvent } from '../utils/events';
 
 // Placeholder: Replace with your actual theme/colors
 const COLORS = {
@@ -14,6 +15,7 @@ const COLORS = {
   error: '#F44336',
   success: '#4BB543',
   grey: { 600: '#757575', 200: '#eeeeee' },
+  white: '#fff',
 };
 const SPACING = { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 };
 const FONT_SIZES = { xs: 12, sm: 14, md: 16, lg: 20, xl: 24 };
@@ -94,6 +96,7 @@ export const PlayerDetailsScreen = () => {
   const [isPaymentHistoryVisible, setIsPaymentHistoryVisible] = useState(false);
   const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
   const [isLoadingPaymentHistory, setIsLoadingPaymentHistory] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     const fetchPlayerData = async () => {
@@ -334,6 +337,99 @@ export const PlayerDetailsScreen = () => {
     }
   };
 
+  const handleDeletePlayer = async () => {
+    Alert.alert(
+      "Delete Player",
+      "Are you sure you want to delete this player? This action cannot be undone.",
+      [
+        {
+          text: "Cancel",
+          style: "cancel"
+        },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setIsDeleting(true);
+              console.log("Starting deletion process for player ID:", playerId);
+              
+              // Check if player exists and is active
+              const { data: checkData, error: checkError } = await supabase
+                .from('players')
+                .select('is_active')
+                .eq('id', playerId)
+                .single();
+                
+              if (checkError) {
+                console.error('Error checking player:', checkError);
+                throw new Error('Could not find player data');
+              }
+              
+              if (!checkData.is_active) {
+                console.log('Player is already inactive');
+                // Continue with notification and navigation
+                triggerEvent('player_deleted', playerId);
+                Alert.alert(
+                  "Success", 
+                  "Player deleted successfully",
+                  [{ text: "OK", onPress: () => navigation.goBack() }]
+                );
+                return;
+              }
+              
+              // First, update the player to set is_active to false (soft delete)
+              const { error: updateError } = await supabase
+                .from('players')
+                .update({ is_active: false })
+                .eq('id', playerId)
+                .eq('is_active', true); // Add this condition to ensure we're updating an active player
+                
+              if (updateError) {
+                console.error('Error updating player:', updateError);
+                throw new Error('Failed to delete player');
+              }
+              
+              // If the player has a parent_id, also update the corresponding parent_children record
+              if (player?.parent_id) {
+                const { error: childUpdateError } = await supabase
+                  .from('parent_children')
+                  .update({ is_active: false })
+                  .eq('parent_id', player.parent_id)
+                  .eq('full_name', player.name)
+                  .eq('is_active', true); // Add this condition
+                  
+                if (childUpdateError) {
+                  console.error('Error updating parent_children:', childUpdateError);
+                  // Continue even if this update fails
+                }
+              }
+              
+              // Trigger event to notify other screens
+              triggerEvent('player_deleted', playerId);
+              
+              Alert.alert(
+                "Success", 
+                "Player deleted successfully",
+                [
+                  {
+                    text: "OK",
+                    onPress: () => navigation.goBack()
+                  }
+                ]
+              );
+            } catch (error) {
+              console.error('Error in delete process:', error);
+              Alert.alert("Error", error instanceof Error ? error.message : "Failed to delete player");
+            } finally {
+              setIsDeleting(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
   if (isLoading) {
     return (
       <SafeAreaView style={[styles.container, styles.centered]}>
@@ -402,58 +498,6 @@ export const PlayerDetailsScreen = () => {
           </TouchableOpacity>
         </Section>
 
-        {/* Payment History Modal */}
-        <Modal
-          visible={isPaymentHistoryVisible}
-          animationType="slide"
-          transparent={true}
-          onRequestClose={() => setIsPaymentHistoryVisible(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Payment History</Text>
-                <TouchableOpacity 
-                  onPress={() => setIsPaymentHistoryVisible(false)}
-                  style={styles.closeButton}
-                >
-                  <MaterialCommunityIcons name="close" size={24} color={COLORS.text} />
-                </TouchableOpacity>
-              </View>
-              
-              {player && (
-                <Text style={styles.playerModalName}>{player.name}</Text>
-              )}
-              
-              {isLoadingPaymentHistory ? (
-                <ActivityIndicator size="large" color={COLORS.primary} style={{ marginVertical: 20 }} />
-              ) : (
-                <ScrollView style={{ maxHeight: '80%' }}>
-                  {paymentHistory.length === 0 ? (
-                    <Text style={styles.emptyText}>No payment history available</Text>
-                  ) : (
-                    paymentHistory.map((payment, index) => (
-                      <View key={index} style={styles.paymentItem}>
-                        <View>
-                          <Text style={styles.paymentMonth}>
-                            {new Date(payment.year, payment.month - 1).toLocaleString('default', { month: 'long' })} {payment.year}
-                          </Text>
-                          <StatusPill status={payment.status} />
-                        </View>
-                        {payment.updated_at && (
-                          <Text style={styles.paymentDate}>
-                            {formatDate(payment.updated_at)}
-                          </Text>
-                        )}
-                      </View>
-                    ))
-                  )}
-                </ScrollView>
-              )}
-            </View>
-          </View>
-        </Modal>
-
         {/* Medical Visa Information */}
         <Section title="Medical Visa Information">
           <InfoRow 
@@ -510,7 +554,72 @@ export const PlayerDetailsScreen = () => {
             {parent.email && <InfoRow label="Email" value={parent.email} />}
           </Section>
         )}
+        
+        {/* Delete button for admin and coach - moved to bottom of page with consistent styling */}
+        {(role === 'admin' || role === 'coach') && (
+          <TouchableOpacity 
+            style={[styles.deleteButton, isDeleting && styles.disabledButton]} 
+            onPress={handleDeletePlayer}
+            disabled={isDeleting}
+          >
+            <Text style={styles.deleteButtonText}>
+              {isDeleting ? "Deleting..." : "Delete Player"}
+            </Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
+
+      {/* Payment History Modal */}
+      <Modal
+        visible={isPaymentHistoryVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setIsPaymentHistoryVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Payment History</Text>
+              <TouchableOpacity 
+                onPress={() => setIsPaymentHistoryVisible(false)}
+                style={styles.closeButton}
+              >
+                <MaterialCommunityIcons name="close" size={24} color={COLORS.text} />
+              </TouchableOpacity>
+            </View>
+            
+            {player && (
+              <Text style={styles.playerModalName}>{player.name}</Text>
+            )}
+            
+            {isLoadingPaymentHistory ? (
+              <ActivityIndicator size="large" color={COLORS.primary} style={{ marginVertical: 20 }} />
+            ) : (
+              <ScrollView style={{ maxHeight: '80%' }}>
+                {paymentHistory.length === 0 ? (
+                  <Text style={styles.emptyText}>No payment history available</Text>
+                ) : (
+                  paymentHistory.map((payment, index) => (
+                    <View key={index} style={styles.paymentItem}>
+                      <View>
+                        <Text style={styles.paymentMonth}>
+                          {new Date(payment.year, payment.month - 1).toLocaleString('default', { month: 'long' })} {payment.year}
+                        </Text>
+                        <StatusPill status={payment.status} />
+                      </View>
+                      {payment.updated_at && (
+                        <Text style={styles.paymentDate}>
+                          {formatDate(payment.updated_at)}
+                        </Text>
+                      )}
+                    </View>
+                  ))
+                )}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -701,5 +810,26 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     marginBottom: SPACING.md,
     textAlign: 'center',
+  },
+  deleteButton: {
+    backgroundColor: COLORS.white,
+    borderRadius: 100,
+    height: 58,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.error,
+    marginTop: SPACING.lg,
+    marginBottom: SPACING.xl,
+  },
+  deleteButtonText: {
+    color: COLORS.error,
+    fontSize: FONT_SIZES.md,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+    fontFamily: 'Urbanist',
+  },
+  disabledButton: {
+    opacity: 0.7,
   },
 }); 

@@ -148,6 +148,23 @@ export const AdminManageScreen = () => {
     };
   }, []);
 
+  // Add event listener for player_deleted events
+  useEffect(() => {
+    // Listen for player deletion events
+    const handlePlayerDeleted = () => {
+      console.log('Player deleted, refreshing players data');
+      fetchPlayers();
+    };
+
+    // Add event listener and get the unregister function
+    const unregister = registerEventListener('player_deleted', handlePlayerDeleted);
+
+    // Clean up the listener when component unmounts
+    return () => {
+      unregister();
+    };
+  }, []);
+
   const fetchTeams = async () => {
     try {
       console.log('Fetching teams...');

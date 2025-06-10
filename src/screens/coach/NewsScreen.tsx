@@ -111,7 +111,27 @@ export const CoachNewsScreen = () => {
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [availableTeams, setAvailableTeams] = useState<{ id: string; name: string }[]>([]);
   const [loadingTeams, setLoadingTeams] = useState(true);
+  const [clubId, setClubId] = useState<string | null>(null);
   const navigation = useNavigation<NativeStackNavigationProp<CoachStackParamList>>();
+
+  useEffect(() => {
+    // Fetch coach's club_id
+    const fetchCoachClubId = async () => {
+      try {
+        const storedCoachData = await AsyncStorage.getItem('coach_data');
+        if (storedCoachData) {
+          const coachData = JSON.parse(storedCoachData);
+          if (coachData.club_id) {
+            setClubId(coachData.club_id);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching coach club_id:', err);
+      }
+    };
+    
+    fetchCoachClubId();
+  }, []);
 
   useEffect(() => {
     const fetchTeams = async () => {
@@ -177,15 +197,32 @@ export const CoachNewsScreen = () => {
 
   return (
     <View style={styles.container}>
-      <NewsFeed
-        key={refreshKey}
-        filters={{ team_ids: availableTeams.map(t => t.id) }}
-        onPressComments={handlePressComments}
-        onEdit={handleEdit}
-      />
-      <TouchableOpacity style={styles.fab} onPress={handleCreate}>
-        <Text style={styles.fabText}>+</Text>
-      </TouchableOpacity>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>News</Text>
+      </View>
+      
+      {clubId ? (
+        <>
+          <NewsFeed
+            key={refreshKey}
+            filters={{ 
+              team_ids: availableTeams.map(t => t.id),
+              club_id: clubId
+            }}
+            onPressComments={handlePressComments}
+            onEdit={handleEdit}
+          />
+          
+          <TouchableOpacity style={styles.fab} onPress={handleCreate}>
+            <Text style={styles.fabText}>+</Text>
+          </TouchableOpacity>
+        </>
+      ) : (
+        <View style={styles.centered}>
+          <Text>Loading club information...</Text>
+        </View>
+      )}
+      
       {loadingTeams && (
         <View style={{ position: 'absolute', top: 100, left: 0, right: 0, alignItems: 'center' }}>
           <Text>Loading teams...</Text>
@@ -212,6 +249,16 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     paddingTop: SPACING.lg,
   },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: SPACING.md,
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginLeft: SPACING.md,
+  },
   fab: {
     position: 'absolute',
     right: 24,
@@ -233,5 +280,10 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: 'bold',
     marginBottom: 2,
+  },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 }); 

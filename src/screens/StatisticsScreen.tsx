@@ -131,17 +131,25 @@ export const StatisticsScreen = () => {
     try {
       console.log('Loading teams for role:', userRole);
       if (userRole === 'admin') {
-        // Admin sees all teams
+        // Get current admin's club
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data: club, error: clubError } = await supabase
+          .from('clubs')
+          .select('id')
+          .eq('admin_id', user.id)
+          .single();
+        if (clubError || !club) return;
+
+        // Fetch only teams from this club
         const { data, error } = await supabase
           .from('teams')
           .select('id, name')
+          .eq('club_id', club.id)
           .eq('is_active', true)
           .order('name');
-          
         if (error) throw error;
-        console.log('Admin teams loaded:', data?.length);
         setTeams(data || []);
-        
       } else if (userRole === 'coach' && coachId) {
         // Coach sees only their teams
         console.log('Loading teams for coach with internal ID:', coachId);
@@ -273,33 +281,33 @@ export const StatisticsScreen = () => {
           // Also fetch players if we need them
           let relevantPlayers = players;
           
-          // If we don't have players loaded or need players from multiple teams, fetch them
-          if (players.length === 0 || !selectedTeamId) {
-            let playersQuery = supabase.from('players').select('id, name, team_id');
-            
-            if (selectedTeamId) {
-              playersQuery = playersQuery.eq('team_id', selectedTeamId);
-            } else if (userRole === 'coach' && coachId) {
-              // For coach with no team selected, get players from all their teams
-              const { data: coachTeams } = await supabase
-                .from('teams')
-                .select('id')
-                .eq('coach_id', coachId);
-                
-              if (coachTeams && coachTeams.length > 0) {
-                const teamIds = coachTeams.map(t => t.id);
-                playersQuery = playersQuery.in('team_id', teamIds);
-              }
+          // Always fetch fresh player data when loading statistics
+          let activePlayersQuery = supabase.from('players').select('id, name, team_id').eq('is_active', true);
+          
+          if (selectedTeamId) {
+            activePlayersQuery = activePlayersQuery.eq('team_id', selectedTeamId);
+          } else if (userRole === 'coach' && coachId) {
+            // For coach with no team selected, get players from all their teams
+            const { data: coachTeams } = await supabase
+              .from('teams')
+              .select('id')
+              .eq('coach_id', coachId);
+              
+            if (coachTeams && coachTeams.length > 0) {
+              const teamIds = coachTeams.map(t => t.id);
+              activePlayersQuery = activePlayersQuery.in('team_id', teamIds);
             }
-            
-            const { data: playersData, error: playersError } = await playersQuery;
-            
-            if (playersError) {
-              console.error('Error fetching players for stats:', playersError);
-            } else if (playersData) {
-              relevantPlayers = playersData;
-              console.log(`Fetched ${playersData.length} players for statistics`);
-            }
+          }
+          
+          const { data: playersData, error: playersError } = await activePlayersQuery;
+          
+          if (playersError) {
+            console.error('Error fetching players for stats:', playersError);
+          } else if (playersData) {
+            relevantPlayers = playersData;
+            // Update the players state to keep it in sync
+            setPlayers(playersData);
+            console.log(`Fetched ${playersData.length} players for statistics`);
           }
           
           // Now create stats for each player
@@ -574,7 +582,13 @@ export const StatisticsScreen = () => {
       }
       
       console.log(`Loaded ${data?.length || 0} players for team ${teamId}`);
+      // Always update the players state with fresh data
       setPlayers(data || []);
+      
+      // If we're in player view, trigger a statistics reload to ensure we have fresh data
+      if (activeView === 'player') {
+        loadStatistics();
+      }
     } catch (error) {
       console.error('Error in loadPlayersForTeam:', error);
       setPlayers([]);

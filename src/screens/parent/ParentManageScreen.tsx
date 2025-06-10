@@ -24,13 +24,14 @@ interface Child {
 interface Coach {
   id: string;
   name: string;
-  phone: string;
+  phone_number: string;
   email?: string;
 }
 
 interface Team {
   id: string;
   name: string;
+  access_code: string;
   coaches: Coach[];
   players: {id: string; name: string}[];
 }
@@ -45,6 +46,16 @@ interface TeamCoachResponse {
     name: string;
     phone: string;
   } | null;
+}
+
+// Add this interface to properly type the nested coach data
+interface CoachTeamRelation {
+  coach_id: string;
+  coaches: {
+    id: string;
+    name: string;
+    phone_number: string;
+  };
 }
 
 export const ParentManageScreen = () => {
@@ -143,10 +154,13 @@ export const ParentManageScreen = () => {
   const loadTeamsInfo = async () => {
     try {
       setIsLoading(true);
+      console.log('Starting to load teams info');
+      
       const parentData = await AsyncStorage.getItem('parent_data');
       if (!parentData) throw new Error('No parent data found');
 
       const parent = JSON.parse(parentData);
+      console.log('Parent data loaded:', parent.id);
       
       // First get the parent's children and their team IDs
       const { data: childrenData, error: childrenError } = await supabase
@@ -157,6 +171,8 @@ export const ParentManageScreen = () => {
 
       if (childrenError) throw childrenError;
       
+      console.log('Children data loaded:', childrenData?.length || 0);
+      
       if (!childrenData || childrenData.length === 0) {
         setTeams([]);
         setIsLoading(false);
@@ -165,65 +181,101 @@ export const ParentManageScreen = () => {
       
       // Get unique team IDs
       const teamIds = [...new Set(childrenData.map(child => child.team_id))];
+      console.log('Unique team IDs:', teamIds);
       
-      // Fetch team details
-      const { data: teamsData, error: teamsError } = await supabase
-        .from('teams')
-        .select('id, name')
-        .in('id', teamIds);
+      // Get all coaches - we'll match them with teams later
+      const { data: allCoaches, error: coachesError } = await supabase
+        .from('coaches')
+        .select('id, name, phone_number')
+        .eq('is_active', true);
         
-      if (teamsError) throw teamsError;
+      if (coachesError) {
+        console.error('Error fetching coaches:', coachesError);
+      }
       
-      // For each team, get the coaches
-      const teamsWithCoaches: Team[] = [];
+      console.log(`Loaded ${allCoaches?.length || 0} coaches`);
       
-      for (const team of teamsData) {
-        // Get coaches for this team
-        const { data: coachesData, error: coachesError } = await supabase
-          .from('coaches')
-          .select('id, name, phone')
-          .eq('team_id', team.id);
-          
-        if (coachesError) {
-          console.error(`Error fetching coaches for team ${team.id}:`, coachesError);
-          continue;
-        }
-        
-        // Extract coaches - we already have the coach data in the right format
-        const coaches: Coach[] = [];
-        if (coachesData && coachesData.length > 0) {
-          for (const coachData of coachesData) {
-            coaches.push({
-              id: String(coachData.id || ''),
-              name: String(coachData.name || ''),
-              phone: String(coachData.phone || '')
-            });
-          }
-        }
-        
-        // Get players for this team
-        const { data: playersData, error: playersError } = await supabase
-          .from('players')
-          .select('id, name')
-          .eq('team_id', team.id)
-          .eq('is_active', true);
-          
-        if (playersError) {
-          console.error(`Error fetching players for team ${team.id}:`, playersError);
-          continue;
-        }
-        
-        teamsWithCoaches.push({
-          id: team.id,
-          name: team.name,
-          coaches: coaches,
-          players: playersData || []
+      // Create a map of coaches for easy lookup
+      const coachesMap = new Map();
+      if (allCoaches) {
+        allCoaches.forEach(coach => {
+          coachesMap.set(coach.id, coach);
         });
       }
       
-      setTeams(teamsWithCoaches);
+      // Fetch full team details for each team ID
+      const teamsWithDetails: Team[] = [];
+      
+      for (const teamId of teamIds) {
+        try {
+          console.log(`Processing team ${teamId}`);
+          
+          // Get team details including coach_id
+          const { data: teamData, error: teamError } = await supabase
+            .from('teams')
+            .select('id, name, access_code, coach_id')
+            .eq('id', teamId)
+            .single();
+            
+          if (teamError) {
+            console.error(`Error fetching team ${teamId} details:`, teamError);
+            continue;
+          }
+          
+          console.log(`Team ${teamId} details loaded:`, teamData);
+          
+          // Find the coach for this team if coach_id exists
+          const teamCoaches: Coach[] = [];
+          if (teamData.coach_id && coachesMap.has(teamData.coach_id)) {
+            const coach = coachesMap.get(teamData.coach_id);
+            teamCoaches.push({
+              id: String(coach.id || ''),
+              name: String(coach.name || ''),
+              phone_number: String(coach.phone_number || '')
+            });
+            console.log(`Found coach for team ${teamId}:`, coach.name);
+          }
+          
+          // Get players for this team
+          let players: {id: string; name: string}[] = [];
+          
+          try {
+            const { data: playersData, error: playersError } = await supabase
+              .from('players')
+              .select('id, name')
+              .eq('team_id', teamId)
+              .eq('is_active', true);
+              
+            if (playersError) {
+              console.error(`Error fetching players for team ${teamId}:`, playersError);
+            } else {
+              console.log(`Loaded ${playersData?.length || 0} players for team ${teamId}`);
+              players = playersData || [];
+            }
+          } catch (playerError) {
+            console.error(`Error in player fetching for team ${teamId}:`, playerError);
+          }
+          
+          // Add the team to our list
+          teamsWithDetails.push({
+            id: teamData.id,
+            name: teamData.name,
+            access_code: teamData.access_code || '',
+            coaches: teamCoaches,
+            players: players
+          });
+          
+          console.log(`Successfully processed team ${teamId}`);
+        } catch (error) {
+          console.error(`Error processing team ${teamId}:`, error);
+          // Continue with next team
+        }
+      }
+      
+      console.log(`Setting teams state with ${teamsWithDetails.length} teams`);
+      setTeams(teamsWithDetails);
     } catch (error) {
-      console.error('Error loading teams info:', error);
+      console.error('Error in loadTeamsInfo:', error);
       Alert.alert('Error', 'Failed to load teams information');
     } finally {
       setIsLoading(false);
@@ -532,12 +584,24 @@ export const ParentManageScreen = () => {
                       <Text style={styles.teamName}>{team.name}</Text>
                     </View>
                   </View>
+                  
+                  <View style={styles.teamCodeContainer}>
+                    <Text style={styles.teamCodeLabel}>Team Access Code:</Text>
+                    <Text style={styles.teamCodeValue}>{team.access_code}</Text>
+                  </View>
 
                   <Divider style={styles.divider} />
                   
                   <Text style={styles.sectionTitle}>Coaches</Text>
                   {team.coaches.length === 0 ? (
-                    <Text style={styles.noCoachText}>No coaches assigned to this team</Text>
+                    <View style={styles.noCoachContainer}>
+                      <MaterialCommunityIcons 
+                        name="account-alert-outline" 
+                        size={24} 
+                        color={COLORS.grey[500]} 
+                      />
+                      <Text style={styles.noCoachText}>No coaches assigned to this team yet</Text>
+                    </View>
                   ) : (
                     team.coaches.map((coach) => (
                       <View key={coach.id} style={styles.coachItem}>
@@ -555,7 +619,7 @@ export const ParentManageScreen = () => {
                             size={16} 
                             color={COLORS.grey[700]} 
                           />
-                          <Text style={styles.phoneNumber}>{coach.phone}</Text>
+                          <Text style={styles.phoneNumber}>{coach.phone_number}</Text>
                         </View>
                       </View>
                     ))
@@ -565,7 +629,10 @@ export const ParentManageScreen = () => {
                     style={styles.playersToggle}
                     onPress={() => toggleTeamExpanded(team.id)}
                   >
-                    <Text style={styles.sectionTitle}>Players</Text>
+                    <View style={styles.playersHeaderContainer}>
+                      <Text style={styles.sectionTitle}>Players</Text>
+                      <Text style={styles.playerCount}>({team.players.length})</Text>
+                    </View>
                     <MaterialCommunityIcons 
                       name={expandedTeamId === team.id ? "chevron-up" : "chevron-down"} 
                       size={24} 
@@ -583,7 +650,7 @@ export const ParentManageScreen = () => {
                             <MaterialCommunityIcons 
                               name="account" 
                               size={20} 
-                              color={COLORS.grey[700]} 
+                              color={COLORS.primary} 
                             />
                             <Text style={styles.playerName}>{player.name}</Text>
                           </View>
@@ -804,13 +871,20 @@ const styles = StyleSheet.create({
   },
   teamCard: {
     marginBottom: SPACING.md,
-    borderRadius: 12,
     backgroundColor: COLORS.white,
+    borderColor: COLORS.grey[200],
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 1,
+    elevation: 1,
   },
   teamHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: SPACING.md,
   },
   teamTitleContainer: {
     flexDirection: 'row',
@@ -849,40 +923,78 @@ const styles = StyleSheet.create({
     color: COLORS.grey[700],
     marginLeft: SPACING.xs,
   },
+  noCoachContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: SPACING.md,
+    padding: SPACING.md,
+    backgroundColor: COLORS.grey[100],
+    borderRadius: 8,
+  },
   noCoachText: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.grey[600],
     fontStyle: 'italic',
-    marginBottom: SPACING.md,
+    marginLeft: SPACING.sm,
   },
   playersToggle: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: SPACING.sm,
+    marginBottom: SPACING.sm,
   },
   playersList: {
-    marginTop: SPACING.sm,
     backgroundColor: COLORS.grey[100],
     borderRadius: 8,
-    padding: SPACING.sm,
+    padding: SPACING.md,
+    marginTop: SPACING.xs,
+    marginBottom: SPACING.md,
   },
   playerItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: SPACING.xs,
+    paddingVertical: SPACING.sm,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.grey[200],
   },
   playerName: {
     fontSize: FONT_SIZES.md,
-    color: COLORS.text,
     marginLeft: SPACING.sm,
+    color: COLORS.text,
   },
   noPlayersText: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.grey[600],
     fontStyle: 'italic',
     padding: SPACING.sm,
-  }
+  },
+  teamCodeContainer: {
+    backgroundColor: COLORS.grey[100],
+    borderRadius: 6,
+    padding: SPACING.sm,
+    marginBottom: SPACING.md,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  teamCodeLabel: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.grey[700],
+    fontWeight: '500',
+  },
+  teamCodeValue: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: '600',
+    color: COLORS.primary,
+    letterSpacing: 1,
+  },
+  playersHeaderContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  playerCount: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.grey[600],
+    marginLeft: SPACING.xs,
+  },
 }); 

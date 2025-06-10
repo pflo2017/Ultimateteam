@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, FlatList, ActivityIndicator, Alert, TouchableOpacity, ScrollView, TouchableWithoutFeedback, Modal } from 'react-native';
-import { Text, Button, Checkbox, FAB, TextInput, Menu } from 'react-native-paper';
+import { Text, Button, Checkbox, FAB, TextInput } from 'react-native-paper';
 import { Chip } from 'react-native-paper';
 import { COLORS, SPACING } from '../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -17,13 +17,11 @@ import {
 } from '../services/activitiesService';
 import { format, addWeeks, subWeeks, startOfWeek, endOfWeek, isSameDay } from 'date-fns';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getCoachInternalId } from '../utils/coachUtils';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../types/navigation';
-import { PieChart } from 'react-native-chart-kit';
-import { CalendarPickerModal } from '../components/CalendarPickerModal';
 
 type Player = {
   id: string;
@@ -103,26 +101,8 @@ export const AttendanceScreen = () => {
   const [attendanceRecords, setAttendanceRecords] = useState<{ activity: Activity, records: any[] }[]>([]);
   const [isLoadingAttendanceRecords, setIsLoadingAttendanceRecords] = useState(false);
 
-  // Add at the top of the component, after useState hooks
-  const [isStatisticsModalVisible, setStatisticsModalVisible] = useState(false);
-  const [statisticsMonthFilter, setStatisticsMonthFilter] = useState<'last_month' | 'last_3_months' | 'last_6_months' | 'custom'>('last_month');
-  const [statisticsActivity, setStatisticsActivity] = useState<Activity | null>(null);
-
-  // Add at the top of the component, after useState hooks
-  const [statisticsData, setStatisticsData] = useState<any[]>([]);
-  const [isLoadingStatistics, setIsLoadingStatistics] = useState(false);
-  const [statisticsError, setStatisticsError] = useState<string | null>(null);
-
-  // Add at the top of the component, after useState hooks
-  const [periodMenuVisible, setPeriodMenuVisible] = useState(false);
-  const [activityTypeMenuVisible, setActivityTypeMenuVisible] = useState(false);
-  const [customDateModalVisible, setCustomDateModalVisible] = useState(false);
-  const [customRangeStep, setCustomRangeStep] = useState<'start' | 'end'>('start');
-  const [customStartDate, setCustomStartDate] = useState<Date | null>(null);
-  const [customEndDate, setCustomEndDate] = useState<Date | null>(null);
-  const [statisticsActivityType, setStatisticsActivityType] = useState<ActivityType | 'all'>('all');
-
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const route = useRoute();
 
   // Load user role on mount
   useEffect(() => {
@@ -688,76 +668,38 @@ export const AttendanceScreen = () => {
     }
   };
 
-  // Helper to get date range from dropdown
-  const getStatisticsDateRange = () => {
-    const now = new Date();
-    let start: Date, end: Date;
-    if (statisticsMonthFilter === 'last_month') {
-      // Current month
-      start = new Date(now.getFullYear(), now.getMonth(), 1);
-      end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-    } else if (statisticsMonthFilter === 'last_3_months') {
-      // Last 3 months including current month
-      start = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-      end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-    } else if (statisticsMonthFilter === 'last_6_months') {
-      // Last 6 months including current month
-      start = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-      end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-    } else if (statisticsMonthFilter === 'custom' && customStartDate && customEndDate) {
-      start = customStartDate;
-      end = customEndDate;
-    } else {
-      // Default to current month
-      start = new Date(now.getFullYear(), now.getMonth(), 1);
-      end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-    }
-    return { start, end };
-  };
-
-  // Fetch statistics when modal opens or filters change
+  // Add a useEffect (after the other useEffects) to restore selectedDate from route params.
   useEffect(() => {
-    if (!isStatisticsModalVisible) return;
-    const fetchStatistics = async () => {
-      setIsLoadingStatistics(true);
-      setStatisticsError(null);
-      try {
-        const { start, end } = getStatisticsDateRange();
-        let activityTypeParam = null;
-        if (statisticsActivityType !== 'all') {
-          activityTypeParam = statisticsActivityType;
+    const params = (route as any).params;
+    if (params?.restoreDate && !isLoadingActivities) {
+      const restoreDate = new Date(params.restoreDate);
+      setSelectedDate(restoreDate);
+      
+      // If we have an activityId, find and select that activity
+      if (params.activityId && activities.length > 0) {
+        const activity = activities.find(a => a.id === params.activityId);
+        if (activity) {
+          setSelectedActivity(activity);
+          fetchAttendanceRecords(activity.id);
         }
-        const params = {
-          p_start_date: start.toISOString(),
-          p_end_date: end.toISOString(),
-          p_team_id: selectedTeam?.id || null,
-          p_activity_type: activityTypeParam // null for 'all', string for others
-        };
-        console.log('[get_attendance_stats] Supabase params:', params);
-        const { data, error } = await supabase.rpc('get_attendance_stats', params);
-        if (error) {
-          console.error('[get_attendance_stats] Error:', error);
-          throw error;
-        }
-        setStatisticsData(data || []);
-      } catch (err: any) {
-        setStatisticsError(err.message || 'Failed to load statistics');
-        setStatisticsData([]);
-        console.error('[get_attendance_stats] Fetch error:', err);
-      } finally {
-        setIsLoadingStatistics(false);
       }
-    };
-    fetchStatistics();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isStatisticsModalVisible, statisticsMonthFilter, statisticsActivityType, customStartDate, customEndDate, selectedTeam]);
+      
+      // Clear the params after restoring
+      (route as any).params = undefined;
+    }
+  }, [route, isLoadingActivities]); // Only depend on route and loading state
 
-  // Calculate general stats
-  const totalPresent = statisticsData.reduce((sum, a) => sum + (a.present_count || 0), 0);
-  const totalAbsent = statisticsData.reduce((sum, a) => sum + (a.absent_count || 0), 0);
-  const total = totalPresent + totalAbsent;
-  const presentPercent = total > 0 ? Math.round((totalPresent / total) * 100) : 0;
-  const absentPercent = total > 0 ? Math.round((totalAbsent / total) * 100) : 0;
+  // Add a separate effect to handle activity selection after activities are loaded
+  useEffect(() => {
+    const params = (route as any).params;
+    if (params?.activityId && !isLoadingActivities && activities.length > 0) {
+      const activity = activities.find(a => a.id === params.activityId);
+      if (activity) {
+        setSelectedActivity(activity);
+        fetchAttendanceRecords(activity.id);
+      }
+    }
+  }, [activities, isLoadingActivities]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -773,14 +715,14 @@ export const AttendanceScreen = () => {
         }
         const eventDates = activities.map(a => a.start_time.split('T')[0]).filter((date, i, arr) => arr.indexOf(date) === i && weekDates.includes(date));
         return (
-      <WeeklyCalendarCard
-        currentDate={currentWeek}
-        selectedDate={selectedDate}
-        onDateSelect={setSelectedDate}
-        onPrevWeek={handlePrevWeek}
-        onNextWeek={handleNextWeek}
+          <WeeklyCalendarCard
+            currentDate={currentWeek}
+            selectedDate={selectedDate}
+            onDateSelect={setSelectedDate}
+            onPrevWeek={handlePrevWeek}
+            onNextWeek={handleNextWeek}
             eventDates={eventDates}
-      />
+          />
         );
       })()}
 
@@ -796,24 +738,24 @@ export const AttendanceScreen = () => {
       <ScrollView style={styles.reportsList}>
         {isLoadingAttendanceRecords ? (
           <View style={{ padding: 32, alignItems: 'center' }}>
-              <ActivityIndicator size="large" color={COLORS.primary} />
+            <ActivityIndicator size="large" color={COLORS.primary} />
             <Text style={{ marginTop: 12, color: COLORS.grey[600] }}>Loading attendance records...</Text>
-            </View>
+          </View>
         ) : attendanceRecords.length === 0 ? (
           <View style={{ padding: 32, alignItems: 'center' }}>
             <MaterialCommunityIcons name="clipboard-text-outline" size={48} color={COLORS.grey[400]} />
             <Text style={{ marginTop: 12, color: COLORS.grey[600], fontSize: 16 }}>No attendance records for this date.</Text>
-                  </View>
+          </View>
         ) : (
           attendanceRecords.map((record, idx) => {
             const presentCount = record.records.filter(r => r.status === 'present').length;
             const totalCount = record.records.length;
             return (
-                      <TouchableOpacity 
+              <TouchableOpacity
                 key={record.activity.id}
                 style={[styles.reportCard, idx > 0 && { marginTop: 16 }]}
                 activeOpacity={0.8}
-                onPress={() => navigation.navigate('AttendanceReportDetails', { activityId: record.activity.id })}
+                onPress={() => navigation.navigate('AttendanceReportDetails', { activityId: record.activity.id, selectedDate: format(selectedDate, 'yyyy-MM-dd') })}
               >
                 <View style={styles.reportHeader}>
                   <MaterialCommunityIcons 
@@ -824,127 +766,116 @@ export const AttendanceScreen = () => {
                   />
                   <Text style={styles.reportTitle} numberOfLines={1} ellipsizeMode="tail">{record.activity.title}</Text>
                   <Text style={styles.reportTime}>{format(new Date(record.activity.start_time), 'HH:mm')}</Text>
-                    </View>
+                </View>
                 {record.records.length === 0 ? (
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
                     <MaterialCommunityIcons name="alert-circle-outline" size={16} color={COLORS.grey[600]} style={{ marginRight: 4 }} />
                     <Text style={styles.noAttendanceText}>No attendance marked yet</Text>
-            </View>
-          ) : (
+                  </View>
+                ) : (
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
                     <Text style={styles.attendanceCount}>{presentCount}</Text>
                     <Text style={styles.attendanceSlash}>/</Text>
                     <Text style={styles.attendanceTotal}>{totalCount}</Text>
                     <Text style={styles.attendanceLabel}> present</Text>
-            </View>
-          )}
+                  </View>
+                )}
               </TouchableOpacity>
             );
           })
         )}
       </ScrollView>
 
-      {/* View Statistics Button */}
-      <View style={{ alignItems: 'center', marginVertical: 16 }}>
-        <Button
-          mode="contained"
-          onPress={() => navigation.navigate('AttendanceStatistics')}
-          style={{ borderRadius: 8, paddingHorizontal: 32 }}
-        >
-          View Statistics
-        </Button>
-      </View>
-
       {/* Filter Modal (refactored to match ScheduleCalendar) */}
-        <Modal
-          visible={isFilterModalVisible}
+      <Modal
+        visible={isFilterModalVisible}
         animationType="slide"
         transparent={true}
         onRequestClose={() => setFilterModalVisible(false)}
-        >
-          <TouchableWithoutFeedback onPress={() => setFilterModalVisible(false)}>
+      >
+        <TouchableWithoutFeedback onPress={() => setFilterModalVisible(false)}>
           <View style={styles.filterModalOverlay}>
             <TouchableWithoutFeedback onPress={() => {}}>
-            <View style={styles.filterModalContent}>
-              <ScrollView>
-                <Text style={styles.filterModalTitle}>Filter Activities</Text>
-                <Text style={styles.filterModalSection}>Activity Type</Text>
-                <View style={styles.filterChipRow}>
-                  {(['all', 'training', 'game', 'tournament', 'other'] as (ActivityType | 'all')[]).map((type) => {
-                    const isSelected = filterType === type;
-                    const color = getActivityColor(type);
-                    return (
-                      <TouchableOpacity
-                        key={type}
-                        style={[
-                          styles.chip,
-                          isSelected && { backgroundColor: color, borderColor: color }
-                        ]}
-                        onPress={() => setFilterType(type)}
-                      >
-                        <MaterialCommunityIcons
-                          name={getActivityIcon(type)}
-                          size={16}
-                          color={isSelected ? '#fff' : color}
-                          style={{ marginRight: 4 }}
-                        />
-                        <Text style={[
-                          styles.chipText,
-                          isSelected && { color: '#fff' }
-                        ]}>
-                          {getActivityTypeLabel(type)}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-                <Text style={styles.filterModalSection}>Teams</Text>
-                <View style={styles.filterChipRow}>
-                  <TouchableOpacity
-                    style={[
-                      styles.chip,
-                      filterTeamIds.length === 0 && { backgroundColor: COLORS.primary, borderColor: COLORS.primary }
-                    ]}
-                    onPress={() => setFilterTeamIds([])}
-                  >
-                    <Text style={[
-                      styles.chipText,
-                      filterTeamIds.length === 0 && { color: '#fff' }
-                    ]}>All Teams</Text>
-                  </TouchableOpacity>
-                  {teams.map(team => {
-                    const isSelected = filterTeamIds.includes(team.id);
-                    return (
-                      <TouchableOpacity
-                        key={team.id}
-                        style={[
-                          styles.chip,
-                          isSelected && { backgroundColor: COLORS.primary, borderColor: COLORS.primary }
-                        ]}
-                        onPress={() => {
-                          setFilterTeamIds(prev =>
-                            prev.includes(team.id)
-                              ? prev.filter(id => id !== team.id)
-                              : [...prev, team.id]
-                          );
-                        }}
-                      >
-                        <Text style={[
-                          styles.chipText,
-                          isSelected && { color: '#fff' }
-                        ]}>{team.name}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
+              <View style={styles.filterModalContent}>
+                <ScrollView>
+                  <Text style={styles.filterModalTitle}>Filter Activities</Text>
+                  <Text style={styles.filterModalSection}>Activity Type</Text>
+                  <View style={styles.filterChipRow}>
+                    {(['all', 'training', 'game', 'tournament', 'other'] as (ActivityType | 'all')[]).map((type) => {
+                      const isSelected = filterType === type;
+                      const color = getActivityColor(type);
+                      return (
+                        <TouchableOpacity
+                          key={type}
+                          style={[
+                            styles.chip,
+                            isSelected && { backgroundColor: color, borderColor: color }
+                          ]}
+                          onPress={() => setFilterType(type)}
+                        >
+                          <MaterialCommunityIcons
+                            name={getActivityIcon(type)}
+                            size={16}
+                            color={isSelected ? '#fff' : color}
+                            style={{ marginRight: 4 }}
+                          />
+                          <Text style={[
+                            styles.chipText,
+                            isSelected && { color: '#fff' }
+                          ]}>
+                            {getActivityTypeLabel(type)}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                  <Text style={styles.filterModalSection}>Teams</Text>
+                  <View style={styles.filterChipRow}>
+                    <TouchableOpacity
+                      style={[
+                        styles.chip,
+                        filterTeamIds.length === 0 && { backgroundColor: COLORS.primary, borderColor: COLORS.primary }
+                      ]}
+                      onPress={() => setFilterTeamIds([])}
+                    >
+                      <Text style={[
+                        styles.chipText,
+                        filterTeamIds.length === 0 && { color: '#fff' }
+                      ]}>All Teams</Text>
+                    </TouchableOpacity>
+                    {teams.map(team => {
+                      const isSelected = filterTeamIds.includes(team.id);
+                      return (
+                        <TouchableOpacity
+                          key={team.id}
+                          style={[
+                            styles.chip,
+                            isSelected && { backgroundColor: COLORS.primary, borderColor: COLORS.primary }
+                          ]}
+                          onPress={() => {
+                            setFilterTeamIds(prev =>
+                              prev.includes(team.id)
+                                ? prev.filter(id => id !== team.id)
+                                : [...prev, team.id]
+                            );
+                          }}
+                        >
+                          <Text style={[
+                            styles.chipText,
+                            isSelected && { color: '#fff' }
+                          ]}>{team.name}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
                   <Button mode="contained" onPress={() => {
                     setFilterModalVisible(false);
                     setSelectedType(filterType);
                     setSelectedTeam(filterTeamIds.length > 0 ? teams.find(t => t.id === filterTeamIds[0]) || null : null);
                   }} style={styles.filterApplyButton}>
-                  Apply Filters
-                </Button>
-              </ScrollView>
+                    Apply Filters
+                  </Button>
+                </ScrollView>
               </View>
             </TouchableWithoutFeedback>
           </View>
