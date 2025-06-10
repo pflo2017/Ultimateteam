@@ -145,6 +145,11 @@ export const AdminHomeScreen = () => {
         <View style={styles.divider} />
         <View style={styles.carouselHeaderRow}>
           <Text style={styles.carouselTitle}>Future activities</Text>
+          {activities.length > 3 && (
+            <TouchableOpacity onPress={handleSeeAll} style={styles.seeAllButton} activeOpacity={0.7}>
+              <Text style={styles.seeAllText}>See all &gt;</Text>
+            </TouchableOpacity>
+          )}
         </View>
         <View style={styles.carouselContainer}>
           <FlatList
@@ -163,11 +168,6 @@ export const AdminHomeScreen = () => {
             )}
           />
         </View>
-        {activities.length > 3 && (
-          <TouchableOpacity onPress={handleSeeAll} style={styles.seeAllActionWrapper} activeOpacity={0.7}>
-            <Text style={styles.seeAllActionText}>See all &gt;</Text>
-          </TouchableOpacity>
-        )}
       </>
     );
   };
@@ -277,8 +277,8 @@ const styles = StyleSheet.create({
   carouselHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-start',
-    paddingLeft: SPACING.lg,
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.lg,
     marginBottom: 16,
   },
   carouselTitle: {

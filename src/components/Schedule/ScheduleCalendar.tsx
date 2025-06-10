@@ -1062,6 +1062,20 @@ export const EventCard = ({ activity, isWeeklyView }: { activity: Activity, isWe
   const cardNavigation = useNavigation<NavigationProp>();
   const activityColor = getActivityColor(activity.type);
 
+  // Parse duration (e.g., '1h', '90m', '1h 30m')
+  let durationMinutes = 0;
+  if (activity.duration) {
+    const hourMatch = activity.duration.match(/(\d+)h/);
+    const minMatch = activity.duration.match(/(\d+)m/);
+    if (hourMatch) durationMinutes += parseInt(hourMatch[1], 10) * 60;
+    if (minMatch) durationMinutes += parseInt(minMatch[1], 10);
+  }
+  // End time = start + duration
+  const endTime = new Date(startTime.getTime() + durationMinutes * 60000);
+  // Ended threshold = end + 1 hour
+  const endedThreshold = new Date(endTime.getTime() + 60 * 60000);
+  const isEnded = Date.now() > endedThreshold.getTime();
+
   const handlePress = () => {
     if (!activity.id) {
       console.error('Cannot navigate to activity details: Missing activity ID');
@@ -1106,9 +1120,16 @@ export const EventCard = ({ activity, isWeeklyView }: { activity: Activity, isWe
                 <MaterialCommunityIcons name="repeat" size={14} color={activityColor} style={styles.repeatIcon} />
               )}
             </View>
-            <Text style={styles.eventTime}>
-              {format(startTime, 'HH:mm')}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              {isEnded && (
+                <View style={{ backgroundColor: COLORS.grey[400], borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2, marginRight: 4 }}>
+                  <Text style={{ color: COLORS.white, fontSize: 12, fontWeight: 'bold' }}>ended</Text>
+                </View>
+              )}
+              <Text style={styles.eventTime}>
+                {format(startTime, 'HH:mm')}
+              </Text>
+            </View>
           </View>
           <View style={styles.eventTitleRow}>
             <Text style={styles.eventTitle}>{activity.title}</Text>
