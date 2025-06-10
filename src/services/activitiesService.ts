@@ -471,19 +471,55 @@ export const getActivityById = async (id: string): Promise<ActivityResponse> => 
     }
 
     // Standard activity lookup
-    const clubId = await getUserClubId();
-    if (!clubId) {
-      throw new Error('User not associated with a club');
+    let clubId = await getUserClubId();
+    if (clubId) {
+      // Admin/coach: fetch by club
+      const { data, error } = await supabase
+        .from('activities')
+        .select('*')
+        .eq('id', id)
+        .eq('club_id', clubId)
+        .single();
+      if (error) throw error;
+      return { data, error: null };
     }
-    const { data, error } = await supabase
-      .from('activities')
-      .select('*')
-      .eq('id', id)
-      .eq('club_id', clubId)
-      .single();
 
-    if (error) throw error;
-    return { data, error: null };
+    // If not admin/coach, check if user is a parent
+    let parentId: string | null = null;
+    try {
+      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+      const parentDataStr = await AsyncStorage.getItem('parent_data');
+      if (parentDataStr) {
+        const parentData = JSON.parse(parentDataStr);
+        parentId = parentData.id;
+      }
+    } catch (e) {
+      parentId = null;
+    }
+    if (parentId) {
+      // Get all children for this parent
+      const { data: children, error: childrenError } = await supabase
+        .from('parent_children')
+        .select('team_id')
+        .eq('parent_id', parentId)
+        .eq('is_active', true);
+      if (!childrenError && children && children.length > 0) {
+        const teamIds = Array.from(new Set(children.map((c: any) => c.team_id).filter(Boolean)));
+        if (teamIds.length > 0) {
+          // Fetch the activity if it belongs to one of the parent's children teams
+          const { data, error } = await supabase
+            .from('activities')
+            .select('*')
+            .eq('id', id)
+            .in('team_id', teamIds)
+            .maybeSingle();
+          if (error) throw error;
+          if (data) return { data, error: null };
+        }
+      }
+    }
+
+    throw new Error('User not associated with a club or with a team via their children');
   } catch (error) {
     console.error('Error fetching activity:', error);
     return { data: null, error: error as Error };
