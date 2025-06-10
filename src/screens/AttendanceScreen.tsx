@@ -17,7 +17,7 @@ import {
 } from '../services/activitiesService';
 import { format, addWeeks, subWeeks, startOfWeek, endOfWeek, isSameDay } from 'date-fns';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getCoachInternalId } from '../utils/coachUtils';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -102,6 +102,7 @@ export const AttendanceScreen = () => {
   const [isLoadingAttendanceRecords, setIsLoadingAttendanceRecords] = useState(false);
 
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const route = useRoute();
 
   // Load user role on mount
   useEffect(() => {
@@ -667,6 +668,39 @@ export const AttendanceScreen = () => {
     }
   };
 
+  // Add a useEffect (after the other useEffects) to restore selectedDate from route params.
+  useEffect(() => {
+    const params = (route as any).params;
+    if (params?.restoreDate && !isLoadingActivities) {
+      const restoreDate = new Date(params.restoreDate);
+      setSelectedDate(restoreDate);
+      
+      // If we have an activityId, find and select that activity
+      if (params.activityId && activities.length > 0) {
+        const activity = activities.find(a => a.id === params.activityId);
+        if (activity) {
+          setSelectedActivity(activity);
+          fetchAttendanceRecords(activity.id);
+        }
+      }
+      
+      // Clear the params after restoring
+      (route as any).params = undefined;
+    }
+  }, [route, isLoadingActivities]); // Only depend on route and loading state
+
+  // Add a separate effect to handle activity selection after activities are loaded
+  useEffect(() => {
+    const params = (route as any).params;
+    if (params?.activityId && !isLoadingActivities && activities.length > 0) {
+      const activity = activities.find(a => a.id === params.activityId);
+      if (activity) {
+        setSelectedActivity(activity);
+        fetchAttendanceRecords(activity.id);
+      }
+    }
+  }, [activities, isLoadingActivities]);
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Calculate weekDates and eventDates for event dots */}
@@ -721,7 +755,7 @@ export const AttendanceScreen = () => {
                 key={record.activity.id}
                 style={[styles.reportCard, idx > 0 && { marginTop: 16 }]}
                 activeOpacity={0.8}
-                onPress={() => navigation.navigate('AttendanceReportDetails', { activityId: record.activity.id })}
+                onPress={() => navigation.navigate('AttendanceReportDetails', { activityId: record.activity.id, selectedDate: format(selectedDate, 'yyyy-MM-dd') })}
               >
                 <View style={styles.reportHeader}>
                   <MaterialCommunityIcons 
