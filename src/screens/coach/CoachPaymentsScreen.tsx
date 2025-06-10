@@ -25,7 +25,6 @@ interface Player {
   };
   parent_id?: string;
   last_payment_date?: string;
-  cash_collected?: boolean;
   payment_updated_at?: string | null; // When the payment status was last updated
   payment_updated_by?: string | null; // Who updated the payment status
   payment_updated_by_name?: string | null; // Name of the person who updated the payment status
@@ -1280,10 +1279,10 @@ export const CoachPaymentsScreen = () => {
       
       console.log('Payment marked as collected, collection ID:', data);
       
-      // Update the UI
+      // Update the UI - no longer setting cash_collected flag
       const updatedPlayers = players.map(p => 
         p.id === selectedPlayer.id 
-          ? { ...p, cash_collected: true }
+          ? { ...p }
           : p
       );
       setPlayers(updatedPlayers);
