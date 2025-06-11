@@ -346,11 +346,12 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
         (isBefore(activityDate, weekEnd) || isSameDay(activityDate, weekEnd))
       );
     });
-    
+    // Sort by start_time ascending
+    const sortedWeekActivities = [...weekActivities].sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
     // Then filter by selected type if needed
     return selectedType === 'all' 
-      ? weekActivities 
-      : weekActivities.filter(activity => activity.type === selectedType);
+      ? sortedWeekActivities
+      : sortedWeekActivities.filter(activity => activity.type === selectedType);
   };
   
   const handleMonthChange = (month: DateData) => {

@@ -769,8 +769,8 @@ export const AttendanceScreen = () => {
                 </View>
                 {record.records.length === 0 ? (
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
-                    <MaterialCommunityIcons name="alert-circle-outline" size={16} color={COLORS.grey[600]} style={{ marginRight: 4 }} />
-                    <Text style={styles.noAttendanceText}>No attendance marked yet</Text>
+                    <MaterialCommunityIcons name="alert-circle-outline" size={16} color={COLORS.error} style={{ marginRight: 4 }} />
+                    <Text style={styles.noAttendanceText}>No attendance marked yet. Tap to create</Text>
                   </View>
                 ) : (
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
