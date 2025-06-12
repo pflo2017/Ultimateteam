@@ -175,10 +175,8 @@ export const StatisticsScreen = () => {
           console.log('Formatted teams for coach:', formattedTeams);
           setTeams(formattedTeams);
           
-          // Select first team by default if there are teams
-          if (formattedTeams.length > 0 && !selectedTeamId) {
-            setSelectedTeamId(formattedTeams[0].id);
-          }
+          // Remove automatic team selection for coaches to match admin behavior
+          // No longer automatically selecting the first team
         } else {
           console.log('No teams found for coach');
           setTeams([]);
