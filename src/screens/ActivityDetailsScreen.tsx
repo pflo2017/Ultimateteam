@@ -269,7 +269,7 @@ export const ActivityDetailsScreen = () => {
       
       if (error) throw error;
       
-      Alert.alert('Success', 'Activity deleted successfully');
+      Alert.alert('Success', 'Activity deleted successfully. Any attendance records and statistics for this activity have also been removed.');
       navigation.goBack();
     } catch (error) {
       console.error('Error deleting activity:', error);
@@ -930,6 +930,9 @@ export const ActivityDetailsScreen = () => {
           <Dialog.Title>Delete Activity</Dialog.Title>
           <Dialog.Content>
             <Text>Are you sure you want to delete this activity? This action cannot be undone.</Text>
+            <Text style={styles.warningText}>
+              All attendance records and statistics associated with this activity will also be deleted.
+            </Text>
             {activity?.is_repeating && !activity.is_recurring_instance && (
               <Text style={styles.warningText}>
                 This will delete all recurring instances of this activity.

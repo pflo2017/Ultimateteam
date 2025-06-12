@@ -258,7 +258,7 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
           const year = now.getFullYear();
           const month = now.getMonth() + 1;
           
-          // Fetch payment status and updated_at for this month from player_payments
+          // Fetch payment status and updated_at for this month from monthly_payments
           // Force a network request by adding a random param to bypass cache
           const random = Math.random();
           console.log(`[DEBUG] Fetching payment status for player ${player.id} (admin) for ${year}-${month}, random=${random}`);

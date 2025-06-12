@@ -20,8 +20,10 @@ interface Player {
   team_name: string;
   payment_status: string;
   attendance?: {
-    attended: number;
+    present: number;
+    absent: number;
     total: number;
+    percentage: number;
   };
   parent_id?: string;
   last_payment_date?: string;
@@ -123,7 +125,7 @@ export const CoachPaymentsScreen = () => {
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
 
-  const [attendanceData, setAttendanceData] = useState<{[playerId: string]: {attended: number, total: number}}>({});
+  const [attendanceData, setAttendanceData] = useState<{[playerId: string]: {present: number, absent: number, total: number, percentage: number}}>({});
 
   const [expandedPlayerId, setExpandedPlayerId] = useState<string | null>(null); // Track expanded card
 
@@ -589,7 +591,7 @@ export const CoachPaymentsScreen = () => {
       // Fetch all activities for the selected team and month
       const { data: activitiesData, error: activitiesError } = await supabase
         .from('activities')
-        .select('id, start_time')
+        .select('id, start_time, type')
         .eq('team_id', teamId)
         .gte('start_time', startDateStr)
         .lte('start_time', endDateStr);
@@ -600,59 +602,58 @@ export const CoachPaymentsScreen = () => {
       }
       
       console.log(`Found ${activitiesData?.length || 0} activities for this period (${month}/${year})`);
-      
-      // Fetch attendance records for these activities
-      const activityIds = (activitiesData || []).map((a: any) => a.id);
-      
-      if (activityIds.length === 0) {
-        // No activities this month
-        console.log(`No activities found for month ${month}/${year}`);
-        const emptyAttendance: {[playerId: string]: {attended: number, total: number}} = {};
-        playersList.forEach(player => {
-          emptyAttendance[player.id] = { attended: 0, total: 0 };
-        });
-        setAttendanceData(emptyAttendance);
-        
-        // Update players with empty attendance data
-        setPlayers(playersList.map(player => ({
-          ...player,
-          attendance: { attended: 0, total: 0 }
-        })));
-        
-        return;
+      if (activitiesData && activitiesData.length > 0) {
+        console.log(`Activities by type: ${
+          activitiesData.reduce((acc: {[key: string]: number}, activity: any) => {
+            const type = activity.type || 'unknown';
+            acc[type] = (acc[type] || 0) + 1;
+            return acc;
+          }, {})}`);
       }
       
+      // Filter activities to only include 'training' type
+      const trainingActivities = (activitiesData || []).filter((a: any) => a.type === 'training');
+      const trainingActivityIds = trainingActivities.map((a: any) => a.id);
+
+      if (trainingActivityIds.length === 0) {
+        // No training sessions this month
+        const emptyAttendance: {[playerId: string]: {present: number, absent: number, total: number, percentage: number}} = {};
+        playersList.forEach(player => {
+          emptyAttendance[player.id] = { present: 0, absent: 0, total: 0, percentage: 0 };
+        });
+        setAttendanceData(emptyAttendance);
+        setPlayers(playersList.map(player => ({
+          ...player,
+          attendance: { present: 0, absent: 0, total: 0, percentage: 0 }
+        })));
+        return;
+      }
+
+      // Fetch attendance records for these training activities
       const { data: attendanceData, error: attendanceError } = await supabase
         .from('activity_attendance')
         .select('activity_id, player_id, status')
-        .in('activity_id', activityIds);
-      
+        .in('activity_id', trainingActivityIds);
+
       if (attendanceError) {
-        console.error("Error fetching attendance:", attendanceError);
+        console.error('Error fetching attendance:', attendanceError);
         throw attendanceError;
       }
-      
-      console.log(`Found ${attendanceData?.length || 0} attendance records for month ${month}/${year}`);
-      
-      // Calculate attendance for each player for this specific month only
-      const attendance: {[playerId: string]: {attended: number, total: number}} = {};
-      
+
+      // Calculate attendance for each player for trainings only
+      const attendance: {[playerId: string]: {present: number, absent: number, total: number, percentage: number}} = {};
       playersList.forEach(player => {
-        // Only include attendance records for activities in the current month
-        const playerAttendance = (attendanceData || []).filter((a: any) => a.player_id === player.id);
-        const attended = playerAttendance.filter((a: any) => a.status === 'present').length;
-        // Total sessions is the total number of activities for this month
-        const total = activityIds.length;
-        
-        attendance[player.id] = { attended, total };
+        const playerAttendance = (attendanceData || []).filter((a: any) => a.player_id === player.id && trainingActivityIds.includes(a.activity_id));
+        const present = playerAttendance.filter((a: any) => a.status === 'present').length;
+        const absent = playerAttendance.filter((a: any) => a.status === 'absent').length;
+        const total = playerAttendance.length; // Only trainings where attendance is marked for this player
+        const percentage = total > 0 ? Math.round((present / total) * 100) : 0;
+        attendance[player.id] = { present, absent, total, percentage };
       });
-      
       setAttendanceData(attendance);
-      
-      // Update players with attendance data for this specific month
       setPlayers(playersList.map(player => ({
         ...player,
-        attendance: attendance[player.id] || { attended: 0, total: 0 }
+        attendance: attendance[player.id] || { present: 0, absent: 0, total: 0, percentage: 0 }
       })));
       
     } catch (error) {
@@ -1539,9 +1540,9 @@ export const CoachPaymentsScreen = () => {
       if (activityIds.length === 0) {
         // No activities this month across any team
         console.log(`[DEBUG] fetchAttendanceDataForAllTeams - No activities found for month ${month}/${year} across any team`);
-        const emptyAttendance: {[playerId: string]: {attended: number, total: number}} = {};
+        const emptyAttendance: {[playerId: string]: {present: number, absent: number, total: number, percentage: number}} = {};
         playersList.forEach(player => {
-          emptyAttendance[player.id] = { attended: 0, total: 0 };
+          emptyAttendance[player.id] = { present: 0, absent: 0, total: 0, percentage: 0 };
         });
         setAttendanceData(emptyAttendance);
         
@@ -1549,7 +1550,7 @@ export const CoachPaymentsScreen = () => {
         console.log(`[DEBUG] fetchAttendanceDataForAllTeams - Updating ${playersList.length} players with empty attendance data`);
         setPlayers(playersList.map(player => ({
           ...player,
-          attendance: { attended: 0, total: 0 }
+          attendance: { present: 0, absent: 0, total: 0, percentage: 0 }
         })));
         
         return;
@@ -1569,21 +1570,20 @@ export const CoachPaymentsScreen = () => {
       console.log(`[DEBUG] fetchAttendanceDataForAllTeams - Found ${attendanceData?.length || 0} attendance records`);
       
       // Calculate attendance for each player
-      const attendance: {[playerId: string]: {attended: number, total: number}} = {};
+      const attendance: {[playerId: string]: {present: number, absent: number, total: number, percentage: number}} = {};
       
       playersList.forEach(player => {
         // Get activities for this player's team
         const teamActivities = teamActivitiesMap.get(player.team_id) || [];
-        const total = teamActivities.length;
-        
         // Only count attendance for activities in this player's team
         const playerAttendance = (attendanceData || []).filter(
           (a: any) => a.player_id === player.id && teamActivities.includes(a.activity_id)
         );
-        
-        const attended = playerAttendance.filter((a: any) => a.status === 'present').length;
-        
-        attendance[player.id] = { attended, total };
+        const present = playerAttendance.filter((a: any) => a.status === 'present').length;
+        const absent = playerAttendance.filter((a: any) => a.status === 'absent').length;
+        const total = playerAttendance.length; // Only trainings where attendance is marked for this player
+        const percentage = total > 0 ? Math.round((present / total) * 100) : 0;
+        attendance[player.id] = { present, absent, total, percentage };
       });
       
       console.log(`[DEBUG] fetchAttendanceDataForAllTeams - Calculated attendance for ${Object.keys(attendance).length} players`);
@@ -1593,7 +1593,7 @@ export const CoachPaymentsScreen = () => {
       console.log(`[DEBUG] fetchAttendanceDataForAllTeams - Updating ${playersList.length} players with attendance data`);
       setPlayers(playersList.map(player => ({
         ...player,
-        attendance: attendance[player.id] || { attended: 0, total: 0 }
+        attendance: attendance[player.id] || { present: 0, absent: 0, total: 0, percentage: 0 }
       })));
       
       console.log(`[DEBUG] fetchAttendanceDataForAllTeams - Completed successfully`);
@@ -1785,10 +1785,19 @@ export const CoachPaymentsScreen = () => {
                     {/* Attendance Info */}
                     {player.attendance && (
                       <View style={styles.attendanceContainer}>
-                        <MaterialCommunityIcons name="calendar-check" size={16} color={COLORS.grey[600]} />
-                        <Text style={styles.attendanceText}>
-                          Attendance: {player.attendance.attended} / {player.attendance.total} sessions
-                        </Text>
+                        {/* Present icon */}
+                        <MaterialCommunityIcons name="account-check" size={16} color={COLORS.success} style={{ borderWidth: 2, borderColor: COLORS.success, borderRadius: 8, marginRight: 2 }} />
+                        <Text style={styles.attendanceText}>{player.attendance.present}</Text>
+                        {/* Absent icon */}
+                        <MaterialCommunityIcons name="account-off-outline" size={16} color={COLORS.error} style={{ borderWidth: 2, borderColor: COLORS.error, borderRadius: 8, marginLeft: 8, marginRight: 2 }} />
+                        <Text style={styles.attendanceText}>{player.attendance.absent}</Text>
+                        {/* Separator */}
+                        <Text style={{ marginHorizontal: 8, color: COLORS.grey[400], fontWeight: 'bold', fontSize: 16 }}>|</Text>
+                        {/* Whistle icon for training and total */}
+                        <MaterialCommunityIcons name="whistle" size={16} color={COLORS.primary} style={{ marginRight: 2 }} />
+                        <Text style={styles.attendanceText}>{player.attendance.total}</Text>
+                        {/* Percentage */}
+                        <Text style={[styles.attendanceText, { marginLeft: 8 }]}>({player.attendance.percentage}%)</Text>
                       </View>
                     )}
                     {/* Expandable Payment Toggle Button */}

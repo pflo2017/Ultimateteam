@@ -133,20 +133,82 @@ export const updateActivity = async (id: string, activityData: Partial<Activity>
 };
 
 /**
- * Delete an activity
+ * Delete an activity and all associated data
+ * This ensures complete removal of the activity and all its related records
  */
 export const deleteActivity = async (id: string): Promise<{ error: Error | null }> => {
   try {
+    console.log(`Deleting activity with ID: ${id}`);
+    
+    // First check if this is a game activity to properly handle game-specific data
+    const { data: activityData, error: activityError } = await supabase
+      .from('activities')
+      .select('type, lineup_players, is_repeating, team_id')
+      .eq('id', id)
+      .single();
+    
+    if (activityError) {
+      console.error('Error fetching activity data before deletion:', activityError);
+      // Continue with deletion even if we can't fetch the activity data
+    }
+    
+    if (activityData) {
+      console.log(`Deleting activity - Type: ${activityData.type}, Team ID: ${activityData.team_id}, Has lineup: ${!!activityData.lineup_players?.length}, Is repeating: ${activityData.is_repeating}`);
+    }
+    
+    // Start deleting all related data
+    
+    // 1. Delete attendance records
+    console.log('Deleting official attendance records (marked by coach)');
+    const { error: attendanceError } = await supabase
+      .from('activity_attendance')
+      .delete()
+      .eq('activity_id', id);
+    
+    if (attendanceError) {
+      console.error('Error deleting attendance records:', attendanceError);
+      throw attendanceError;
+    }
+    
+    // 2. Delete presence responses (RSVP)
+    console.log('Deleting presence responses (RSVPs from parents/players)');
+    const { error: presenceError } = await supabase
+      .from('activity_presence')
+      .delete()
+      .eq('activity_id', id);
+    
+    if (presenceError) {
+      console.error('Error deleting presence records:', presenceError);
+      // Continue with deletion even if presence deletion fails
+    }
+    
+    // 3. If this is a recurring activity, delete all its instances
+    if (activityData?.type && activityData?.is_repeating) {
+      // Extract the base ID (first 36 characters) from recurring instances
+      const baseId = id.slice(0, 36);
+      const { error: recurringError } = await supabase
+        .from('activities')
+        .delete()
+        .like('id', `${baseId}-%`); // Match pattern for recurring instances
+      
+      if (recurringError) {
+        console.error('Error deleting recurring instances:', recurringError);
+        // Continue with deleting the main activity
+      }
+    }
+    
+    // 4. Finally delete the activity itself
     const { error } = await supabase
       .from('activities')
       .delete()
       .eq('id', id);
-
+    
     if (error) throw error;
-
+    
+    console.log(`Activity and all related data successfully deleted: ${id}`);
     return { error: null };
   } catch (error) {
-    console.error('Error deleting activity:', error);
+    console.error('Error in deleteActivity:', error);
     return { error: error as Error };
   }
 };

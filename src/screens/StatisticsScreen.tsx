@@ -268,8 +268,10 @@ export const StatisticsScreen = () => {
             : 'All Teams';
           
           // Now get attendance records - but use separate queries, not relationships
+          console.log("Getting attendance records for activities:", activityIds.length, "activities");
+          console.log("IMPORTANT: Only using official coach-marked attendance from activity_attendance table, not parent RSVPs");
           const { data: attendanceData, error: attendanceError } = await supabase
-            .from('activity_attendance')
+            .from('activity_attendance') // Only use official coach-marked attendance
             .select('activity_id, player_id, status')
             .in('activity_id', activityIds);
             
@@ -332,7 +334,8 @@ export const StatisticsScreen = () => {
           // Update with actual attendance data
           attendanceData?.forEach(record => {
             const playerId = record.player_id;
-            if (playerStatsMap.has(playerId)) {
+            // Only count this attendance record if it belongs to a valid activity
+            if (playerStatsMap.has(playerId) && activityIds.includes(record.activity_id)) {
               const stats = playerStatsMap.get(playerId);
               stats.total_activities++;
               

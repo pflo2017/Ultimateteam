@@ -5,6 +5,7 @@ import { COLORS, SPACING } from '../../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { useDataRefresh } from '../../utils/useDataRefresh';
+import { getUserClubId } from '../../services/activitiesService';
 
 interface Player {
   id: string;
@@ -250,6 +251,16 @@ export const AdminPaymentsScreen = () => {
       
       console.log("Fetching payments for all teams");
       
+      // Get the current user's club ID first
+      const { data: { user } } = await supabase.auth.getUser();
+      console.log('DEBUG: Current admin user ID', user?.id, 'email', user?.email);
+      const clubId = await getUserClubId();
+      console.log('DEBUG: clubId', clubId);
+      if (!clubId) {
+        console.error('No club found for user');
+        return;
+      }
+      
       // Fetch all active players with their teams, regardless of team selection
       const { data: playersData, error: playersError } = await supabase
         .from('players')
@@ -259,7 +270,10 @@ export const AdminPaymentsScreen = () => {
           team_id,
           teams:team_id(name)
         `)
-        .eq('is_active', true);
+        .eq('is_active', true)
+        .eq('club_id', clubId);
+      const playerIds = playersData ? playersData.map((p: any) => p.id) : [];
+      console.log('DEBUG: playerIds for payments query', playerIds);
       
       if (playersError) {
         console.error("Error fetching players:", playersError);
@@ -318,8 +332,6 @@ export const AdminPaymentsScreen = () => {
       
       // For current or past months, fetch actual payment data
       // Fetch monthly payments for these players
-      const playerIds = playersData.map((p: any) => p.id);
-      
       const { data: paymentsData, error: paymentsError } = await supabase
         .from('monthly_payments')
         .select('*')
@@ -375,6 +387,10 @@ export const AdminPaymentsScreen = () => {
           payment_updated_by: paymentInfo.updated_by
         };
       });
+      
+      console.log('DEBUG: playersData', playersData);
+      console.log('DEBUG: paymentsData', paymentsData);
+      console.log('DEBUG: transformedPlayers', transformedPlayers);
       
       setPlayers(transformedPlayers);
       
@@ -527,6 +543,10 @@ export const AdminPaymentsScreen = () => {
         };
       });
       
+      console.log('DEBUG: playersData', playersData);
+      console.log('DEBUG: paymentsData', paymentsData);
+      console.log('DEBUG: transformedPlayers', transformedPlayers);
+      
       setPlayers(transformedPlayers);
       
       // Calculate stats
@@ -568,16 +588,14 @@ export const AdminPaymentsScreen = () => {
       // Prepare query for activities
       let activitiesQuery = supabase
         .from('activities')
-        .select('id, start_time')
+        .select('id, start_time, type')
         .gte('start_time', startDateStr)
         .lte('start_time', endDateStr);
       
-      // If teamId is provided, filter by team
       if (teamId) {
         activitiesQuery = activitiesQuery.eq('team_id', teamId);
       }
       
-      // Fetch activities
       const { data: activitiesData, error: activitiesError } = await activitiesQuery;
       
       if (activitiesError) {
@@ -585,7 +603,15 @@ export const AdminPaymentsScreen = () => {
         throw activitiesError;
       }
       
-      console.log(`Found ${activitiesData?.length || 0} activities for this period`);
+      console.log(`Found ${activitiesData?.length || 0} activities for period (${month}/${year})`);
+      if (activitiesData && activitiesData.length > 0) {
+        console.log(`Activities by type: ${
+          activitiesData.reduce((acc: {[key: string]: number}, activity: any) => {
+            const type = activity.type || 'unknown';
+            acc[type] = (acc[type] || 0) + 1;
+            return acc;
+          }, {})}`);
+      }
       
       // If no activities, set empty attendance data
       if (!activitiesData || activitiesData.length === 0) {
@@ -605,10 +631,14 @@ export const AdminPaymentsScreen = () => {
       
       // Get activity IDs
       const activityIds = activitiesData.map((a: any) => a.id);
+      console.log("Activity IDs to fetch attendance for:", activityIds);
+      
+      // Ensure we're only getting official coach-marked attendance, not parent RSVPs
+      console.log("IMPORTANT: Only fetching official coach-marked attendance records from activity_attendance table");
       
       // Fetch attendance records for these activities
       const { data: attendanceData, error: attendanceError } = await supabase
-        .from('activity_attendance')
+        .from('activity_attendance')  // This is the official coach-marked attendance
         .select('activity_id, player_id, status')
         .in('activity_id', activityIds);
       
@@ -618,14 +648,48 @@ export const AdminPaymentsScreen = () => {
       }
       
       console.log(`Found ${attendanceData?.length || 0} attendance records`);
+      if (attendanceData && attendanceData.length > 0) {
+        console.log("Sample attendance data:", attendanceData.slice(0, 3));
+      }
       
       // Calculate attendance for each player
       const attendance: {[playerId: string]: {attended: number, total: number}} = {};
       
       playersList.forEach(player => {
-        const playerAttendance = (attendanceData || []).filter((a: any) => a.player_id === player.id);
+        // Only include attendance records for activities in the valid list
+        const playerAttendance = (attendanceData || []).filter((a: any) => {
+          return a.player_id === player.id && activityIds.includes(a.activity_id);
+        });
+        
         const attended = playerAttendance.filter((a: any) => a.status === 'present').length;
         const total = activityIds.length;
+        
+        // Also calculate stats by activity type for debugging
+        const attendanceByType: {[type: string]: {attended: number, total: number}} = {};
+        
+        // Group activities by type
+        const activitiesByType: {[type: string]: string[]} = {};
+        (activitiesData || []).forEach((activity: any) => {
+          const type = activity.type || 'unknown';
+          if (!activitiesByType[type]) activitiesByType[type] = [];
+          activitiesByType[type].push(activity.id);
+        });
+        
+        // Calculate attendance by type
+        Object.entries(activitiesByType).forEach(([type, ids]) => {
+          const typeAttendance = playerAttendance.filter((a: any) => 
+            ids.includes(a.activity_id) && a.status === 'present'
+          ).length;
+          attendanceByType[type] = {
+            attended: typeAttendance,
+            total: ids.length
+          };
+        });
+        
+        // Log attendance by type for debugging
+        if (player.id === playersList[0]?.id) {
+          console.log(`Attendance by type for first player (${player.player_name}):`, attendanceByType);
+        }
         
         attendance[player.id] = { attended, total };
       });
