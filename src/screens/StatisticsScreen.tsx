@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Dimensions } from 'react-native';
 import { COLORS, SPACING } from '../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
@@ -626,17 +626,25 @@ export const StatisticsScreen = () => {
 
   // After setting the selected month in the initialization, add effect to scroll to it
   useEffect(() => {
-    // Scroll to center the selected month
-    setTimeout(() => {
-      const currentMonthIndex = new Date().getMonth();
-      if (monthScrollViewRef.current) {
-        // Calculate position to center the month
-        const itemWidth = 80; // Approximate width of month item
-        const screenWidth = 390; // Average screen width
-        const offset = Math.max(0, (currentMonthIndex * itemWidth) - (screenWidth / 2) + (itemWidth / 2));
-        monthScrollViewRef.current.scrollTo({ x: offset, animated: true });
-      }
-    }, 100);
+    // Scroll to center the selected month with multiple attempts for reliability
+    const currentMonthIndex = new Date().getMonth();
+    
+    // Use a sequence of timeouts at different intervals for more reliable centering
+    const timers = [100, 300, 600, 1000].map(delay => 
+      setTimeout(() => {
+        if (monthScrollViewRef.current) {
+          // Calculate position to center the month
+          const itemWidth = 90; // Approximate width of month item including margins
+          const screenWidth = Dimensions.get('window').width;
+          const offset = Math.max(0, (currentMonthIndex * itemWidth) - (screenWidth / 2) + (itemWidth / 2));
+          
+          console.log(`Scrolling to month ${currentMonthIndex} at offset ${offset}px with delay ${delay}ms`);
+          monthScrollViewRef.current.scrollTo({ x: offset, animated: false });
+        }
+      }, delay)
+    );
+    
+    return () => timers.forEach(clearTimeout);
   }, []);
 
   // Render month selector

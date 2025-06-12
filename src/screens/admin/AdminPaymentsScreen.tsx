@@ -17,8 +17,10 @@ interface Player {
   payment_updated_at?: string | null; // When the payment status was last updated
   payment_updated_by?: string | null; // Who updated the payment status
   attendance?: {
-    attended: number;
+    present: number;
+    absent: number;
     total: number;
+    percentage: number;
   };
 }
 
@@ -615,15 +617,15 @@ export const AdminPaymentsScreen = () => {
       
       // If no activities, set empty attendance data
       if (!activitiesData || activitiesData.length === 0) {
-        const emptyAttendance: {[playerId: string]: {attended: number, total: number}} = {};
+        const emptyAttendance: {[playerId: string]: {present: number, absent: number, total: number, percentage: number}} = {};
         playersList.forEach(player => {
-          emptyAttendance[player.id] = { attended: 0, total: 0 };
+          emptyAttendance[player.id] = { present: 0, absent: 0, total: 0, percentage: 0 };
         });
         
         // Update players with attendance data
         setPlayers(playersList.map(player => ({
           ...player,
-          attendance: { attended: 0, total: 0 }
+          attendance: { present: 0, absent: 0, total: 0, percentage: 0 }
         })));
         
         return;
@@ -653,7 +655,7 @@ export const AdminPaymentsScreen = () => {
       }
       
       // Calculate attendance for each player
-      const attendance: {[playerId: string]: {attended: number, total: number}} = {};
+      const attendance: {[playerId: string]: {present: number, absent: number, total: number, percentage: number}} = {};
       
       playersList.forEach(player => {
         // Only include attendance records for activities in the valid list
@@ -661,11 +663,13 @@ export const AdminPaymentsScreen = () => {
           return a.player_id === player.id && activityIds.includes(a.activity_id);
         });
         
-        const attended = playerAttendance.filter((a: any) => a.status === 'present').length;
-        const total = activityIds.length;
+        const present = playerAttendance.filter((a: any) => a.status === 'present').length;
+        const absent = playerAttendance.filter((a: any) => a.status === 'absent').length;
+        const total = playerAttendance.length;
+        const percentage = total > 0 ? Math.round((present / total) * 100) : 0;
         
         // Also calculate stats by activity type for debugging
-        const attendanceByType: {[type: string]: {attended: number, total: number}} = {};
+        const attendanceByType: {[type: string]: {present: number, absent: number, total: number}} = {};
         
         // Group activities by type
         const activitiesByType: {[type: string]: string[]} = {};
@@ -681,8 +685,13 @@ export const AdminPaymentsScreen = () => {
             ids.includes(a.activity_id) && a.status === 'present'
           ).length;
           attendanceByType[type] = {
-            attended: typeAttendance,
-            total: ids.length
+            present: typeAttendance,
+            absent: playerAttendance.filter((a: any) => 
+              ids.includes(a.activity_id) && a.status === 'absent'
+            ).length,
+            total: playerAttendance.filter((a: any) => 
+              ids.includes(a.activity_id)
+            ).length
           };
         });
         
@@ -691,13 +700,13 @@ export const AdminPaymentsScreen = () => {
           console.log(`Attendance by type for first player (${player.player_name}):`, attendanceByType);
         }
         
-        attendance[player.id] = { attended, total };
+        attendance[player.id] = { present, absent, total, percentage };
       });
       
       // Update players with attendance data
       setPlayers(playersList.map(player => ({
         ...player,
-        attendance: attendance[player.id] || { attended: 0, total: 0 }
+        attendance: attendance[player.id] || { present: 0, absent: 0, total: 0, percentage: 0 }
       })));
       
     } catch (error) {
@@ -932,10 +941,19 @@ export const AdminPaymentsScreen = () => {
                     {/* Attendance Info */}
                     {player.attendance && (
                       <View style={styles.attendanceContainer}>
-                        <MaterialCommunityIcons name="calendar-check" size={16} color={COLORS.grey[600]} />
-                        <Text style={styles.attendanceText}>
-                          Attendance: {player.attendance.attended} / {player.attendance.total} sessions
-                        </Text>
+                        {/* Present icon */}
+                        <MaterialCommunityIcons name="account-check" size={16} color={COLORS.success} style={{ borderWidth: 2, borderColor: COLORS.success, borderRadius: 8, marginRight: 2 }} />
+                        <Text style={styles.attendanceText}>{player.attendance.present}</Text>
+                        {/* Absent icon */}
+                        <MaterialCommunityIcons name="account-off-outline" size={16} color={COLORS.error} style={{ borderWidth: 2, borderColor: COLORS.error, borderRadius: 8, marginLeft: 8, marginRight: 2 }} />
+                        <Text style={styles.attendanceText}>{player.attendance.absent}</Text>
+                        {/* Separator */}
+                        <Text style={{ marginHorizontal: 8, color: COLORS.grey[400], fontWeight: 'bold', fontSize: 16 }}>|</Text>
+                        {/* Whistle icon for training and total */}
+                        <MaterialCommunityIcons name="whistle" size={16} color={COLORS.primary} style={{ marginRight: 2 }} />
+                        <Text style={styles.attendanceText}>{player.attendance.total}</Text>
+                        {/* Percentage */}
+                        <Text style={[styles.attendanceText, { marginLeft: 8 }]}>({player.attendance.percentage}%)</Text>
                       </View>
                     )}
                   </View>
