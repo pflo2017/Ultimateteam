@@ -15,6 +15,7 @@ interface Player {
   payment_status: 'paid' | 'unpaid';
   payment_updated_at?: string | null; // When the payment status was last updated
   payment_updated_by?: string | null; // Who updated the payment status
+  parent_id?: string; // Parent ID for sending notifications
   attendance?: {
     present: number;
     absent: number;
@@ -45,7 +46,7 @@ export const AdminPaymentsScreen = () => {
   const [searchQuery, setSearchQuery] = useState('');
   
   // Filter state
-  const [selectedTeamId, setSelectedTeamId] = useState<string | undefined>(undefined);
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [isTeamModalVisible, setIsTeamModalVisible] = useState(false);
   
   // Month selection state
@@ -65,6 +66,10 @@ export const AdminPaymentsScreen = () => {
   
   // Add state for modal month picker
   const [isMonthPickerVisible, setIsMonthPickerVisible] = useState(false);
+  
+  // Add state for toast
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
   
   // Initialize on mount
   useEffect(() => {
@@ -776,12 +781,56 @@ export const AdminPaymentsScreen = () => {
     return matchesSearch;
   });
 
-  // Helper function to format date
+  // Format date for display
   const formatDate = (dateString: string) => {
-    if (!dateString) return '';
     const date = new Date(dateString);
-    if (isNaN(date.getTime())) return dateString; // Return as-is if not a valid date
-    return date.toLocaleDateString('en-GB');
+    return `${date.getDate()}/${date.getMonth() + 1}/${date.getFullYear()}`;
+  };
+  
+  // Send payment reminder to parent
+  const sendPaymentReminder = async (player: Player) => {
+    try {
+      if (!selectedMonth) return;
+      
+      // Get current user
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError) throw userError;
+      
+      if (!user) {
+        Alert.alert('Error', 'You must be logged in to send reminders.');
+        return;
+      }
+      
+      // Call the Edge Function to send the reminder
+      const { data, error } = await supabase.functions.invoke('send-payment-reminder', {
+        body: {
+          playerId: player.id,
+          parentId: player.parent_id,
+          month: selectedMonth.value,
+          monthName: selectedMonth.name,
+          year: selectedMonth.year,
+          playerName: player.player_name,
+          senderId: user.id,
+          senderType: 'admin'
+        }
+      });
+      
+      if (error) throw error;
+      
+      // Show success message
+      setToastMessage(data.message || 'Payment reminder sent');
+      setShowToast(true);
+      
+      // Hide toast after 3 seconds
+      setTimeout(() => {
+        setShowToast(false);
+      }, 3000);
+      
+    } catch (error) {
+      console.error('Error sending payment reminder:', error);
+      Alert.alert('Error', 'Failed to send payment reminder. Please try again.');
+    }
   };
 
   if (isLoading) {
@@ -955,6 +1004,21 @@ export const AdminPaymentsScreen = () => {
                               {player.payment_status === 'paid' ? 'Paid' : 'Not Paid'}
                             </Text>
                           </View>
+                          
+                          {/* Payment reminder bell icon - only show for unpaid players */}
+                          {player.payment_status !== 'paid' && (
+                            <TouchableOpacity 
+                              style={styles.reminderButton}
+                              onPress={() => sendPaymentReminder(player)}
+                              accessibilityLabel="Send payment reminder"
+                            >
+                              <MaterialCommunityIcons 
+                                name="bell" 
+                                size={20} 
+                                color={COLORS.warning} 
+                              />
+                            </TouchableOpacity>
+                          )}
                         </View>
                         
                         {/* Payment Update Info - Show only for paid payments */}
@@ -1091,6 +1155,13 @@ export const AdminPaymentsScreen = () => {
             </View>
           </View>
         </Modal>
+        
+        {/* Toast Notification */}
+        {showToast && (
+          <View style={styles.toast}>
+            <Text style={styles.toastText}>{toastMessage}</Text>
+          </View>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -1398,8 +1469,36 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   attendanceLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.primary,
+  },
+  reminderButton: {
+    padding: 4,
+    borderRadius: 20,
+    backgroundColor: COLORS.warning + '20',
+    marginLeft: SPACING.sm,
+  },
+  toast: {
+    position: 'absolute',
+    bottom: 100,
+    left: 20,
+    right: 20,
+    backgroundColor: COLORS.primary,
+    padding: SPACING.md,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  toastText: {
+    color: 'white',
     fontSize: 14,
     fontWeight: '500',
-    color: COLORS.grey[600],
   },
 }); 

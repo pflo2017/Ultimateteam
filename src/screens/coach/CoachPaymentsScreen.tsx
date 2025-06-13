@@ -1309,10 +1309,54 @@ export const CoachPaymentsScreen = () => {
   };
 
   const formatDate = (dateString: string) => {
-    if (!dateString) return '';
     const date = new Date(dateString);
-    if (isNaN(date.getTime())) return dateString; // Return as-is if not a valid date
-    return date.toLocaleDateString('en-GB');
+    return `${date.getDate()}/${date.getMonth() + 1}/${date.getFullYear()}`;
+  };
+  
+  // Send payment reminder to parent
+  const sendPaymentReminder = async (player: Player) => {
+    try {
+      if (!selectedMonth) return;
+      
+      // Get current user
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError) throw userError;
+      
+      if (!user) {
+        Alert.alert('Error', 'You must be logged in to send reminders.');
+        return;
+      }
+      
+      // Call the Edge Function to send the reminder
+      const { data, error } = await supabase.functions.invoke('send-payment-reminder', {
+        body: {
+          playerId: player.id,
+          parentId: player.parent_id,
+          month: selectedMonth.value,
+          monthName: selectedMonth.name,
+          year: selectedMonth.year,
+          playerName: player.player_name,
+          senderId: user.id,
+          senderType: 'coach'
+        }
+      });
+      
+      if (error) throw error;
+      
+      // Show success message
+      setToastMessage(data.message || 'Payment reminder sent');
+      setShowToast(true);
+      
+      // Hide toast after 3 seconds
+      setTimeout(() => {
+        setShowToast(false);
+      }, 3000);
+      
+    } catch (error) {
+      console.error('Error sending payment reminder:', error);
+      Alert.alert('Error', 'Failed to send payment reminder. Please try again.');
+    }
   };
 
   // Function to fetch payments data for all teams managed by the coach
@@ -1772,6 +1816,22 @@ export const CoachPaymentsScreen = () => {
                                 {player.payment_status === 'paid' ? 'Paid' : 'Not Paid'}
                               </Text>
                             </View>
+                            
+                            {/* Payment reminder bell icon - only show for unpaid players */}
+                            {player.payment_status !== 'paid' && (
+                              <TouchableOpacity 
+                                style={styles.reminderButton}
+                                onPress={() => sendPaymentReminder(player)}
+                                accessibilityLabel="Send payment reminder"
+                              >
+                                <MaterialCommunityIcons 
+                                  name="bell" 
+                                  size={20} 
+                                  color={COLORS.warning} 
+                                />
+                              </TouchableOpacity>
+                            )}
+                            
                             {/* Expand/collapse arrow */}
                             <TouchableOpacity
                               onPress={() => setExpandedPlayerId(expandedPlayerId === player.id ? null : player.id)}
@@ -2218,17 +2278,25 @@ const styles = StyleSheet.create({
   // Toast styles
   toast: {
     position: 'absolute',
-    bottom: 20,
+    bottom: 100,
     left: 20,
     right: 20,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: COLORS.primary,
     padding: SPACING.md,
     borderRadius: 8,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   toastText: {
-    color: COLORS.white,
+    color: 'white',
     fontSize: 14,
+    fontWeight: '500',
   },
   // Payment update styles
   paymentUpdateContainer: {
@@ -2302,5 +2370,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.grey[600],
     marginTop: 4,
+  },
+  reminderButton: {
+    padding: 4,
+    borderRadius: 20,
+    backgroundColor: COLORS.warning + '20',
+    marginLeft: SPACING.sm,
   },
 }); 
