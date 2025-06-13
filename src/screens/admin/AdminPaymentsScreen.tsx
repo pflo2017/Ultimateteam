@@ -218,12 +218,24 @@ export const AdminPaymentsScreen = () => {
     try {
       setIsLoading(true);
       
-      console.log("Fetching all teams");
+      console.log("Fetching teams for current club");
       
-      // Fetch all teams
+      // Get the current user's club ID first
+      const clubId = await getUserClubId();
+      if (!clubId) {
+        console.error('No club found for user');
+        setIsLoading(false);
+        return;
+      }
+      
+      console.log(`Fetching teams for club ID: ${clubId}`);
+      
+      // IMPORTANT: Always filter by club_id to ensure proper data isolation between clubs
+      // This prevents admins from seeing teams from other clubs/academies
       const { data: teamsData, error: teamsError } = await supabase
         .from('teams')
         .select('id, name')
+        .eq('club_id', clubId) // Add club_id filter to ensure data isolation
         .eq('is_active', true)
         .order('name');
       
@@ -232,7 +244,7 @@ export const AdminPaymentsScreen = () => {
         throw teamsError;
       }
       
-      console.log(`Found ${teamsData?.length || 0} teams`);
+      console.log(`Found ${teamsData?.length || 0} teams for club ${clubId}`);
       setTeams(teamsData || []);
       
       // We don't fetch payment data here anymore - that's handled by the useEffect
@@ -422,7 +434,18 @@ export const AdminPaymentsScreen = () => {
     try {
       setIsLoading(true);
       
+      // Get the current user's club ID first
+      const clubId = await getUserClubId();
+      if (!clubId) {
+        console.error('No club found for user');
+        setIsLoading(false);
+        return;
+      }
+      
+      console.log(`Fetching monthly payments for team ${teamId} in club ${clubId}`);
+      
       // Fetch players for the selected team
+      // IMPORTANT: Always filter by club_id to ensure proper data isolation between clubs
       const { data: playersData, error: playersError } = await supabase
         .from('players')
         .select(`
@@ -432,6 +455,7 @@ export const AdminPaymentsScreen = () => {
           teams:team_id(name)
         `)
         .eq('team_id', teamId)
+        .eq('club_id', clubId) // Add club_id filter to ensure data isolation
         .eq('is_active', true);
       
       if (playersError) throw playersError;
@@ -575,6 +599,13 @@ export const AdminPaymentsScreen = () => {
   // New function to fetch attendance data
   const fetchAttendanceData = async (year: number, month: number, playersList: Player[], teamId?: string) => {
     try {
+      // Get the current user's club ID first
+      const clubId = await getUserClubId();
+      if (!clubId) {
+        console.error('No club found for user');
+        return;
+      }
+      
       // Calculate the start and end dates for the selected month
       const monthIndex = month - 1; // Convert to 0-based month
       const startDate = new Date(year, monthIndex, 1);
@@ -584,12 +615,14 @@ export const AdminPaymentsScreen = () => {
       const startDateStr = startDate.toISOString().split('T')[0];
       const endDateStr = endDate.toISOString().split('T')[0];
       
-      console.log(`Fetching attendance data from ${startDateStr} to ${endDateStr}`);
+      console.log(`Fetching attendance data from ${startDateStr} to ${endDateStr} for club ${clubId}`);
       
       // Prepare query for activities
+      // IMPORTANT: Always filter by club_id to ensure proper data isolation between clubs
       let activitiesQuery = supabase
         .from('activities')
         .select('id, start_time, type')
+        .eq('club_id', clubId) // Add club_id filter to ensure data isolation
         .gte('start_time', startDateStr)
         .lte('start_time', endDateStr);
       
