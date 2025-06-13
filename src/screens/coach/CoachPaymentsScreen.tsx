@@ -1688,17 +1688,19 @@ export const CoachPaymentsScreen = () => {
             </View>
           )}
           
-          {/* Search Bar */}
-          <View style={styles.searchContainer}>
-            <MaterialCommunityIcons name="magnify" size={20} color={COLORS.grey[400]} style={styles.searchIcon} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search player"
-              placeholderTextColor={COLORS.grey[400]}
-              value={searchQuery}
-              onChangeText={handleSearchChange}
-            />
-          </View>
+          {/* Search Bar - Only show when a team is selected */}
+          {selectedTeamId && (
+            <View style={styles.searchContainer}>
+              <MaterialCommunityIcons name="magnify" size={20} color={COLORS.grey[400]} style={styles.searchIcon} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search player"
+                placeholderTextColor={COLORS.grey[400]}
+                value={searchQuery}
+                onChangeText={handleSearchChange}
+              />
+            </View>
+          )}
           
           {/* Stats Summary */}
           {selectedTeamId && (
@@ -1796,6 +1798,10 @@ export const CoachPaymentsScreen = () => {
                         {/* Attendance Info */}
                         {player.attendance && (
                           <View style={styles.attendanceContainer}>
+                            {/* Training label */}
+                            <MaterialCommunityIcons name="whistle" size={16} color={COLORS.primary} style={{ marginRight: 4 }} />
+                            <Text style={[styles.attendanceLabel, { marginRight: 8 }]}>Training:</Text>
+                            
                             {/* Present icon */}
                             <MaterialCommunityIcons 
                               name="check-circle" 
@@ -1804,6 +1810,7 @@ export const CoachPaymentsScreen = () => {
                               style={{ marginRight: 2 }} 
                             />
                             <Text style={styles.attendanceText}>{player.attendance.present}</Text>
+                            
                             {/* Absent icon */}
                             <MaterialCommunityIcons 
                               name="close-circle" 
@@ -1812,13 +1819,11 @@ export const CoachPaymentsScreen = () => {
                               style={{ marginLeft: 8, marginRight: 2 }} 
                             />
                             <Text style={styles.attendanceText}>{player.attendance.absent}</Text>
-                            {/* Separator */}
+                            
+                            {/* Total and percentage */}
                             <Text style={{ marginHorizontal: 8, color: COLORS.grey[400], fontWeight: 'bold', fontSize: 16 }}>|</Text>
-                            {/* Whistle icon for training and total */}
-                            <MaterialCommunityIcons name="whistle" size={16} color={COLORS.primary} style={{ marginRight: 2 }} />
-                            <Text style={styles.attendanceText}>{player.attendance.total}</Text>
-                            {/* Percentage */}
-                            <Text style={[styles.attendanceText, { marginLeft: 8 }]}>({player.attendance.percentage}%)</Text>
+                            <Text style={styles.attendanceText}>{player.attendance.total} total</Text>
+                            <Text style={[styles.attendanceText, { marginLeft: 4 }]}>({player.attendance.percentage}%)</Text>
                           </View>
                         )}
                         {/* Expandable Payment Toggle Button */}
@@ -2292,5 +2297,10 @@ const styles = StyleSheet.create({
     color: COLORS.grey[600],
     textAlign: 'center',
     marginTop: SPACING.md,
+  },
+  attendanceLabel: {
+    fontSize: 14,
+    color: COLORS.grey[600],
+    marginTop: 4,
   },
 }); 

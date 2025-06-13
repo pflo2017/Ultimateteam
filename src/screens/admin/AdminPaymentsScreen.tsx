@@ -619,10 +619,12 @@ export const AdminPaymentsScreen = () => {
       
       // Prepare query for activities
       // IMPORTANT: Always filter by club_id to ensure proper data isolation between clubs
+      // IMPORTANT: Only count training activities for attendance on payments page
       let activitiesQuery = supabase
         .from('activities')
         .select('id, start_time, type')
         .eq('club_id', clubId) // Add club_id filter to ensure data isolation
+        .eq('type', 'training') // Only count training activities
         .gte('start_time', startDateStr)
         .lte('start_time', endDateStr);
       
@@ -861,17 +863,19 @@ export const AdminPaymentsScreen = () => {
             </View>
           )}
           
-          {/* Search Bar */}
-          <View style={styles.searchContainer}>
-            <MaterialCommunityIcons name="magnify" size={20} color={COLORS.grey[400]} style={styles.searchIcon} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search player"
-              placeholderTextColor={COLORS.grey[400]}
-              value={searchQuery}
-              onChangeText={handleSearchChange}
-            />
-          </View>
+          {/* Search Bar - Only show when a team is selected */}
+          {selectedTeamId && (
+            <View style={styles.searchContainer}>
+              <MaterialCommunityIcons name="magnify" size={20} color={COLORS.grey[400]} style={styles.searchIcon} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search player"
+                placeholderTextColor={COLORS.grey[400]}
+                value={searchQuery}
+                onChangeText={handleSearchChange}
+              />
+            </View>
+          )}
           
           {/* Stats Summary */}
           {selectedTeamId && (
@@ -966,19 +970,22 @@ export const AdminPaymentsScreen = () => {
                         {/* Attendance Info */}
                         {player.attendance && (
                           <View style={styles.attendanceContainer}>
+                            {/* Training label */}
+                            <MaterialCommunityIcons name="whistle" size={16} color={COLORS.primary} style={{ marginRight: 4 }} />
+                            <Text style={[styles.attendanceLabel, { marginRight: 8 }]}>Training:</Text>
+                            
                             {/* Present icon */}
                             <MaterialCommunityIcons name="check-circle" size={16} color={COLORS.success} style={{ marginRight: 2 }} />
                             <Text style={styles.attendanceText}>{player.attendance.present}</Text>
+                            
                             {/* Absent icon */}
                             <MaterialCommunityIcons name="close-circle" size={16} color={COLORS.error} style={{ marginLeft: 8, marginRight: 2 }} />
                             <Text style={styles.attendanceText}>{player.attendance.absent}</Text>
-                            {/* Separator */}
+                            
+                            {/* Total and percentage */}
                             <Text style={{ marginHorizontal: 8, color: COLORS.grey[400], fontWeight: 'bold', fontSize: 16 }}>|</Text>
-                            {/* Whistle icon for training and total */}
-                            <MaterialCommunityIcons name="whistle" size={16} color={COLORS.primary} style={{ marginRight: 2 }} />
-                            <Text style={styles.attendanceText}>{player.attendance.total}</Text>
-                            {/* Percentage */}
-                            <Text style={[styles.attendanceText, { marginLeft: 8 }]}>({player.attendance.percentage}%)</Text>
+                            <Text style={styles.attendanceText}>{player.attendance.total} total</Text>
+                            <Text style={[styles.attendanceText, { marginLeft: 4 }]}>({player.attendance.percentage}%)</Text>
                           </View>
                         )}
                       </View>
@@ -1389,5 +1396,10 @@ const styles = StyleSheet.create({
   monthGridItemTextSelected: {
     color: COLORS.primary,
     fontWeight: 'bold',
+  },
+  attendanceLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: COLORS.grey[600],
   },
 }); 
