@@ -981,9 +981,6 @@ export const StatisticsScreen = () => {
 
     return (
       <View style={styles.statsContainer}>
-        {/* Search Bar */}
-        {renderSearchBar()}
-        
         {/* Player List */}
         <Text style={styles.sectionTitle}>Player Attendance</Text>
         {filteredPlayerStats.map((player) => (
@@ -1080,9 +1077,6 @@ export const StatisticsScreen = () => {
 
     return (
       <View style={styles.statsContainer}>
-        {/* Search Bar */}
-        {renderSearchBar()}
-        
         {/* Team Stats */}
         {filteredTeamStats.map((team) => (
           <View key={team.team_id} style={styles.teamStatCard}>
