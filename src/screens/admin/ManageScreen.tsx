@@ -188,10 +188,11 @@ export const AdminManageScreen = () => {
           created_at,
           is_active,
           coach_id,
-          players(count)
+          players!inner(count)
         `)
         .eq('club_id', clubId)
         .eq('is_active', true)
+        .eq('players.is_active', true) // Only count active players
         .order('name');
 
       if (teamsError) {

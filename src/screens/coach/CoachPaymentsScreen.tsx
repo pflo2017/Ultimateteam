@@ -1,6 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, TextInput, ScrollView, TouchableOpacity, Modal, Alert, Platform, SafeAreaView, KeyboardAvoidingView, Dimensions, ActivityIndicator as RNActivityIndicator } from 'react-native';
-import { Text, Card, ActivityIndicator, Button, Divider } from 'react-native-paper';
+import { 
+  View, 
+  StyleSheet, 
+  TextInput, 
+  ScrollView, 
+  TouchableOpacity, 
+  Modal, 
+  Alert, 
+  Platform, 
+  SafeAreaView, 
+  KeyboardAvoidingView, 
+  Dimensions, 
+  ActivityIndicator,
+  Text,
+  Button
+} from 'react-native';
 import { COLORS, SPACING, FONT_SIZES } from '../../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
@@ -85,7 +99,7 @@ export const CoachPaymentsScreen = () => {
   
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [selectedTeamId, setSelectedTeamId] = useState<string | undefined>(undefined);
   const [isTeamModalVisible, setIsTeamModalVisible] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [isPlayerDetailsModalVisible, setIsPlayerDetailsModalVisible] = useState(false);
@@ -662,25 +676,17 @@ export const CoachPaymentsScreen = () => {
   };
   
   // Handle team selection
-  const handleTeamSelect = (teamId: string | null) => {
-    console.log(`Team selected: ${teamId || 'All Teams'}`);
+  const handleTeamSelect = (teamId: string) => {
+    console.log(`Team selected: ${teamId}`);
     setSelectedTeamId(teamId);
     setIsTeamModalVisible(false);
     
-    // Fetch data for the new team selection
+    // Fetch data for the selected team
     if (selectedMonth) {
-      if (teamId) {
-        // Fetch data for a specific team
-        console.log(`Fetching data for team ${teamId} and month ${selectedMonth.value}/${selectedMonth.year}`);
-        fetchMonthlyPaymentsForTeam(selectedMonth.year, selectedMonth.value, teamId);
-      } else {
-        // Fetch data for all teams
-        console.log(`Fetching data for all teams and month ${selectedMonth.value}/${selectedMonth.year}`);
-        fetchAllTeamsPayments(selectedMonth.year, selectedMonth.value);
-      }
+      console.log(`Fetching data for team ${teamId} and month ${selectedMonth.value}/${selectedMonth.year}`);
+      fetchMonthlyPaymentsForTeam(selectedMonth.year, selectedMonth.value, teamId);
       
       // Ensure the month selector stays centered on the current month after team selection
-      // Using multiple timeouts at different intervals for more reliable centering
       const currentIndex = currentMonthIndex;
       setTimeout(() => {
         if (currentIndex > 0) scrollToMonth(currentIndex);
@@ -1663,16 +1669,24 @@ export const CoachPaymentsScreen = () => {
             onPress={() => setIsTeamModalVisible(true)}
           >
             <MaterialCommunityIcons 
-              name={selectedTeamId ? "account-group" : "view-grid"} 
+              name="account-group" 
               size={20} 
               color={COLORS.primary} 
               style={styles.teamSelectorIcon} 
             />
             <Text style={styles.teamSelectorText} numberOfLines={1}>
-              {selectedTeamId ? teams.find(t => t.id === selectedTeamId)?.name : 'All Teams'}
+              {selectedTeamId ? teams.find(t => t.id === selectedTeamId)?.name : 'Select Team'}
             </Text>
             <MaterialCommunityIcons name="chevron-down" size={20} color={COLORS.grey[400]} />
           </TouchableOpacity>
+          
+          {/* Add empty state message when no team is selected */}
+          {!selectedTeamId && (
+            <View style={styles.emptyStateContainer}>
+              <MaterialCommunityIcons name="arrow-up-drop-circle" size={48} color={COLORS.primary} />
+              <Text style={styles.emptyStateTextCentered}>Please select a team to view payments</Text>
+            </View>
+          )}
           
           {/* Search Bar */}
           <View style={styles.searchContainer}>
@@ -1687,148 +1701,157 @@ export const CoachPaymentsScreen = () => {
           </View>
           
           {/* Stats Summary */}
-          <View style={styles.statsContainer}>
-            <View style={styles.statItem}>
-              <MaterialCommunityIcons name="check-circle" size={24} color={COLORS.success} />
-              <Text style={styles.statLabel}>Paid</Text>
-              <Text style={styles.statValue}>{stats.paidPlayers}</Text>
-            </View>
-            
-            <View style={styles.statDivider} />
-            
-            <View style={styles.statItem}>
-              <MaterialCommunityIcons name="close-circle" size={24} color={COLORS.error} />
-              <Text style={styles.statLabel}>Not Paid</Text>
-              <Text style={styles.statValue}>{stats.unpaidPlayers}</Text>
-            </View>
-            
-            <View style={styles.statDivider} />
-            
-            <View style={styles.statItem}>
-              <MaterialCommunityIcons name="account-group" size={24} color={COLORS.primary} />
-              <Text style={styles.statLabel}>Total</Text>
-              <Text style={styles.statValue}>{stats.totalPlayers}</Text>
-            </View>
-          </View>
-          
-          {/* Player List */}
-          <View style={styles.playersContainer}>
-            {filteredPlayers.length === 0 ? (
-              <View style={styles.emptyState}>
-                <MaterialCommunityIcons name="account-off" size={48} color={COLORS.grey[400]} />
-                <Text style={styles.emptyStateText}>No players found</Text>
+          {selectedTeamId && (
+            <>
+              <View style={styles.statsContainer}>
+                <View style={styles.statItem}>
+                  <MaterialCommunityIcons name="check-circle" size={24} color={COLORS.success} />
+                  <Text style={styles.statLabel}>Paid</Text>
+                  <Text style={styles.statValue}>{stats.paidPlayers}</Text>
+                </View>
+                <View style={styles.statDivider} />
+                <View style={styles.statItem}>
+                  <MaterialCommunityIcons name="close-circle" size={24} color={COLORS.error} />
+                  <Text style={styles.statLabel}>Not Paid</Text>
+                  <Text style={styles.statValue}>{stats.unpaidPlayers}</Text>
+                </View>
+                <View style={styles.statDivider} />
+                <View style={styles.statItem}>
+                  <MaterialCommunityIcons name="account-group" size={24} color={COLORS.primary} />
+                  <Text style={styles.statLabel}>Total</Text>
+                  <Text style={styles.statValue}>{stats.totalPlayers}</Text>
+                </View>
               </View>
-            ) : (
-              filteredPlayers.map(player => (
-                <View key={player.id} style={styles.playerCard}>
-                  <View 
-                    style={[
-                      styles.playerCardContent,
-                      { 
-                        borderLeftWidth: 4,
-                        borderLeftColor: player.payment_status === 'paid' ? COLORS.success : COLORS.error,
-                        borderTopWidth: 1,
-                        borderRightWidth: 1,
-                        borderBottomWidth: 1,
-                        borderTopColor: COLORS.grey[200],
-                        borderRightColor: COLORS.grey[200],
-                        borderBottomColor: COLORS.grey[200]
-                      }
-                    ]}
-                  >
-                    {/* Player Name and Status */}
-                    <View style={styles.playerHeader}>
-                      <View style={styles.playerInfo}>
-                        <MaterialCommunityIcons name="account" size={24} color={COLORS.text} style={styles.playerIcon} />
-                        <Text style={styles.playerName}>{player.player_name}</Text>
-                      </View>
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <View style={[
-                          styles.statusBadge,
-                          { backgroundColor: player.payment_status === 'paid' ? COLORS.success + '20' : COLORS.error + '20' }
-                        ]}>
-                          <MaterialCommunityIcons 
-                            name={player.payment_status === 'paid' ? 'check' : 'close'} 
-                            size={14} 
-                            color={player.payment_status === 'paid' ? COLORS.success : COLORS.error} 
-                          />
-                          <Text style={[
-                            styles.statusText,
-                            { color: player.payment_status === 'paid' ? COLORS.success : COLORS.error }
-                          ]}>
-                            {player.payment_status === 'paid' ? 'Paid' : 'Not Paid'}
-                          </Text>
+              {/* Player List */}
+              <View style={styles.playersContainer}>
+                {filteredPlayers.length === 0 ? (
+                  <View style={styles.emptyState}>
+                    <MaterialCommunityIcons name="account-off" size={48} color={COLORS.grey[400]} />
+                    <Text style={styles.emptyStateText}>No players found</Text>
+                  </View>
+                ) : (
+                  filteredPlayers.map(player => (
+                    <View key={player.id} style={styles.playerCard}>
+                      <View 
+                        style={[
+                          styles.playerCardContent,
+                          { 
+                            borderLeftWidth: 4,
+                            borderLeftColor: player.payment_status === 'paid' ? COLORS.success : COLORS.error,
+                            borderTopWidth: 1,
+                            borderRightWidth: 1,
+                            borderBottomWidth: 1,
+                            borderTopColor: COLORS.grey[200],
+                            borderRightColor: COLORS.grey[200],
+                            borderBottomColor: COLORS.grey[200]
+                          }
+                        ]}
+                      >
+                        {/* Player Name and Status */}
+                        <View style={styles.playerHeader}>
+                          <View style={styles.playerInfo}>
+                            <MaterialCommunityIcons name="account" size={24} color={COLORS.text} style={styles.playerIcon} />
+                            <Text style={styles.playerName}>{player.player_name}</Text>
+                          </View>
+                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <View style={[
+                              styles.statusBadge,
+                              { backgroundColor: player.payment_status === 'paid' ? COLORS.success + '20' : COLORS.error + '20' }
+                            ]}>
+                              <MaterialCommunityIcons 
+                                name={player.payment_status === 'paid' ? 'check' : 'close'} 
+                                size={14} 
+                                color={player.payment_status === 'paid' ? COLORS.success : COLORS.error} 
+                              />
+                              <Text style={[
+                                styles.statusText,
+                                { color: player.payment_status === 'paid' ? COLORS.success : COLORS.error }
+                              ]}>
+                                {player.payment_status === 'paid' ? 'Paid' : 'Not Paid'}
+                              </Text>
+                            </View>
+                            {/* Expand/collapse arrow */}
+                            <TouchableOpacity
+                              onPress={() => setExpandedPlayerId(expandedPlayerId === player.id ? null : player.id)}
+                              style={{ marginLeft: 8 }}
+                              accessibilityLabel={expandedPlayerId === player.id ? 'Collapse actions' : 'Expand actions'}
+                            >
+                              <MaterialCommunityIcons 
+                                name={expandedPlayerId === player.id ? 'chevron-up' : 'chevron-down'} 
+                                size={24} 
+                                color={COLORS.grey[600]} 
+                              />
+                            </TouchableOpacity>
+                          </View>
                         </View>
-                        {/* Expand/collapse arrow */}
-                        <TouchableOpacity
-                          onPress={() => setExpandedPlayerId(expandedPlayerId === player.id ? null : player.id)}
-                          style={{ marginLeft: 8 }}
-                          accessibilityLabel={expandedPlayerId === player.id ? 'Collapse actions' : 'Expand actions'}
-                        >
-                          <MaterialCommunityIcons 
-                            name={expandedPlayerId === player.id ? 'chevron-up' : 'chevron-down'} 
-                            size={24} 
-                            color={COLORS.grey[600]} 
-                          />
-                        </TouchableOpacity>
+                        {/* Payment Update Info - Show only for paid payments */}
+                        {player.payment_status === 'paid' && player.payment_updated_at && (
+                          <View style={styles.paymentUpdateContainer}>
+                            <MaterialCommunityIcons name="clock-outline" size={16} color={COLORS.grey[600]} />
+                            <Text style={styles.paymentUpdateText}>
+                              Marked as paid on {formatDate(player.payment_updated_at)}
+                            </Text>
+                          </View>
+                        )}
+                        {/* Attendance Info */}
+                        {player.attendance && (
+                          <View style={styles.attendanceContainer}>
+                            {/* Present icon */}
+                            <MaterialCommunityIcons 
+                              name="check-circle" 
+                              size={16} 
+                              color={COLORS.success} 
+                              style={{ marginRight: 2 }} 
+                            />
+                            <Text style={styles.attendanceText}>{player.attendance.present}</Text>
+                            {/* Absent icon */}
+                            <MaterialCommunityIcons 
+                              name="close-circle" 
+                              size={16} 
+                              color={COLORS.error} 
+                              style={{ marginLeft: 8, marginRight: 2 }} 
+                            />
+                            <Text style={styles.attendanceText}>{player.attendance.absent}</Text>
+                            {/* Separator */}
+                            <Text style={{ marginHorizontal: 8, color: COLORS.grey[400], fontWeight: 'bold', fontSize: 16 }}>|</Text>
+                            {/* Whistle icon for training and total */}
+                            <MaterialCommunityIcons name="whistle" size={16} color={COLORS.primary} style={{ marginRight: 2 }} />
+                            <Text style={styles.attendanceText}>{player.attendance.total}</Text>
+                            {/* Percentage */}
+                            <Text style={[styles.attendanceText, { marginLeft: 8 }]}>({player.attendance.percentage}%)</Text>
+                          </View>
+                        )}
+                        {/* Expandable Payment Toggle Button */}
+                        {expandedPlayerId === player.id && (
+                          <TouchableOpacity 
+                            style={[
+                              styles.paymentToggleButton,
+                              { backgroundColor: player.payment_status === 'paid' ? COLORS.error + '20' : COLORS.success + '20' }
+                            ]}
+                            onPress={() => togglePaymentStatus(player)}
+                          >
+                            <MaterialCommunityIcons 
+                              name={player.payment_status === 'paid' ? 'close' : 'check'} 
+                              size={20} 
+                              color={player.payment_status === 'paid' ? COLORS.error : COLORS.success} 
+                            />
+                            <Text style={[
+                              styles.paymentToggleText,
+                              { color: player.payment_status === 'paid' ? COLORS.error : COLORS.success }
+                            ]}>
+                              Mark as {player.payment_status === 'paid' ? 'Not Paid' : 'Paid'}
+                            </Text>
+                          </TouchableOpacity>
+                        )}
                       </View>
                     </View>
-                    {/* Payment Update Info - Show only for paid payments */}
-                    {player.payment_status === 'paid' && player.payment_updated_at && (
-                      <View style={styles.paymentUpdateContainer}>
-                        <MaterialCommunityIcons name="clock-outline" size={16} color={COLORS.grey[600]} />
-                        <Text style={styles.paymentUpdateText}>
-                          Marked as paid on {formatDate(player.payment_updated_at)}
-                        </Text>
-                      </View>
-                    )}
-                    {/* Attendance Info */}
-                    {player.attendance && (
-                      <View style={styles.attendanceContainer}>
-                        {/* Present icon */}
-                        <MaterialCommunityIcons name="account-check" size={16} color={COLORS.success} style={{ borderWidth: 2, borderColor: COLORS.success, borderRadius: 8, marginRight: 2 }} />
-                        <Text style={styles.attendanceText}>{player.attendance.present}</Text>
-                        {/* Absent icon */}
-                        <MaterialCommunityIcons name="account-off-outline" size={16} color={COLORS.error} style={{ borderWidth: 2, borderColor: COLORS.error, borderRadius: 8, marginLeft: 8, marginRight: 2 }} />
-                        <Text style={styles.attendanceText}>{player.attendance.absent}</Text>
-                        {/* Separator */}
-                        <Text style={{ marginHorizontal: 8, color: COLORS.grey[400], fontWeight: 'bold', fontSize: 16 }}>|</Text>
-                        {/* Whistle icon for training and total */}
-                        <MaterialCommunityIcons name="whistle" size={16} color={COLORS.primary} style={{ marginRight: 2 }} />
-                        <Text style={styles.attendanceText}>{player.attendance.total}</Text>
-                        {/* Percentage */}
-                        <Text style={[styles.attendanceText, { marginLeft: 8 }]}>({player.attendance.percentage}%)</Text>
-                      </View>
-                    )}
-                    {/* Expandable Payment Toggle Button */}
-                    {expandedPlayerId === player.id && (
-                      <TouchableOpacity 
-                        style={[
-                          styles.paymentToggleButton,
-                          { backgroundColor: player.payment_status === 'paid' ? COLORS.error + '20' : COLORS.success + '20' }
-                        ]}
-                        onPress={() => togglePaymentStatus(player)}
-                      >
-                        <MaterialCommunityIcons 
-                          name={player.payment_status === 'paid' ? 'close' : 'check'} 
-                          size={20} 
-                          color={player.payment_status === 'paid' ? COLORS.error : COLORS.success} 
-                        />
-                        <Text style={[
-                          styles.paymentToggleText,
-                          { color: player.payment_status === 'paid' ? COLORS.error : COLORS.success }
-                        ]}>
-                          Mark as {player.payment_status === 'paid' ? 'Not Paid' : 'Paid'}
-                        </Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                </View>
-              ))
-            )}
-            {/* Add extra padding at bottom for better scrolling */}
-            <View style={{ height: 24 }} />
-          </View>
+                  ))
+                )}
+                {/* Add extra padding at bottom for better scrolling */}
+                <View style={{ height: 24 }} />
+              </View>
+            </>
+          )}
         </ScrollView>
 
         {/* Team Selection Modal */}
@@ -1848,22 +1871,6 @@ export const CoachPaymentsScreen = () => {
                   <MaterialCommunityIcons name="close" size={24} color={COLORS.text} />
                 </TouchableOpacity>
               </View>
-              
-              {/* All Teams option */}
-              <TouchableOpacity
-                style={[styles.teamOption, selectedTeamId === null && styles.teamOptionSelected]}
-                onPress={() => handleTeamSelect(null)}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <MaterialCommunityIcons name="view-grid" size={20} color={COLORS.primary} style={{ marginRight: 8 }} />
-                  <Text style={[styles.teamOptionText, selectedTeamId === null && styles.teamOptionTextSelected]}>
-                    All Teams
-                  </Text>
-                </View>
-                {selectedTeamId === null && (
-                  <MaterialCommunityIcons name="check" size={20} color={COLORS.primary} />
-                )}
-              </TouchableOpacity>
               
               {teams.map(team => (
                 <TouchableOpacity
@@ -2272,5 +2279,18 @@ const styles = StyleSheet.create({
   monthGridItemTextSelected: {
     color: COLORS.primary,
     fontWeight: 'bold',
+  },
+  emptyStateContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.xl,
+    marginTop: SPACING.xl,
+  },
+  emptyStateTextCentered: {
+    fontSize: 16,
+    color: COLORS.grey[600],
+    textAlign: 'center',
+    marginTop: SPACING.md,
   },
 }); 

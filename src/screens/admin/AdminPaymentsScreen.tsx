@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, TextInput, ScrollView, TouchableOpacity, Modal, Alert, SafeAreaView, Dimensions } from 'react-native';
-import { Text, ActivityIndicator } from 'react-native-paper';
-import { COLORS, SPACING } from '../../constants/theme';
+import { View, StyleSheet, TextInput, ScrollView, TouchableOpacity, Modal, Alert, SafeAreaView, Dimensions, ActivityIndicator, Text } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { COLORS, SPACING } from '../../constants/theme';
 import { supabase } from '../../lib/supabase';
 import { useDataRefresh } from '../../utils/useDataRefresh';
 import { getUserClubId } from '../../services/activitiesService';
@@ -46,7 +45,7 @@ export const AdminPaymentsScreen = () => {
   const [searchQuery, setSearchQuery] = useState('');
   
   // Filter state
-  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [selectedTeamId, setSelectedTeamId] = useState<string | undefined>(undefined);
   const [isTeamModalVisible, setIsTeamModalVisible] = useState(false);
   
   // Month selection state
@@ -714,35 +713,18 @@ export const AdminPaymentsScreen = () => {
     }
   };
   
-  // Handle team selection
-  const handleTeamSelect = (teamId: string | null) => {
+  // Modify the handleTeamSelect function to remove the "All Teams" option
+  const handleTeamSelect = (teamId: string) => {
+    console.log(`Team selected: ${teamId}`);
     setSelectedTeamId(teamId);
     setIsTeamModalVisible(false);
     
-    // Fetch data for the new team selection
+    // Fetch data for the selected team
     if (selectedMonth) {
-      if (teamId) {
-        // If a specific team is selected, fetch data for that team
-        fetchMonthlyPayments(selectedMonth.year, selectedMonth.value, teamId);
-      } else {
-        // If "All Teams" is selected, fetch data for all teams
-        fetchAllTeamsPayments(selectedMonth.year, selectedMonth.value);
-      }
-      
-      // Ensure the month selector stays centered on the current month after team selection
-      // Using multiple timeouts at different intervals for more reliable centering
-      const currentIndex = currentMonthIndex;
-      setTimeout(() => {
-        if (currentIndex > 0) scrollToMonth(currentIndex);
-      }, 100);
-      
-      setTimeout(() => {
-        if (currentIndex > 0) scrollToMonth(currentIndex);
-      }, 300);
-      
-      setTimeout(() => {
-        if (currentIndex > 0) scrollToMonth(currentIndex);
-      }, 600);
+      console.log(`Fetching data for team ${teamId} and month ${selectedMonth.value}/${selectedMonth.year}`);
+      fetchMonthlyPayments(selectedMonth.year, selectedMonth.value, teamId);
+    } else {
+      console.log('Could not fetch data: selectedMonth is missing', { selectedMonth });
     }
   };
   
@@ -827,16 +809,24 @@ export const AdminPaymentsScreen = () => {
             onPress={() => setIsTeamModalVisible(true)}
           >
             <MaterialCommunityIcons 
-              name={selectedTeamId ? "account-group" : "view-grid"} 
+              name="account-group" 
               size={20} 
               color={COLORS.primary} 
               style={styles.teamSelectorIcon} 
             />
             <Text style={styles.teamSelectorText} numberOfLines={1}>
-              {selectedTeamId ? teams.find(t => t.id === selectedTeamId)?.name : 'All Teams'}
+              {selectedTeamId ? teams.find(t => t.id === selectedTeamId)?.name : 'Select Team'}
             </Text>
             <MaterialCommunityIcons name="chevron-down" size={20} color={COLORS.grey[400]} />
           </TouchableOpacity>
+          
+          {/* Add empty state message when no team is selected */}
+          {!selectedTeamId && (
+            <View style={styles.emptyStateContainer}>
+              <MaterialCommunityIcons name="arrow-up-drop-circle" size={48} color={COLORS.primary} />
+              <Text style={styles.emptyStateText}>Please select a team to view payments</Text>
+            </View>
+          )}
           
           {/* Search Bar */}
           <View style={styles.searchContainer}>
@@ -851,119 +841,123 @@ export const AdminPaymentsScreen = () => {
           </View>
           
           {/* Stats Summary */}
-          <View style={styles.statsContainer}>
-            <View style={styles.statItem}>
-              <MaterialCommunityIcons name="check-circle" size={24} color={COLORS.success} />
-              <Text style={styles.statLabel}>Paid</Text>
-              <Text style={styles.statValue}>{stats.paidPlayers}</Text>
-            </View>
-            
-            <View style={styles.statDivider} />
-            
-            <View style={styles.statItem}>
-              <MaterialCommunityIcons name="close-circle" size={24} color={COLORS.error} />
-              <Text style={styles.statLabel}>Not Paid</Text>
-              <Text style={styles.statValue}>{stats.unpaidPlayers}</Text>
-            </View>
-            
-            <View style={styles.statDivider} />
-            
-            <View style={styles.statItem}>
-              <MaterialCommunityIcons name="account-group" size={24} color={COLORS.primary} />
-              <Text style={styles.statLabel}>Total</Text>
-              <Text style={styles.statValue}>{stats.totalPlayers}</Text>
-            </View>
-          </View>
-          
-          {/* Player List */}
-          <View style={styles.playersContainer}>
-            {filteredPlayers.length === 0 ? (
-              <View style={styles.emptyState}>
-                <MaterialCommunityIcons name="account-off" size={48} color={COLORS.grey[400]} />
-                <Text style={styles.emptyStateText}>No players found</Text>
+          {selectedTeamId && (
+            <>
+              <View style={styles.statsContainer}>
+                <View style={styles.statItem}>
+                  <MaterialCommunityIcons name="check-circle" size={24} color={COLORS.success} />
+                  <Text style={styles.statLabel}>Paid</Text>
+                  <Text style={styles.statValue}>{stats.paidPlayers}</Text>
+                </View>
+                
+                <View style={styles.statDivider} />
+                
+                <View style={styles.statItem}>
+                  <MaterialCommunityIcons name="close-circle" size={24} color={COLORS.error} />
+                  <Text style={styles.statLabel}>Not Paid</Text>
+                  <Text style={styles.statValue}>{stats.unpaidPlayers}</Text>
+                </View>
+                
+                <View style={styles.statDivider} />
+                
+                <View style={styles.statItem}>
+                  <MaterialCommunityIcons name="account-group" size={24} color={COLORS.primary} />
+                  <Text style={styles.statLabel}>Total</Text>
+                  <Text style={styles.statValue}>{stats.totalPlayers}</Text>
+                </View>
               </View>
-            ) : (
-              filteredPlayers.map(player => (
-                <View key={player.id} style={styles.playerCard}>
-                  <View 
-                    style={[
-                      styles.playerCardContent,
-                      { 
-                        borderLeftWidth: 4,
-                        borderLeftColor: player.payment_status === 'paid' ? COLORS.success : COLORS.error,
-                        borderTopWidth: 1,
-                        borderRightWidth: 1,
-                        borderBottomWidth: 1,
-                        borderTopColor: COLORS.grey[200],
-                        borderRightColor: COLORS.grey[200],
-                        borderBottomColor: COLORS.grey[200]
-                      }
-                    ]}
-                  >
-                    {/* Player Name and Team */}
-                    <View style={styles.playerHeader}>
-                      <View style={styles.playerInfo}>
-                        <MaterialCommunityIcons name="account" size={24} color={COLORS.text} style={styles.playerIcon} />
-                        <View>
-                          <Text style={styles.playerName}>{player.player_name}</Text>
-                          <Text style={styles.teamName}>{player.team_name}</Text>
+              
+              {/* Player List */}
+              <View style={styles.playersContainer}>
+                {filteredPlayers.length === 0 ? (
+                  <View style={styles.emptyState}>
+                    <MaterialCommunityIcons name="account-off" size={48} color={COLORS.grey[400]} />
+                    <Text style={styles.emptyStateText}>No players found</Text>
+                  </View>
+                ) : (
+                  filteredPlayers.map(player => (
+                    <View key={player.id} style={styles.playerCard}>
+                      <View 
+                        style={[
+                          styles.playerCardContent,
+                          { 
+                            borderLeftWidth: 4,
+                            borderLeftColor: player.payment_status === 'paid' ? COLORS.success : COLORS.error,
+                            borderTopWidth: 1,
+                            borderRightWidth: 1,
+                            borderBottomWidth: 1,
+                            borderTopColor: COLORS.grey[200],
+                            borderRightColor: COLORS.grey[200],
+                            borderBottomColor: COLORS.grey[200]
+                          }
+                        ]}
+                      >
+                        {/* Player Name and Team */}
+                        <View style={styles.playerHeader}>
+                          <View style={styles.playerInfo}>
+                            <MaterialCommunityIcons name="account" size={24} color={COLORS.text} style={styles.playerIcon} />
+                            <View>
+                              <Text style={styles.playerName}>{player.player_name}</Text>
+                              <Text style={styles.teamName}>{player.team_name}</Text>
+                            </View>
+                          </View>
+                          
+                          <View style={[
+                            styles.statusBadge,
+                            { backgroundColor: player.payment_status === 'paid' ? COLORS.success + '20' : COLORS.error + '20' }
+                          ]}>
+                            <MaterialCommunityIcons 
+                              name={player.payment_status === 'paid' ? 'check' : 'close'} 
+                              size={14} 
+                              color={player.payment_status === 'paid' ? COLORS.success : COLORS.error} 
+                            />
+                            <Text style={[
+                              styles.statusText,
+                              { color: player.payment_status === 'paid' ? COLORS.success : COLORS.error }
+                            ]}>
+                              {player.payment_status === 'paid' ? 'Paid' : 'Not Paid'}
+                            </Text>
+                          </View>
                         </View>
-                      </View>
-                      
-                      <View style={[
-                        styles.statusBadge,
-                        { backgroundColor: player.payment_status === 'paid' ? COLORS.success + '20' : COLORS.error + '20' }
-                      ]}>
-                        <MaterialCommunityIcons 
-                          name={player.payment_status === 'paid' ? 'check' : 'close'} 
-                          size={14} 
-                          color={player.payment_status === 'paid' ? COLORS.success : COLORS.error} 
-                        />
-                        <Text style={[
-                          styles.statusText,
-                          { color: player.payment_status === 'paid' ? COLORS.success : COLORS.error }
-                        ]}>
-                          {player.payment_status === 'paid' ? 'Paid' : 'Not Paid'}
-                        </Text>
+                        
+                        {/* Payment Update Info - Show only for paid payments */}
+                        {player.payment_status === 'paid' && player.payment_updated_at && (
+                          <View style={styles.paymentUpdateContainer}>
+                            <MaterialCommunityIcons name="clock-outline" size={16} color={COLORS.grey[600]} />
+                            <Text style={styles.paymentUpdateText}>
+                              Marked as paid on {formatDate(player.payment_updated_at)}
+                            </Text>
+                          </View>
+                        )}
+                        
+                        {/* Attendance Info */}
+                        {player.attendance && (
+                          <View style={styles.attendanceContainer}>
+                            {/* Present icon */}
+                            <MaterialCommunityIcons name="check-circle" size={16} color={COLORS.success} style={{ marginRight: 2 }} />
+                            <Text style={styles.attendanceText}>{player.attendance.present}</Text>
+                            {/* Absent icon */}
+                            <MaterialCommunityIcons name="close-circle" size={16} color={COLORS.error} style={{ marginLeft: 8, marginRight: 2 }} />
+                            <Text style={styles.attendanceText}>{player.attendance.absent}</Text>
+                            {/* Separator */}
+                            <Text style={{ marginHorizontal: 8, color: COLORS.grey[400], fontWeight: 'bold', fontSize: 16 }}>|</Text>
+                            {/* Whistle icon for training and total */}
+                            <MaterialCommunityIcons name="whistle" size={16} color={COLORS.primary} style={{ marginRight: 2 }} />
+                            <Text style={styles.attendanceText}>{player.attendance.total}</Text>
+                            {/* Percentage */}
+                            <Text style={[styles.attendanceText, { marginLeft: 8 }]}>({player.attendance.percentage}%)</Text>
+                          </View>
+                        )}
                       </View>
                     </View>
-                    
-                    {/* Payment Update Info - Show only for paid payments */}
-                    {player.payment_status === 'paid' && player.payment_updated_at && (
-                      <View style={styles.paymentUpdateContainer}>
-                        <MaterialCommunityIcons name="clock-outline" size={16} color={COLORS.grey[600]} />
-                        <Text style={styles.paymentUpdateText}>
-                          Marked as paid on {formatDate(player.payment_updated_at)}
-                        </Text>
-                      </View>
-                    )}
-                    
-                    {/* Attendance Info */}
-                    {player.attendance && (
-                      <View style={styles.attendanceContainer}>
-                        {/* Present icon */}
-                        <MaterialCommunityIcons name="account-check" size={16} color={COLORS.success} style={{ borderWidth: 2, borderColor: COLORS.success, borderRadius: 8, marginRight: 2 }} />
-                        <Text style={styles.attendanceText}>{player.attendance.present}</Text>
-                        {/* Absent icon */}
-                        <MaterialCommunityIcons name="account-off-outline" size={16} color={COLORS.error} style={{ borderWidth: 2, borderColor: COLORS.error, borderRadius: 8, marginLeft: 8, marginRight: 2 }} />
-                        <Text style={styles.attendanceText}>{player.attendance.absent}</Text>
-                        {/* Separator */}
-                        <Text style={{ marginHorizontal: 8, color: COLORS.grey[400], fontWeight: 'bold', fontSize: 16 }}>|</Text>
-                        {/* Whistle icon for training and total */}
-                        <MaterialCommunityIcons name="whistle" size={16} color={COLORS.primary} style={{ marginRight: 2 }} />
-                        <Text style={styles.attendanceText}>{player.attendance.total}</Text>
-                        {/* Percentage */}
-                        <Text style={[styles.attendanceText, { marginLeft: 8 }]}>({player.attendance.percentage}%)</Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
-              ))
-            )}
-            
-            {/* Add extra padding at bottom for better scrolling */}
-            <View style={{ height: 24 }} />
-          </View>
+                  ))
+                )}
+                
+                {/* Add extra padding at bottom for better scrolling */}
+                <View style={{ height: 24 }} />
+              </View>
+            </>
+          )}
         </ScrollView>
 
         {/* Team Selection Modal */}
@@ -983,22 +977,6 @@ export const AdminPaymentsScreen = () => {
                   <MaterialCommunityIcons name="close" size={24} color={COLORS.text} />
                 </TouchableOpacity>
               </View>
-              
-              {/* All Teams option */}
-              <TouchableOpacity
-                style={[styles.teamOption, selectedTeamId === null && styles.teamOptionSelected]}
-                onPress={() => handleTeamSelect(null)}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <MaterialCommunityIcons name="view-grid" size={20} color={COLORS.primary} style={{ marginRight: 8 }} />
-                  <Text style={[styles.teamOptionText, selectedTeamId === null && styles.teamOptionTextSelected]}>
-                    All Teams
-                  </Text>
-                </View>
-                {selectedTeamId === null && (
-                  <MaterialCommunityIcons name="check" size={20} color={COLORS.primary} />
-                )}
-              </TouchableOpacity>
               
               {/* Team options */}
               {teams.map(team => (
@@ -1206,10 +1184,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: SPACING.xl,
   },
+  emptyStateContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.xl,
+    marginTop: SPACING.xl,
+  },
   emptyStateText: {
-    marginTop: SPACING.md,
-    color: COLORS.grey[600],
     fontSize: 16,
+    color: COLORS.grey[600],
+    textAlign: 'center',
+    marginTop: SPACING.md,
   },
   // Player card styles
   playerCard: {
