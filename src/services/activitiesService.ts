@@ -4,31 +4,90 @@ import { addDays, addWeeks, addMonths, format, parseISO, isBefore, isAfter, isSa
 // Add helper function to get user's club_id
 export const getUserClubId = async (): Promise<string | null> => {
   try {
-    // Check if user is authenticated
+    // DIRECT FIX: Add more debugging
+    console.log('[getUserClubId] Starting club ID lookup...');
+    
+    // First try to get admin data from AsyncStorage
+    try {
+      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+      const adminDataStr = await AsyncStorage.getItem('admin_data');
+      console.log('[getUserClubId] Admin data from AsyncStorage:', adminDataStr ? 'Found' : 'Not found');
+      
+      if (adminDataStr) {
+        const adminData = JSON.parse(adminDataStr);
+        if (adminData.club_id) {
+          console.log('[getUserClubId] Found club_id in admin_data:', adminData.club_id);
+          return adminData.club_id;
+        } else {
+          console.log('[getUserClubId] admin_data found but no club_id in it');
+        }
+      }
+    } catch (e) {
+      console.log('[getUserClubId] Error reading admin_data from AsyncStorage:', e);
+    }
+    
+    // Check if user is authenticated via Supabase auth
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return null;
+    if (!user) {
+      console.log('[getUserClubId] No authenticated user found');
+      return null;
+    }
+    
+    console.log('[getUserClubId] Authenticated user found:', user.id);
 
-    // First try to get club_id if user is an admin
-    let { data: club } = await supabase
+    // Try to get club_id if user is an admin
+    let { data: club, error: clubError } = await supabase
       .from('clubs')
       .select('id')
       .eq('admin_id', user.id)
       .single();
+    
+    if (clubError) {
+      console.log('[getUserClubId] Error or no result when checking if user is admin:', clubError.message);
+    }
 
-    if (club) return club.id;
+    if (club) {
+      console.log('[getUserClubId] Found club via admin_id:', club.id);
+      
+      // DIRECT FIX: Save to AsyncStorage for future use
+      try {
+        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+        const adminDataStr = await AsyncStorage.getItem('admin_data');
+        if (adminDataStr) {
+          const adminData = JSON.parse(adminDataStr);
+          if (!adminData.club_id) {
+            adminData.club_id = club.id;
+            await AsyncStorage.setItem('admin_data', JSON.stringify(adminData));
+            console.log('[getUserClubId] Updated admin_data with club_id:', club.id);
+          }
+        }
+      } catch (e) {
+        console.log('[getUserClubId] Error updating admin_data in AsyncStorage:', e);
+      }
+      
+      return club.id;
+    }
 
     // If not an admin, check if user is a coach
-    const { data: coach } = await supabase
+    const { data: coach, error: coachError } = await supabase
       .from('coaches')
       .select('club_id')
       .eq('user_id', user.id)
       .single();
+    
+    if (coachError) {
+      console.log('[getUserClubId] Error or no result when checking if user is coach:', coachError.message);
+    }
 
-    if (coach) return coach.club_id;
+    if (coach) {
+      console.log('[getUserClubId] Found club via coach:', coach.club_id);
+      return coach.club_id;
+    }
 
+    console.log('[getUserClubId] No club association found for user');
     return null;
   } catch (error) {
-    console.error('Error getting user club ID:', error);
+    console.error('[getUserClubId] Error getting user club ID:', error);
     return null;
   }
 };

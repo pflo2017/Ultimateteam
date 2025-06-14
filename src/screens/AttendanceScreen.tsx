@@ -313,16 +313,47 @@ export const AttendanceScreen = () => {
       setIsLoadingTeams(true);
       
       if (userRole === 'admin') {
-        // For admins, get all active teams
+        // Get the admin's club_id first
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          console.error('No authenticated user found');
+          setTeams([]);
+          return;
+        }
+        
+        // Get admin's club_id
+        const { data: club, error: clubError } = await supabase
+          .from('clubs')
+          .select('id')
+          .eq('admin_id', user.id)
+          .single();
+          
+        if (clubError) {
+          console.error('Error getting club for admin:', clubError);
+          setTeams([]);
+          return;
+        }
+        
+        if (!club) {
+          console.error('No club found for admin');
+          setTeams([]);
+          return;
+        }
+        
+        console.log('[AttendanceScreen] Admin club_id:', club.id);
+        
+        // For admins, get teams filtered by club_id for data isolation
         const { data, error } = await supabase
           .from('teams')
           .select('id, name')
+          .eq('club_id', club.id) // CRITICAL: Filter by club_id for data isolation
           .eq('is_active', true)
           .order('name');
           
         if (error) throw error;
         
         if (data) {
+          console.log('[AttendanceScreen] Teams loaded for admin:', data.length);
           setTeams(data);
           // If there's only one team, select it automatically
           if (data.length === 1) {
@@ -815,9 +846,9 @@ export const AttendanceScreen = () => {
                         >
                           <MaterialCommunityIcons
                             name={getActivityIcon(type)}
-                            size={16}
+                            size={18}
                             color={isSelected ? '#fff' : color}
-                            style={{ marginRight: 4 }}
+                            style={{ marginRight: 8 }}
                           />
                           <Text style={[
                             styles.chipText,
@@ -831,20 +862,30 @@ export const AttendanceScreen = () => {
                   </View>
                   <Text style={styles.filterModalSection}>Teams</Text>
                   <View style={styles.filterChipRow}>
+                    {/* All Teams option */}
                     <TouchableOpacity
+                      key="all-teams"
                       style={[
                         styles.chip,
-                        filterTeamIds.length === 0 && { backgroundColor: COLORS.primary, borderColor: COLORS.primary }
+                        !selectedTeam && { backgroundColor: COLORS.primary, borderColor: COLORS.primary }
                       ]}
-                      onPress={() => setFilterTeamIds([])}
+                      onPress={() => setSelectedTeam(null)}
                     >
+                      <MaterialCommunityIcons
+                        name="account-group-outline"
+                        size={18}
+                        color={!selectedTeam ? '#fff' : COLORS.primary}
+                        style={{ marginRight: 8 }}
+                      />
                       <Text style={[
                         styles.chipText,
-                        filterTeamIds.length === 0 && { color: '#fff' }
-                      ]}>All Teams</Text>
+                        !selectedTeam && { color: '#fff' }
+                      ]}>
+                        All Teams
+                      </Text>
                     </TouchableOpacity>
-                    {teams.map(team => {
-                      const isSelected = filterTeamIds.includes(team.id);
+                    {teams.map((team) => {
+                      const isSelected = selectedTeam?.id === team.id;
                       return (
                         <TouchableOpacity
                           key={team.id}
@@ -852,18 +893,20 @@ export const AttendanceScreen = () => {
                             styles.chip,
                             isSelected && { backgroundColor: COLORS.primary, borderColor: COLORS.primary }
                           ]}
-                          onPress={() => {
-                            setFilterTeamIds(prev =>
-                              prev.includes(team.id)
-                                ? prev.filter(id => id !== team.id)
-                                : [...prev, team.id]
-                            );
-                          }}
+                          onPress={() => setSelectedTeam(isSelected ? null : team)}
                         >
+                          <MaterialCommunityIcons
+                            name="account-group"
+                            size={18}
+                            color={isSelected ? '#fff' : COLORS.primary}
+                            style={{ marginRight: 8 }}
+                          />
                           <Text style={[
                             styles.chipText,
                             isSelected && { color: '#fff' }
-                          ]}>{team.name}</Text>
+                          ]}>
+                            {team.name}
+                          </Text>
                         </TouchableOpacity>
                       );
                     })}
@@ -871,7 +914,6 @@ export const AttendanceScreen = () => {
                   <Button mode="contained" onPress={() => {
                     setFilterModalVisible(false);
                     setSelectedType(filterType);
-                    setSelectedTeam(filterTeamIds.length > 0 ? teams.find(t => t.id === filterTeamIds[0]) || null : null);
                   }} style={styles.filterApplyButton}>
                     Apply Filters
                   </Button>
@@ -1160,6 +1202,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     padding: 24,
+    paddingHorizontal: 16,
     minHeight: 320,
   },
   filterModalTitle: {
@@ -1176,21 +1219,22 @@ const styles = StyleSheet.create({
   filterChipRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 8,
+    justifyContent: 'flex-start',
+    marginBottom: 16,
+    marginHorizontal: -4, // Negative margin to offset the padding
   },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.white,
-    borderRadius: 16,
+    borderRadius: 24,
     borderWidth: 1,
     borderColor: COLORS.grey[300],
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    marginRight: 8,
-    marginBottom: 8,
-    minHeight: 32,
+    paddingVertical: 8,
+    margin: 4,
+    minWidth: 105,
+    justifyContent: 'flex-start',
   },
   chipSelected: {
     backgroundColor: COLORS.primary,
@@ -1198,7 +1242,7 @@ const styles = StyleSheet.create({
   },
   chipText: {
     color: COLORS.text,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '500',
   },
   chipTextSelected: {
