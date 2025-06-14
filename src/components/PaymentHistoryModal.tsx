@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Modal, ActivityIndicator, StyleSheet } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const COLORS = {
   background: '#fff',
@@ -46,62 +47,112 @@ interface PaymentHistoryModalProps {
 export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({ visible, onClose, playerId, playerName, teamName }) => {
   const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [debug, setDebug] = useState<string>('');
 
   useEffect(() => {
-    if (!visible) return;
+    if (!visible || !playerId) return;
+    
     const fetchPaymentHistory = async () => {
       setIsLoading(true);
+      console.log(`[PaymentHistoryModal] Fetching payment history for player: ${playerId}`);
+      
       try {
         const currentDate = new Date();
         const currentYear = currentDate.getFullYear();
         const currentMonth = currentDate.getMonth() + 1;
+        
+        // Generate month data for current and previous months only
         const months = [];
-        for (let m = currentMonth; m >= 1; m--) {
-          months.push({ year: currentYear, month: m });
+        for (let m = 1; m <= currentMonth; m++) {
+          months.push({ 
+            year: currentYear, 
+            month: m,
+            monthName: new Date(currentYear, m-1).toLocaleString('default', { month: 'long' })
+          });
         }
-        const { data, error } = await supabase
-          .from('monthly_payments')
-          .select('*')
-          .eq('player_id', playerId)
-          .eq('year', currentYear);
-        if (error) throw error;
-        const recordsByMonth: Record<string, any> = {};
-        (data || []).forEach(record => {
-          if (record.year === currentYear && record.month <= currentMonth) {
-            recordsByMonth[`${record.year}-${record.month}`] = record;
+        // Reverse to show most recent first
+        months.reverse();
+        
+        // Get parent ID from storage
+        const parentData = await AsyncStorage.getItem('parent_data');
+        const { data: authData } = await supabase.auth.getSession();
+        const authUserId = authData?.session?.user?.id;
+        
+        let parentId = authUserId;
+        if (parentData) {
+          const parent = JSON.parse(parentData);
+          parentId = parent.id;
+        }
+        
+        console.log(`[PaymentHistoryModal] Using parent ID: ${parentId} for player ${playerId}`);
+        
+        // Call the RPC function instead of direct table access
+        const { data: rpcData, error: rpcError } = await supabase.rpc(
+          'get_player_payment_history',
+          {
+            p_player_id: playerId,
+            p_parent_id: parentId,
+            p_year: currentYear // Dynamically use current year
           }
-        });
-        const historyRecords = months.map(({ year, month }) => {
+        );
+        
+        if (rpcError) {
+          console.error(`[PaymentHistoryModal] RPC error:`, rpcError);
+          throw rpcError;
+        }
+        
+        console.log(`[PaymentHistoryModal] Received ${rpcData?.length || 0} history records from function`);
+        
+        // Process the JSON returned by the function
+        const recordsByMonth: Record<string, any> = {};
+        if (rpcData && rpcData.length > 0) {
+          rpcData.forEach((item: any) => {
+            // Handle both string and object formats from RPC
+            const record = typeof item === 'string' ? JSON.parse(item) : item;
+            const key = `${record.year}-${record.month}`;
+            recordsByMonth[key] = {
+              id: `${record.year}-${record.month}`,
+              player_id: record.player_id,
+              year: record.year,
+              month: record.month,
+              status: record.status,
+              updated_at: record.updated_at
+            };
+          });
+        }
+        
+        // Create complete history for current and previous months only
+        const historyRecords = months.map(({ year, month, monthName }) => {
           const key = `${year}-${month}`;
           if (recordsByMonth[key]) {
-            return recordsByMonth[key];
-          } else if (month === currentMonth) {
             return {
-              id: `virtual-${year}-${month}`,
-              player_id: playerId,
-              year,
-              month,
-              status: 'not_paid',
-              updated_at: new Date().toISOString()
+              ...recordsByMonth[key],
+              monthName
             };
           } else {
+            // For months without records, create virtual records with not_paid status
             return {
               id: `virtual-${year}-${month}`,
               player_id: playerId,
               year,
               month,
+              monthName,
               status: 'not_paid',
-              updated_at: new Date().toISOString()
+              updated_at: null
             };
           }
         });
+        
         setPaymentHistory(historyRecords);
       } catch (err) {
+        console.error(`[PaymentHistoryModal] Error fetching history:`, err);
+        setDebug(prev => prev + `\nError: ${(err as Error).message}`);
         setPaymentHistory([]);
       } finally {
         setIsLoading(false);
       }
     };
+    
     fetchPaymentHistory();
   }, [visible, playerId]);
 
@@ -110,7 +161,11 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({ visibl
     try {
       const date = new Date(dateString);
       if (isNaN(date.getTime())) return 'Invalid date';
-      return date.toLocaleDateString('en-GB');
+      return date.toLocaleDateString('en-GB', { 
+        day: '2-digit',
+        month: '2-digit', 
+        year: 'numeric' 
+      });
     } catch (e) {
       return 'Error formatting date';
     }
@@ -144,14 +199,16 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({ visibl
                   <View key={index} style={styles.paymentItem}>
                     <View>
                       <Text style={styles.paymentMonth}>
-                        {new Date(payment.year, payment.month - 1).toLocaleString('default', { month: 'long' })} {payment.year}
+                        {payment.monthName} {payment.year}
                       </Text>
                       <StatusPill status={payment.status} />
                     </View>
-                    {payment.updated_at && (
+                    {payment.updated_at ? (
                       <Text style={styles.paymentDate}>
                         {formatDate(payment.updated_at)}
                       </Text>
+                    ) : (
+                      <Text style={styles.paymentDate}>-</Text>
                     )}
                   </View>
                 ))
@@ -175,7 +232,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
     padding: SPACING.lg,
     borderRadius: 8,
-    width: '80%',
+    width: '90%',
     maxHeight: '80%',
   },
   modalHeader: {
@@ -196,7 +253,7 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.md,
     fontWeight: 'bold',
     color: COLORS.text,
-    marginBottom: SPACING.md,
+    marginBottom: SPACING.xs,
     textAlign: 'center',
   },
   teamName: {

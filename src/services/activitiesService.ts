@@ -4,31 +4,90 @@ import { addDays, addWeeks, addMonths, format, parseISO, isBefore, isAfter, isSa
 // Add helper function to get user's club_id
 export const getUserClubId = async (): Promise<string | null> => {
   try {
-    // Check if user is authenticated
+    // DIRECT FIX: Add more debugging
+    console.log('[getUserClubId] Starting club ID lookup...');
+    
+    // First try to get admin data from AsyncStorage
+    try {
+      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+      const adminDataStr = await AsyncStorage.getItem('admin_data');
+      console.log('[getUserClubId] Admin data from AsyncStorage:', adminDataStr ? 'Found' : 'Not found');
+      
+      if (adminDataStr) {
+        const adminData = JSON.parse(adminDataStr);
+        if (adminData.club_id) {
+          console.log('[getUserClubId] Found club_id in admin_data:', adminData.club_id);
+          return adminData.club_id;
+        } else {
+          console.log('[getUserClubId] admin_data found but no club_id in it');
+        }
+      }
+    } catch (e) {
+      console.log('[getUserClubId] Error reading admin_data from AsyncStorage:', e);
+    }
+    
+    // Check if user is authenticated via Supabase auth
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return null;
+    if (!user) {
+      console.log('[getUserClubId] No authenticated user found');
+      return null;
+    }
+    
+    console.log('[getUserClubId] Authenticated user found:', user.id);
 
-    // First try to get club_id if user is an admin
-    let { data: club } = await supabase
+    // Try to get club_id if user is an admin
+    let { data: club, error: clubError } = await supabase
       .from('clubs')
       .select('id')
       .eq('admin_id', user.id)
       .single();
+    
+    if (clubError) {
+      console.log('[getUserClubId] Error or no result when checking if user is admin:', clubError.message);
+    }
 
-    if (club) return club.id;
+    if (club) {
+      console.log('[getUserClubId] Found club via admin_id:', club.id);
+      
+      // DIRECT FIX: Save to AsyncStorage for future use
+      try {
+        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+        const adminDataStr = await AsyncStorage.getItem('admin_data');
+        if (adminDataStr) {
+          const adminData = JSON.parse(adminDataStr);
+          if (!adminData.club_id) {
+            adminData.club_id = club.id;
+            await AsyncStorage.setItem('admin_data', JSON.stringify(adminData));
+            console.log('[getUserClubId] Updated admin_data with club_id:', club.id);
+          }
+        }
+      } catch (e) {
+        console.log('[getUserClubId] Error updating admin_data in AsyncStorage:', e);
+      }
+      
+      return club.id;
+    }
 
     // If not an admin, check if user is a coach
-    const { data: coach } = await supabase
+    const { data: coach, error: coachError } = await supabase
       .from('coaches')
       .select('club_id')
       .eq('user_id', user.id)
       .single();
+    
+    if (coachError) {
+      console.log('[getUserClubId] Error or no result when checking if user is coach:', coachError.message);
+    }
 
-    if (coach) return coach.club_id;
+    if (coach) {
+      console.log('[getUserClubId] Found club via coach:', coach.club_id);
+      return coach.club_id;
+    }
 
+    console.log('[getUserClubId] No club association found for user');
     return null;
   } catch (error) {
-    console.error('Error getting user club ID:', error);
+    console.error('[getUserClubId] Error getting user club ID:', error);
     return null;
   }
 };
@@ -133,20 +192,82 @@ export const updateActivity = async (id: string, activityData: Partial<Activity>
 };
 
 /**
- * Delete an activity
+ * Delete an activity and all associated data
+ * This ensures complete removal of the activity and all its related records
  */
 export const deleteActivity = async (id: string): Promise<{ error: Error | null }> => {
   try {
+    console.log(`Deleting activity with ID: ${id}`);
+    
+    // First check if this is a game activity to properly handle game-specific data
+    const { data: activityData, error: activityError } = await supabase
+      .from('activities')
+      .select('type, lineup_players, is_repeating, team_id')
+      .eq('id', id)
+      .single();
+    
+    if (activityError) {
+      console.error('Error fetching activity data before deletion:', activityError);
+      // Continue with deletion even if we can't fetch the activity data
+    }
+    
+    if (activityData) {
+      console.log(`Deleting activity - Type: ${activityData.type}, Team ID: ${activityData.team_id}, Has lineup: ${!!activityData.lineup_players?.length}, Is repeating: ${activityData.is_repeating}`);
+    }
+    
+    // Start deleting all related data
+    
+    // 1. Delete attendance records
+    console.log('Deleting official attendance records (marked by coach)');
+    const { error: attendanceError } = await supabase
+      .from('activity_attendance')
+      .delete()
+      .eq('activity_id', id);
+    
+    if (attendanceError) {
+      console.error('Error deleting attendance records:', attendanceError);
+      throw attendanceError;
+    }
+    
+    // 2. Delete presence responses (RSVP)
+    console.log('Deleting presence responses (RSVPs from parents/players)');
+    const { error: presenceError } = await supabase
+      .from('activity_presence')
+      .delete()
+      .eq('activity_id', id);
+    
+    if (presenceError) {
+      console.error('Error deleting presence records:', presenceError);
+      // Continue with deletion even if presence deletion fails
+    }
+    
+    // 3. If this is a recurring activity, delete all its instances
+    if (activityData?.type && activityData?.is_repeating) {
+      // Extract the base ID (first 36 characters) from recurring instances
+      const baseId = id.slice(0, 36);
+      const { error: recurringError } = await supabase
+        .from('activities')
+        .delete()
+        .like('id', `${baseId}-%`); // Match pattern for recurring instances
+      
+      if (recurringError) {
+        console.error('Error deleting recurring instances:', recurringError);
+        // Continue with deleting the main activity
+      }
+    }
+    
+    // 4. Finally delete the activity itself
     const { error } = await supabase
       .from('activities')
       .delete()
       .eq('id', id);
-
+    
     if (error) throw error;
-
+    
+    console.log(`Activity and all related data successfully deleted: ${id}`);
     return { error: null };
   } catch (error) {
-    console.error('Error deleting activity:', error);
+    console.error('Error in deleteActivity:', error);
     return { error: error as Error };
   }
 };

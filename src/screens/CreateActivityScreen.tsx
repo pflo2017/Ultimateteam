@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Alert, Modal } from 'react-native';
+import { View, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Alert, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { Text, Button, TextInput, IconButton, ActivityIndicator, Divider, Menu } from 'react-native-paper';
 import { COLORS, SPACING } from '../constants/theme';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -435,352 +435,362 @@ export const CreateActivityScreen = () => {
         </Button>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.activityTypeContainer}>
-          <ActivityTypeButton type="training" label="Training" icon="whistle" />
-          <ActivityTypeButton type="game" label="Game" icon="trophy-outline" />
-          <ActivityTypeButton type="tournament" label="Tournament" icon="tournament" />
-          <ActivityTypeButton type="other" label="Other" icon="calendar-text" />
-        </View>
-
-        <Text style={styles.label}>Title</Text>
-        <TextInput
-          value={title}
-          onChangeText={setTitle}
-          style={styles.input}
-          mode="outlined"
-          outlineColor={COLORS.grey[200]}
-          activeOutlineColor={getActivityColor(activityType)}
-          outlineStyle={styles.inputOutline}
-          placeholder="Enter activity title"
-          dense
-        />
-
-        <Text style={styles.label}>Location</Text>
-        <TextInput
-          value={location}
-          onChangeText={setLocation}
-          style={styles.input}
-          mode="outlined"
-          outlineColor={COLORS.grey[200]}
-          activeOutlineColor={getActivityColor(activityType)}
-          outlineStyle={styles.inputOutline}
-          placeholder="Enter location"
-          dense
-        />
-
-        {/* Home/Away selection for Game type */}
-        {activityType === 'game' && (
-          <View>
-            <Text style={styles.label}>Home/Away</Text>
-            <View style={styles.homeAwayContainer}>
-              <TouchableOpacity
-                style={[
-                  styles.homeAwayButton,
-                  homeAway === 'home' && { backgroundColor: getActivityColor(activityType) }
-                ]}
-                onPress={() => setHomeAway('home')}
-              >
-                <Text style={[
-                  styles.homeAwayButtonText,
-                  homeAway === 'home' && styles.activeHomeAwayButtonText
-                ]}>
-                  Home
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.homeAwayButton,
-                  homeAway === 'away' && { backgroundColor: getActivityColor(activityType) }
-                ]}
-                onPress={() => setHomeAway('away')}
-              >
-                <Text style={[
-                  styles.homeAwayButtonText,
-                  homeAway === 'away' && styles.activeHomeAwayButtonText
-                ]}>
-                  Away
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-
-        <Text style={styles.label}>Time</Text>
-        <View style={styles.timeContainer}>
-          <View style={styles.startTimeContainer}>
-            <Text style={styles.timeLabel}>Start</Text>
-            <TouchableOpacity 
-              style={styles.dateTimeButton} 
-              onPress={showStartDatePicker}
-            >
-              <MaterialCommunityIcons 
-                name="calendar-clock" 
-                size={18} 
-                color={getActivityColor(activityType)} 
-                style={styles.inputIcon}
-              />
-              <Text style={styles.dateTimeText}>
-                {format(startDate, 'EEE, MMM d, HH:mm')}
-              </Text>
-            </TouchableOpacity>
-          </View>
-          
-          <View style={styles.durationContainer}>
-            <Text style={styles.timeLabel}>Duration</Text>
-            <TextInput
-              value={duration}
-              onChangeText={setDuration}
-              style={styles.durationInput}
-              mode="outlined"
-              outlineColor={COLORS.grey[200]}
-              activeOutlineColor={getActivityColor(activityType)}
-              outlineStyle={styles.inputOutline}
-              placeholder="1h"
-              dense
-              left={<TextInput.Icon icon="clock-outline" color={getActivityColor(activityType)} />}
-            />
-          </View>
-        </View>
-
-        {/* Team Selection */}
-        <Text style={styles.label}>Select Team</Text>
-        <TouchableOpacity 
-          style={styles.teamSelector}
-          onPress={() => setShowTeamMenu(true)}
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 20}
+      >
+        <ScrollView 
+          style={styles.content} 
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 100 }}
         >
-          <View>
-            <Text style={styles.teamSelectorText}>
-              {selectedTeam ? selectedTeam.name : 'Select a team'}
-            </Text>
-            <Text style={styles.teamSelectorSubtext}>
-              This activity will be visible to the selected team
-            </Text>
+          <View style={styles.activityTypeContainer}>
+            <ActivityTypeButton type="training" label="Training" icon="whistle" />
+            <ActivityTypeButton type="game" label="Game" icon="trophy-outline" />
+            <ActivityTypeButton type="tournament" label="Tournament" icon="tournament" />
+            <ActivityTypeButton type="other" label="Other" icon="calendar-text" />
           </View>
-          <MaterialCommunityIcons
-            name="chevron-down" 
-            size={24} 
-            color={getActivityColor(activityType)} 
+
+          <Text style={styles.label}>Title</Text>
+          <TextInput
+            value={title}
+            onChangeText={setTitle}
+            style={styles.input}
+            mode="outlined"
+            outlineColor={COLORS.grey[200]}
+            activeOutlineColor={getActivityColor(activityType)}
+            outlineStyle={styles.inputOutline}
+            placeholder="Enter activity title"
+            dense
           />
-        </TouchableOpacity>
 
-        {/* Lineup Selection for Game type */}
-        {activityType === 'game' && selectedTeam && (
-          <View>
-            <Text style={styles.label}>Lineup</Text>
-            <TouchableOpacity 
-              style={styles.teamSelector}
-              onPress={() => setShowPlayerMenu(true)}
-              disabled={!selectedTeam}
-            >
-              <View>
-                <Text style={styles.teamSelectorText}>
-                  {selectedPlayers.length > 0 
-                    ? `${selectedPlayers.length} player${selectedPlayers.length > 1 ? 's' : ''} selected` 
-                    : 'Select players for lineup'}
-                </Text>
-                <Text style={styles.teamSelectorSubtext}>
-                  Select players that will be in the game lineup
-                </Text>
-              </View>
-              <MaterialCommunityIcons
-                name="chevron-down" 
-                size={24} 
-                color={getActivityColor(activityType)} 
-              />
-            </TouchableOpacity>
-          </View>
-        )}
+          <Text style={styles.label}>Location</Text>
+          <TextInput
+            value={location}
+            onChangeText={setLocation}
+            style={styles.input}
+            mode="outlined"
+            outlineColor={COLORS.grey[200]}
+            activeOutlineColor={getActivityColor(activityType)}
+            outlineStyle={styles.inputOutline}
+            placeholder="Enter location"
+            dense
+          />
 
-        {/* Bottom Modal for Team Selection */}
-        <Modal
-          visible={showTeamMenu}
-          animationType="slide"
-          transparent={true}
-          onRequestClose={() => setShowTeamMenu(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Select Team</Text>
-                <TouchableOpacity 
-                  onPress={() => setShowTeamMenu(false)}
-                  style={styles.closeButton}
+          {/* Home/Away selection for Game type */}
+          {activityType === 'game' && (
+            <View>
+              <Text style={styles.label}>Home/Away</Text>
+              <View style={styles.homeAwayContainer}>
+                <TouchableOpacity
+                  style={[
+                    styles.homeAwayButton,
+                    homeAway === 'home' && { backgroundColor: getActivityColor(activityType) }
+                  ]}
+                  onPress={() => setHomeAway('home')}
                 >
-                  <MaterialCommunityIcons
-                    name="close"
-                    size={24}
-                    color={COLORS.text}
-                  />
+                  <Text style={[
+                    styles.homeAwayButtonText,
+                    homeAway === 'home' && styles.activeHomeAwayButtonText
+                  ]}>
+                    Home
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.homeAwayButton,
+                    homeAway === 'away' && { backgroundColor: getActivityColor(activityType) }
+                  ]}
+                  onPress={() => setHomeAway('away')}
+                >
+                  <Text style={[
+                    styles.homeAwayButtonText,
+                    homeAway === 'away' && styles.activeHomeAwayButtonText
+                  ]}>
+                    Away
+                  </Text>
                 </TouchableOpacity>
               </View>
-              
-              <ScrollView style={styles.teamsList}>
-                {availableTeams.length > 0 ? (
-                  availableTeams.map(team => (
-                    <TouchableOpacity
-                      key={team.id}
-                      style={[
-                        styles.teamItem,
-                        selectedTeam?.id === team.id && styles.selectedTeamItem
-                      ]}
-                      onPress={() => handleTeamSelect(team)}
-                    >
-                      <View style={styles.teamItemContent}>
-                        <MaterialCommunityIcons
-                          name="account-group"
-                          size={24}
-                          color={COLORS.primary}
-                        />
-                        <Text style={styles.teamName}>{team.name}</Text>
-                      </View>
-                      {selectedTeam?.id === team.id && (
-                        <MaterialCommunityIcons
-                          name="check"
-                          size={24}
-                          color={COLORS.primary}
-                        />
-                      )}
-                    </TouchableOpacity>
-                  ))
-                ) : (
-                  <Text style={styles.noTeamsText}>No teams available</Text>
-                )}
-              </ScrollView>
-            </View>
-          </View>
-        </Modal>
-
-        {/* Players Modal for Lineup Selection */}
-        <Modal
-          visible={showPlayerMenu}
-          animationType="slide"
-          transparent={true}
-          onRequestClose={() => setShowPlayerMenu(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Select Players for Lineup</Text>
-                <TouchableOpacity 
-                  onPress={() => setShowPlayerMenu(false)}
-                  style={styles.closeButton}
-                >
-                  <MaterialCommunityIcons
-                    name="close"
-                    size={24}
-                    color={COLORS.text}
-                  />
-                </TouchableOpacity>
-              </View>
-              
-              <ScrollView style={styles.teamsList}>
-                {availablePlayers.length > 0 ? (
-                  availablePlayers.map(player => (
-                    <TouchableOpacity
-                      key={player.id}
-                      style={[
-                        styles.teamItem,
-                        selectedPlayers.includes(player.id) && styles.selectedTeamItem
-                      ]}
-                      onPress={() => handlePlayerSelect(player.id)}
-                    >
-                      <View style={styles.teamItemContent}>
-                        <MaterialCommunityIcons
-                          name="account"
-                          size={24}
-                          color={COLORS.primary}
-                        />
-                        <Text style={styles.teamName}>{player.name}</Text>
-                      </View>
-                      {selectedPlayers.includes(player.id) && (
-                        <MaterialCommunityIcons
-                          name="check"
-                          size={24}
-                          color={COLORS.primary}
-                        />
-                      )}
-                    </TouchableOpacity>
-                  ))
-                ) : (
-                  <Text style={styles.noTeamsText}>No players available</Text>
-                )}
-              </ScrollView>
-            </View>
-          </View>
-        </Modal>
-
-        {/* Repeat Schedule Component */}
-        <View style={styles.repeatContainer}>
-          <View style={styles.repeatHeader}>
-            <Text style={styles.label}>Repeat Schedule</Text>
-            <TouchableOpacity 
-              style={styles.repeatToggle}
-              onPress={() => setIsRepeating(!isRepeating)}
-            >
-              <MaterialCommunityIcons 
-                name={isRepeating ? "checkbox-marked" : "checkbox-blank-outline"} 
-                size={24} 
-                color={isRepeating ? getActivityColor(activityType) : COLORS.grey[500]} 
-              />
-              <Text style={[
-                styles.repeatToggleText,
-                isRepeating && { color: getActivityColor(activityType) }
-              ]}>
-                Repeat this event
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {isRepeating && (
-            <View style={styles.repeatOptions}>
-              <RepeatSchedule
-                isRepeating={isRepeating}
-                repeatType={repeatType}
-                repeatDays={repeatDays}
-                repeatUntil={repeatUntil}
-                onIsRepeatingChange={setIsRepeating}
-                onRepeatTypeChange={setRepeatType}
-                onRepeatDaysChange={setRepeatDays}
-                onRepeatUntilChange={setRepeatUntil}
-              />
             </View>
           )}
-        </View>
 
-        <Text style={styles.label}>Additional information</Text>
-        <TextInput
-          value={additionalInfo}
-          onChangeText={setAdditionalInfo}
-          style={styles.textAreaInput}
-          mode="outlined"
-          outlineColor={COLORS.grey[200]}
-          activeOutlineColor={getActivityColor(activityType)}
-          outlineStyle={styles.inputOutline}
-          multiline
-          numberOfLines={3}
-          placeholder="Don't forget to bring..."
-        />
+          <Text style={styles.label}>Time</Text>
+          <View style={styles.timeContainer}>
+            <View style={styles.startTimeContainer}>
+              <Text style={styles.timeLabel}>Start</Text>
+              <TouchableOpacity 
+                style={styles.dateTimeButton} 
+                onPress={showStartDatePicker}
+              >
+                <MaterialCommunityIcons 
+                  name="calendar-clock" 
+                  size={18} 
+                  color={getActivityColor(activityType)} 
+                  style={styles.inputIcon}
+                />
+                <Text style={styles.dateTimeText}>
+                  {format(startDate, 'EEE, MMM d, HH:mm')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.durationContainer}>
+              <Text style={styles.timeLabel}>Duration</Text>
+              <TextInput
+                value={duration}
+                onChangeText={setDuration}
+                style={styles.durationInput}
+                mode="outlined"
+                outlineColor={COLORS.grey[200]}
+                activeOutlineColor={getActivityColor(activityType)}
+                outlineStyle={styles.inputOutline}
+                placeholder="1h"
+                dense
+                left={<TextInput.Icon icon="clock-outline" color={getActivityColor(activityType)} />}
+              />
+            </View>
+          </View>
 
-        <View style={styles.privateNotesContainer}>
-          <Text style={styles.privateNotesTitle}>Private notes for coaches</Text>
-          <Text style={styles.privateNotesSubtitle}>Visible for all coaches and admins in the team</Text>
+          {/* Team Selection */}
+          <Text style={styles.label}>Select Team</Text>
+          <TouchableOpacity 
+            style={styles.teamSelector}
+            onPress={() => setShowTeamMenu(true)}
+          >
+            <View>
+              <Text style={styles.teamSelectorText}>
+                {selectedTeam ? selectedTeam.name : 'Select a team'}
+              </Text>
+              <Text style={styles.teamSelectorSubtext}>
+                This activity will be visible to the selected team
+              </Text>
+            </View>
+            <MaterialCommunityIcons
+              name="chevron-down" 
+              size={24} 
+              color={getActivityColor(activityType)} 
+            />
+          </TouchableOpacity>
+
+          {/* Lineup Selection for Game type */}
+          {activityType === 'game' && selectedTeam && (
+            <View>
+              <Text style={styles.label}>Lineup</Text>
+              <TouchableOpacity 
+                style={styles.teamSelector}
+                onPress={() => setShowPlayerMenu(true)}
+                disabled={!selectedTeam}
+              >
+                <View>
+                  <Text style={styles.teamSelectorText}>
+                    {selectedPlayers.length > 0 
+                      ? `${selectedPlayers.length} player${selectedPlayers.length > 1 ? 's' : ''} selected` 
+                      : 'Select players for lineup'}
+                  </Text>
+                  <Text style={styles.teamSelectorSubtext}>
+                    Select players that will be in the game lineup
+                  </Text>
+                </View>
+                <MaterialCommunityIcons
+                  name="chevron-down" 
+                  size={24} 
+                  color={getActivityColor(activityType)} 
+                />
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Bottom Modal for Team Selection */}
+          <Modal
+            visible={showTeamMenu}
+            animationType="slide"
+            transparent={true}
+            onRequestClose={() => setShowTeamMenu(false)}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>Select Team</Text>
+                  <TouchableOpacity 
+                    onPress={() => setShowTeamMenu(false)}
+                    style={styles.closeButton}
+                  >
+                    <MaterialCommunityIcons
+                      name="close"
+                      size={24}
+                      color={COLORS.text}
+                    />
+                  </TouchableOpacity>
+                </View>
+                
+                <ScrollView style={styles.teamsList}>
+                  {availableTeams.length > 0 ? (
+                    availableTeams.map(team => (
+                      <TouchableOpacity
+                        key={team.id}
+                        style={[
+                          styles.teamItem,
+                          selectedTeam?.id === team.id && styles.selectedTeamItem
+                        ]}
+                        onPress={() => handleTeamSelect(team)}
+                      >
+                        <View style={styles.teamItemContent}>
+                          <MaterialCommunityIcons
+                            name="account-group"
+                            size={24}
+                            color={COLORS.primary}
+                          />
+                          <Text style={styles.teamName}>{team.name}</Text>
+                        </View>
+                        {selectedTeam?.id === team.id && (
+                          <MaterialCommunityIcons
+                            name="check"
+                            size={24}
+                            color={COLORS.primary}
+                          />
+                        )}
+                      </TouchableOpacity>
+                    ))
+                  ) : (
+                    <Text style={styles.noTeamsText}>No teams available</Text>
+                  )}
+                </ScrollView>
+              </View>
+            </View>
+          </Modal>
+
+          {/* Players Modal for Lineup Selection */}
+          <Modal
+            visible={showPlayerMenu}
+            animationType="slide"
+            transparent={true}
+            onRequestClose={() => setShowPlayerMenu(false)}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>Select Players for Lineup</Text>
+                  <TouchableOpacity 
+                    onPress={() => setShowPlayerMenu(false)}
+                    style={styles.closeButton}
+                  >
+                    <MaterialCommunityIcons
+                      name="close"
+                      size={24}
+                      color={COLORS.text}
+                    />
+                  </TouchableOpacity>
+                </View>
+                
+                <ScrollView style={styles.teamsList}>
+                  {availablePlayers.length > 0 ? (
+                    availablePlayers.map(player => (
+                      <TouchableOpacity
+                        key={player.id}
+                        style={[
+                          styles.teamItem,
+                          selectedPlayers.includes(player.id) && styles.selectedTeamItem
+                        ]}
+                        onPress={() => handlePlayerSelect(player.id)}
+                      >
+                        <View style={styles.teamItemContent}>
+                          <MaterialCommunityIcons
+                            name="account"
+                            size={24}
+                            color={COLORS.primary}
+                          />
+                          <Text style={styles.teamName}>{player.name}</Text>
+                        </View>
+                        {selectedPlayers.includes(player.id) && (
+                          <MaterialCommunityIcons
+                            name="check"
+                            size={24}
+                            color={COLORS.primary}
+                          />
+                        )}
+                      </TouchableOpacity>
+                    ))
+                  ) : (
+                    <Text style={styles.noTeamsText}>No players available</Text>
+                  )}
+                </ScrollView>
+              </View>
+            </View>
+          </Modal>
+
+          {/* Repeat Schedule Component */}
+          <View style={styles.repeatContainer}>
+            <View style={styles.repeatHeader}>
+              <Text style={styles.label}>Repeat Schedule</Text>
+              <TouchableOpacity 
+                style={styles.repeatToggle}
+                onPress={() => setIsRepeating(!isRepeating)}
+              >
+                <MaterialCommunityIcons 
+                  name={isRepeating ? "checkbox-marked" : "checkbox-blank-outline"} 
+                  size={24} 
+                  color={isRepeating ? getActivityColor(activityType) : COLORS.grey[500]} 
+                />
+                <Text style={[
+                  styles.repeatToggleText,
+                  isRepeating && { color: getActivityColor(activityType) }
+                ]}>
+                  Repeat this event
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {isRepeating && (
+              <View style={styles.repeatOptions}>
+                <RepeatSchedule
+                  isRepeating={isRepeating}
+                  repeatType={repeatType}
+                  repeatDays={repeatDays}
+                  repeatUntil={repeatUntil}
+                  onIsRepeatingChange={setIsRepeating}
+                  onRepeatTypeChange={setRepeatType}
+                  onRepeatDaysChange={setRepeatDays}
+                  onRepeatUntilChange={setRepeatUntil}
+                />
+              </View>
+            )}
+          </View>
+
+          <Text style={styles.label}>Additional information</Text>
           <TextInput
-            value={privateNotes}
-            onChangeText={setPrivateNotes}
-            style={styles.privateNotesInput}
+            value={additionalInfo}
+            onChangeText={setAdditionalInfo}
+            style={styles.textAreaInput}
             mode="outlined"
             outlineColor={COLORS.grey[200]}
             activeOutlineColor={getActivityColor(activityType)}
             outlineStyle={styles.inputOutline}
             multiline
             numberOfLines={3}
-            placeholder="Add notes..."
+            placeholder="Don't forget to bring..."
           />
-        </View>
-        
-        <View style={styles.spacer} />
-      </ScrollView>
+
+          <View style={styles.privateNotesContainer}>
+            <Text style={styles.privateNotesTitle}>Private notes for coaches</Text>
+            <Text style={styles.privateNotesSubtitle}>Visible for all coaches and admins in the team</Text>
+            <TextInput
+              value={privateNotes}
+              onChangeText={setPrivateNotes}
+              style={styles.privateNotesInput}
+              mode="outlined"
+              outlineColor={COLORS.grey[200]}
+              activeOutlineColor={getActivityColor(activityType)}
+              outlineStyle={styles.inputOutline}
+              multiline
+              numberOfLines={3}
+              placeholder="Add notes..."
+            />
+          </View>
+          
+          <View style={styles.spacer} />
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       <DateTimePickerModal
         isVisible={isDatePickerVisible}

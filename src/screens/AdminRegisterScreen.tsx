@@ -253,6 +253,18 @@ export const AdminRegisterScreen = () => {
           <Text style={styles.successMessage}>
             Your administrator account has been created successfully.
           </Text>
+          
+          <Animated.View 
+            entering={FadeInDown.delay(400).duration(1000).springify()}
+            style={{ marginTop: SPACING.xl }}
+          >
+            <Pressable 
+              onPress={() => navigation.navigate('AdminLogin')}
+              style={[styles.loginButton, SHADOWS.button]}
+            >
+              <Text style={styles.buttonText}>Go to Login</Text>
+            </Pressable>
+          </Animated.View>
         </Animated.View>
       </View>
     );
@@ -514,6 +526,15 @@ const styles = StyleSheet.create({
     color: COLORS.grey[600],
     fontFamily: 'Urbanist',
     textAlign: 'center',
+  },
+  loginButton: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 100,
+    height: 58,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: SPACING.md,
+    paddingHorizontal: SPACING.xl * 2,
   },
   registerButtonDisabled: {
     opacity: 0.7,

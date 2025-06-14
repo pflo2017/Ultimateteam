@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView, SafeAreaView, Modal, TextInput, TouchableWithoutFeedback } from 'react-native';
 import { Text, Button, Card, FAB, Chip } from 'react-native-paper';
 import { Calendar, DateData } from 'react-native-calendars';
@@ -6,13 +6,13 @@ import { COLORS, SPACING } from '../../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { getActivities, getActivitiesByDateRange, ActivityType as ServiceActivityType, Activity } from '../../services/activitiesService';
 import { format, parseISO, startOfMonth, endOfMonth, isSameDay, addMonths, subMonths, setMonth, 
-  addWeeks, subWeeks, startOfWeek, endOfWeek, eachDayOfInterval, addDays, getDate, isSameWeek, isAfter, isBefore } from 'date-fns';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+  addWeeks, subWeeks, startOfWeek, endOfWeek, eachDayOfInterval, addDays, getDate, isSameWeek, isWithinInterval, isAfter, isBefore } from 'date-fns';
+import { supabase } from '../../lib/supabase';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../types/navigation';
-import { useCallback } from 'react';
-import { supabase } from '../../lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { TeamFilterModal } from '../../components/Teams/TeamFilterModal';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -86,6 +86,10 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
   const [teams, setTeams] = useState<{ id: string; name: string }[]>([]); // To be fetched
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]); // All selected by default
   
+  // Add state for the proper team filter modal with data isolation
+  const [showTeamFilterModal, setShowTeamFilterModal] = useState(false);
+  const [selectedTeam, setSelectedTeam] = useState<{ id: string; name: string; is_active?: boolean; club_id?: string; } | null>(null);
+  
   // Add state for coach's teams
   const [coachTeamIds, setCoachTeamIds] = useState<string[]>([]);
   
@@ -97,13 +101,13 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
       return () => {
         // Cleanup if needed
       };
-    }, [viewMode === 'monthly' ? currentMonth : currentWeek, coachTeamIds, selectedTeamIds])
+    }, [viewMode === 'monthly' ? currentMonth : currentWeek, coachTeamIds, selectedTeam])
   );
   
   // Initial load
   useEffect(() => {
     loadActivities();
-  }, [viewMode === 'monthly' ? currentMonth : currentWeek, coachTeamIds, selectedTeamIds]);
+  }, [viewMode === 'monthly' ? currentMonth : currentWeek, coachTeamIds, selectedTeam]);
   
   useEffect(() => {
     const fetchTeams = async () => {
@@ -201,57 +205,68 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
         end = endOfWeek(currentWeek, { weekStartsOn: 1 }).toISOString(); // Sunday
       }
       
+      console.log(`Loading activities from ${start} to ${end}`);
+      
+      // Filter by team if selected
+      let teamId = undefined;
+      if (selectedTeam) {
+        teamId = selectedTeam.id;
+        console.log(`Filtering activities by team: ${teamId}`);
+      } else if (userRole === 'coach' && coachTeamIds.length > 0) {
+        // For coaches, filter by their teams if no specific team is selected
+        teamId = undefined; // Let the backend handle coach team filtering
+      }
+      
       // Different approach based on user role
-      if (userRole === 'coach' && coachTeamIds.length > 0) {
-        // For coaches: Only fetch activities for their teams, filtered by selectedTeamIds
-        const teamsToFetch = coachTeamIds.filter(teamId => 
-          selectedTeamIds.length === 0 || selectedTeamIds.includes(teamId)
-        );
-        
-        if (teamsToFetch.length === 0) {
-          // If no teams selected, show no activities
+      if (userRole === 'admin') {
+        // Admin sees all activities for their club (data isolation enforced by backend)
+        const { data, error } = await getActivitiesByDateRange(start, end, teamId);
+        if (error) {
+          console.error('Error loading activities:', error);
           setActivities([]);
-          setIsLoading(false);
-          return;
+        } else if (data) {
+          // Filter by type if needed
+          let filteredActivities = data;
+          if (selectedFilterType !== 'all') {
+            filteredActivities = data.filter(activity => activity.type === selectedFilterType);
+          }
+          
+          console.log(`Loaded ${filteredActivities.length} activities for admin`);
+          setActivities(filteredActivities);
         }
+      } else if (userRole === 'coach') {
+        // Coach sees only activities for their teams
+        const { data, error } = await getActivitiesByDateRange(start, end, teamId);
         
-        // Fetch activities for each selected team separately and combine them
-        const promises = teamsToFetch.map(teamId => 
-          getActivitiesByDateRange(start, end, teamId)
-        );
-        
-        const results = await Promise.all(promises);
-        
-        // Combine all activities
-        let allActivities: Activity[] = [];
-        results.forEach(result => {
-          if (result.data) {
-            allActivities = [...allActivities, ...result.data];
+        if (error) {
+          console.error('Error loading activities for coach:', error);
+          setActivities([]);
+        } else if (data) {
+          // Filter by type if needed
+          let filteredActivities = data;
+          if (selectedFilterType !== 'all') {
+            filteredActivities = data.filter(activity => activity.type === selectedFilterType);
           }
-        });
-        
-        // Sort by start_time
-        const sorted = [...allActivities].sort(
-          (a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
-        );
-        
-        setActivities(sorted);
+          
+          console.log(`Loaded ${filteredActivities.length} activities for coach`);
+          setActivities(filteredActivities);
+        }
       } else {
-        // For admin: Fetch all activities first
-      const { data, error } = await getActivitiesByDateRange(start, end);
-      
-      if (error) throw error;
-      
-      if (data) {
-          // Then filter by selected teams if any are selected
-          if (selectedTeamIds.length > 0) {
-            const filteredActivities = data.filter(activity => 
-              !activity.team_id || selectedTeamIds.includes(activity.team_id)
-            );
-            setActivities(filteredActivities);
-          } else {
-        setActivities(data);
+        // Parent sees only activities for their children's teams
+        const { data, error } = await getActivitiesByDateRange(start, end, teamId);
+        
+        if (error) {
+          console.error('Error loading activities for parent:', error);
+          setActivities([]);
+        } else if (data) {
+          // Filter by type if needed
+          let filteredActivities = data;
+          if (selectedFilterType !== 'all') {
+            filteredActivities = data.filter(activity => activity.type === selectedFilterType);
           }
+          
+          console.log(`Loaded ${filteredActivities.length} activities for parent`);
+          setActivities(filteredActivities);
         }
       }
     } catch (error) {
@@ -346,11 +361,12 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
         (isBefore(activityDate, weekEnd) || isSameDay(activityDate, weekEnd))
       );
     });
-    
+    // Sort by start_time ascending
+    const sortedWeekActivities = [...weekActivities].sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
     // Then filter by selected type if needed
     return selectedType === 'all' 
-      ? weekActivities 
-      : weekActivities.filter(activity => activity.type === selectedType);
+      ? sortedWeekActivities
+      : sortedWeekActivities.filter(activity => activity.type === selectedType);
   };
   
   const handleMonthChange = (month: DateData) => {
@@ -692,44 +708,24 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
                     })}
                   </View>
                   <Text style={styles.filterModalSection}>Teams</Text>
-                  <View style={styles.filterChipRow}>
-                    <TouchableOpacity
-                      style={[
-                        styles.chip,
-                        selectedTeamIds.length === teams.length && { backgroundColor: COLORS.primary, borderColor: COLORS.primary }
-                      ]}
-                      onPress={() => setSelectedTeamIds(selectedTeamIds.length === teams.length ? [] : teams.map(t => t.id))}
-                    >
-                      <Text style={[
-                        styles.chipText,
-                        selectedTeamIds.length === teams.length && { color: '#fff' }
-                      ]}>All Teams</Text>
-                    </TouchableOpacity>
-                    {teams.map(team => {
-                      const isSelected = selectedTeamIds.includes(team.id);
-                      return (
-                        <TouchableOpacity
-                          key={team.id}
-                          style={[
-                            styles.chip,
-                            isSelected && { backgroundColor: COLORS.primary, borderColor: COLORS.primary }
-                          ]}
-                          onPress={() => {
-                            setSelectedTeamIds(prev =>
-                              prev.includes(team.id)
-                                ? prev.filter(id => id !== team.id)
-                                : [...prev, team.id]
-                            );
-                          }}
-                        >
-                          <Text style={[
-                            styles.chipText,
-                            isSelected && { color: '#fff' }
-                          ]}>{team.name}</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
+                  
+                  {/* Replace the team chips with a button to open the FilterTeamsModal */}
+                  <TouchableOpacity
+                    style={styles.teamSelectorButton}
+                    onPress={() => {
+                      setShowFilterModal(false);
+                      setTimeout(() => setShowTeamFilterModal(true), 300);
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <MaterialCommunityIcons name="account-group" size={20} color={COLORS.primary} style={{ marginRight: 8 }} />
+                      <Text style={styles.teamSelectorText}>
+                        {selectedTeam ? selectedTeam.name : 'All Teams'}
+                      </Text>
+                    </View>
+                    <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.grey[400]} />
+                  </TouchableOpacity>
+                  
                   <Button mode="contained" onPress={() => setShowFilterModal(false)} style={styles.filterApplyButton}>
                     Apply Filters
                   </Button>
@@ -739,6 +735,26 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
           </View>
         </TouchableWithoutFeedback>
       </Modal>
+      
+      {/* Add the FilterTeamsModal component for proper data isolation */}
+      <TeamFilterModal
+        visible={showTeamFilterModal}
+        onClose={() => setShowTeamFilterModal(false)}
+        onSelectTeam={(team) => {
+          setSelectedTeam(team);
+          // If a team is selected, update selectedTeamIds to only include this team
+          if (team) {
+            setSelectedTeamIds([team.id]);
+          } else {
+            // If "All Teams" is selected, include all teams
+            setSelectedTeamIds(teams.map(t => t.id));
+          }
+          // Re-open the filter modal after selection
+          setTimeout(() => setShowFilterModal(true), 300);
+        }}
+        selectedTeam={selectedTeam}
+        styles={styles}
+      />
     </SafeAreaView>
   );
 };
@@ -1054,6 +1070,22 @@ const styles = StyleSheet.create({
   },
   filterApplyButton: {
     marginTop: 16,
+  },
+  teamSelectorButton: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.grey[300],
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    marginVertical: SPACING.sm,
+  },
+  teamSelectorText: {
+    fontSize: 16,
+    color: COLORS.text,
   },
 });
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Dimensions, Platform } from 'react-native';
 import { COLORS, SPACING } from '../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
@@ -7,10 +7,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ActivityType } from '../types/attendance';
 import { getCoachInternalId } from '../utils/coachUtils';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '../types/navigation';
 
 export const StatisticsScreen = () => {
   // Navigation
-  const navigation = useNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   // Refs
   const monthScrollViewRef = useRef<ScrollView>(null);
@@ -52,6 +54,8 @@ export const StatisticsScreen = () => {
     name: string;
     team_id: string;
   }[]>([]);
+  const [filteredPlayerStats, setFilteredPlayerStats] = useState<typeof playerStats>([]);
+  const [filteredTeamStats, setFilteredTeamStats] = useState<typeof teamStats>([]);
 
   // Activity type options
   const activityTypes = [
@@ -67,6 +71,9 @@ export const StatisticsScreen = () => {
     'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
   ];
+
+  // Keep track of the latest team ID to prevent race conditions
+  const latestTeamIdRef = useRef<string | null>(null);
 
   // Initialize and load user data
   useEffect(() => {
@@ -119,9 +126,33 @@ export const StatisticsScreen = () => {
   // Reload data when screen comes into focus
   useFocusEffect(
     React.useCallback(() => {
+      // Create a unique identifier for this focus event
+      const focusId = Date.now();
+      console.log(`[StatisticsScreen] Focus event ${focusId}`);
+      
       if (userRole) {
-        loadTeams();
-        loadStatistics();
+        // First load teams
+        loadTeams().then(() => {
+          // Check if we're still on the same focus event
+          console.log(`[StatisticsScreen] Teams loaded for focus event ${focusId}`);
+          
+          // Then if we have a selected team ID, load its data
+          if (selectedTeamId) {
+            // Update the latest team ID reference
+            latestTeamIdRef.current = selectedTeamId;
+            
+            // Clear previous data first
+            setPlayers([]);
+            setPlayerStats([]);
+            setFilteredPlayerStats([]);
+            setTeamStats([]);
+            setFilteredTeamStats([]);
+            
+            // Load fresh data
+            console.log(`[StatisticsScreen] Loading data for team ${selectedTeamId} on focus event ${focusId}`);
+            loadPlayersForTeam(selectedTeamId, focusId);
+          }
+        });
       }
     }, [userRole, userId, coachId])
   );
@@ -173,25 +204,43 @@ export const StatisticsScreen = () => {
           console.log('Formatted teams for coach:', formattedTeams);
           setTeams(formattedTeams);
           
-          // Select first team by default if there are teams
-          if (formattedTeams.length > 0 && !selectedTeamId) {
-            setSelectedTeamId(formattedTeams[0].id);
-          }
+          // Remove automatic team selection for coaches to match admin behavior
+          // No longer automatically selecting the first team
         } else {
           console.log('No teams found for coach');
           setTeams([]);
         }
       }
+      
+      // Return a resolved promise to allow proper chaining
+      return Promise.resolve();
     } catch (error) {
       console.error('Error loading teams:', error);
       setTeams([]);
+      
+      // Return a resolved promise even in case of error to prevent chain breaking
+      return Promise.resolve();
     }
   };
 
   // Completely revise the loadStatistics function for player stats
-  const loadStatistics = async () => {
+  const loadStatistics = async (teamId?: string) => {
     try {
-      setIsLoading(true);
+      // Use the provided team ID or fall back to the selected team ID
+      const currentTeamId = teamId || selectedTeamId;
+      
+      // If no team is selected, don't load any statistics
+      if (!currentTeamId) {
+        setPlayerStats([]);
+        setTeamStats([]);
+        return;
+      }
+      
+      // Check if this is still the latest team ID request
+      if (latestTeamIdRef.current !== currentTeamId) {
+        console.log(`[StatisticsScreen] Aborting statistics load for team ${currentTeamId} - newer request in progress`);
+        return;
+      }
 
       // Calculate start and end dates for the selected month
       const startDate = new Date(selectedYear, selectedMonth, 1);
@@ -202,24 +251,35 @@ export const StatisticsScreen = () => {
       const endDateStr = endDate.toISOString();
       
       console.log('Loading statistics for date range:', startDateStr, 'to', endDateStr);
-      console.log('Selected team:', selectedTeamId);
+      console.log('Selected team:', currentTeamId);
       console.log('Selected activity type:', selectedActivityType);
+
+      // Make sure we have the latest player data for the selected team
+      const { data: playersData, error: playersError } = await supabase
+        .from('players')
+        .select('id, name, team_id')
+        .eq('team_id', currentTeamId)
+        .eq('is_active', true)
+        .order('name');
+      
+      if (playersError) {
+        console.error('Error fetching players for stats:', playersError);
+        throw playersError;
+      }
+      
+      // Update the players state
+      setPlayers(playersData || []);
+      console.log(`Fetched ${playersData?.length || 0} active players for statistics`);
 
       if (activeView === 'player') {
         try {
-          // Simplify to just use the players we've already loaded
-          // We'll fetch activities separately
-          
-          // First, get activities for the date range
+          // First, get activities for the date range and selected team
           let activitiesQuery = supabase
             .from('activities')
             .select('id, title, type, start_time, team_id')
             .gte('start_time', startDateStr)
-            .lte('start_time', endDateStr);
-          
-          if (selectedTeamId) {
-            activitiesQuery = activitiesQuery.eq('team_id', selectedTeamId);
-          }
+            .lte('start_time', endDateStr)
+            .eq('team_id', currentTeamId); // Always filter by selected team
           
           if (selectedActivityType !== 'all') {
             activitiesQuery = activitiesQuery.filter('type', 'eq', selectedActivityType);
@@ -234,16 +294,19 @@ export const StatisticsScreen = () => {
           
           console.log(`Found ${activitiesData?.length || 0} activities matching criteria`);
           
+          // Get team name for display
+          const teamName = teams.find(t => t.id === currentTeamId)?.name || 'Unknown Team';
+          
           if (!activitiesData || activitiesData.length === 0) {
             // No activities found, but we'll still display players
             // Just without attendance data
-            if (selectedTeamId && players.length > 0) {
-              console.log(`Creating empty stats for ${players.length} players`);
-              const emptyPlayerStats = players.map(player => ({
+            if (playersData && playersData.length > 0) {
+              console.log(`Creating empty stats for ${playersData.length} players`);
+              const emptyPlayerStats = playersData.map(player => ({
                 player_id: player.id,
                 player_name: player.name,
                 team_id: player.team_id,
-                team_name: selectedTeamId ? teams.find(t => t.id === selectedTeamId)?.name || 'Unknown Team' : 'All Teams',
+                team_name: teamName,
                 present_count: 0,
                 absent_count: 0,
                 total_activities: 0,
@@ -251,21 +314,19 @@ export const StatisticsScreen = () => {
               }));
               
               setPlayerStats(emptyPlayerStats);
+              setFilteredPlayerStats(emptyPlayerStats);
             } else {
               setPlayerStats([]);
+              setFilteredPlayerStats([]);
             }
+            setIsLoading(false);
             return;
           }
           
           // Get the activity IDs
           const activityIds = activitiesData.map(a => a.id);
           
-          // Get team name for display
-          const teamName = selectedTeamId 
-            ? teams.find(t => t.id === selectedTeamId)?.name || 'Unknown Team' 
-            : 'All Teams';
-          
-          // Now get attendance records - but use separate queries, not relationships
+          // Get attendance records for these activities
           const { data: attendanceData, error: attendanceError } = await supabase
             .from('activity_attendance')
             .select('activity_id, player_id, status')
@@ -278,43 +339,11 @@ export const StatisticsScreen = () => {
           
           console.log(`Found ${attendanceData?.length || 0} attendance records`);
           
-          // Also fetch players if we need them
-          let relevantPlayers = players;
-          
-          // Always fetch fresh player data when loading statistics
-          let activePlayersQuery = supabase.from('players').select('id, name, team_id').eq('is_active', true);
-          
-          if (selectedTeamId) {
-            activePlayersQuery = activePlayersQuery.eq('team_id', selectedTeamId);
-          } else if (userRole === 'coach' && coachId) {
-            // For coach with no team selected, get players from all their teams
-            const { data: coachTeams } = await supabase
-              .from('teams')
-              .select('id')
-              .eq('coach_id', coachId);
-              
-            if (coachTeams && coachTeams.length > 0) {
-              const teamIds = coachTeams.map(t => t.id);
-              activePlayersQuery = activePlayersQuery.in('team_id', teamIds);
-            }
-          }
-          
-          const { data: playersData, error: playersError } = await activePlayersQuery;
-          
-          if (playersError) {
-            console.error('Error fetching players for stats:', playersError);
-          } else if (playersData) {
-            relevantPlayers = playersData;
-            // Update the players state to keep it in sync
-            setPlayers(playersData);
-            console.log(`Fetched ${playersData.length} players for statistics`);
-          }
-          
           // Now create stats for each player
           const playerStatsMap = new Map();
           
           // Initialize all players with zero attendance
-          relevantPlayers.forEach(player => {
+          playersData?.forEach(player => {
             playerStatsMap.set(player.id, {
               player_id: player.id,
               player_name: player.name,
@@ -330,7 +359,8 @@ export const StatisticsScreen = () => {
           // Update with actual attendance data
           attendanceData?.forEach(record => {
             const playerId = record.player_id;
-            if (playerStatsMap.has(playerId)) {
+            // Only count this attendance record if it belongs to a valid activity and player
+            if (playerStatsMap.has(playerId) && activityIds.includes(record.activity_id)) {
               const stats = playerStatsMap.get(playerId);
               stats.total_activities++;
               
@@ -354,21 +384,21 @@ export const StatisticsScreen = () => {
           
           const filteredStats = searchQuery
             ? processedStats.filter(stat => 
-                stat.player_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                stat.team_name.toLowerCase().includes(searchQuery.toLowerCase())
+                stat.player_name.toLowerCase().includes(searchQuery.toLowerCase())
               )
             : processedStats;
             
           console.log('Final player stats:', filteredStats.length, 'players');
           setPlayerStats(filteredStats);
+          setFilteredPlayerStats(filteredStats);
           
         } catch (error) {
           console.error('Error processing player statistics:', error);
           
           // Fallback to just showing players without attendance data
-          if (selectedTeamId && players.length > 0) {
+          if (players.length > 0) {
             console.log('Fallback: showing players without attendance data');
-            const teamName = teams.find(t => t.id === selectedTeamId)?.name || 'Unknown Team';
+            const teamName = teams.find(t => t.id === currentTeamId)?.name || 'Unknown Team';
             const fallbackStats = players.map(player => ({
               player_id: player.id,
               player_name: player.name,
@@ -380,129 +410,118 @@ export const StatisticsScreen = () => {
               attendance_percentage: 0
             }));
             setPlayerStats(fallbackStats);
+            setFilteredPlayerStats(fallbackStats);
           } else {
             setPlayerStats([]);
+            setFilteredPlayerStats([]);
           }
         }
       } else {
-        // Team statistics - completely revised approach
+        // Team statistics - only for the selected team
         try {
           console.log('Loading team statistics...');
           
-          // Get all teams based on user role
-          let teamsToShow = [...teams]; // Clone the array
+          // Only show the selected team
+          const team = teams.find(t => t.id === currentTeamId);
           
-          if (selectedTeamId) {
-            teamsToShow = teamsToShow.filter(team => team.id === selectedTeamId);
-          }
-          
-          if (teamsToShow.length === 0) {
-            console.log('No teams to show statistics for');
+          if (!team) {
+            console.log('No team found with ID:', currentTeamId);
             setTeamStats([]);
+            setFilteredTeamStats([]);
+            setIsLoading(false);
             return;
           }
           
-          console.log(`Showing statistics for ${teamsToShow.length} teams`);
+          console.log(`Showing statistics for team: ${team.name} (${team.id})`);
           
-          // For each team, get their activities
-          const allTeamStats = [];
-          
-          for (const team of teamsToShow) {
-            console.log(`Processing team ${team.name} (${team.id})`);
+          // Get activities for this team within the date range and of the selected type
+          let activitiesQuery = supabase
+            .from('activities')
+            .select('id, title, type, start_time')
+            .eq('team_id', team.id)
+            .gte('start_time', startDateStr)
+            .lte('start_time', endDateStr);
             
-            // Get activities for this team within the date range and of the selected type
-            let activitiesQuery = supabase
-              .from('activities')
-              .select('id, title, type, start_time')
-              .eq('team_id', team.id)
-              .gte('start_time', startDateStr)
-              .lte('start_time', endDateStr);
-              
-            if (selectedActivityType !== 'all') {
-              activitiesQuery = activitiesQuery.filter('type', 'eq', selectedActivityType);
-            }
-            
-            const { data: activities, error: activitiesError } = await activitiesQuery;
-            
-            if (activitiesError) {
-              console.error(`Error loading activities for team ${team.id}:`, activitiesError);
-              continue;
-            }
-            
-            if (!activities || activities.length === 0) {
-              console.log(`No activities found for team ${team.id} in the selected period`);
-              
-              // Add team with zero stats
-              allTeamStats.push({
-                team_id: team.id,
-                team_name: team.name,
-                present_count: 0,
-                absent_count: 0,
-                total_activities: 0,
-                attendance_percentage: 0
-              });
-              
-              continue;
-            }
-            
-            console.log(`Found ${activities.length} activities for team ${team.id}`);
-            
-            // Get attendance records for these activities
-            const activityIds = activities.map(a => a.id);
-            
-            const { data: attendance, error: attendanceError } = await supabase
-              .from('activity_attendance')
-              .select('activity_id, status')
-              .in('activity_id', activityIds);
-              
-            if (attendanceError) {
-              console.error(`Error loading attendance for team ${team.id}:`, attendanceError);
-              continue;
-            }
-            
-            // Calculate statistics
-            let presentCount = 0;
-            let absentCount = 0;
-            
-            attendance?.forEach(record => {
-              if (record.status === 'present') {
-                presentCount++;
-              } else if (record.status === 'absent') {
-                absentCount++;
-              }
-            });
-            
-            const totalAttendance = presentCount + absentCount;
-            const attendancePercentage = totalAttendance > 0
-              ? Math.round((presentCount / totalAttendance) * 100)
-              : 0;
-              
-            console.log(`Team ${team.id} stats: ${presentCount} present, ${absentCount} absent, ${attendancePercentage}%`);
-            
-            allTeamStats.push({
-              team_id: team.id,
-              team_name: team.name,
-              present_count: presentCount,
-              absent_count: absentCount,
-              total_activities: totalAttendance,
-              attendance_percentage: attendancePercentage
-            });
+          if (selectedActivityType !== 'all') {
+            activitiesQuery = activitiesQuery.filter('type', 'eq', selectedActivityType);
           }
           
-          // Filter by search query if needed
-          const filteredStats = searchQuery
-            ? allTeamStats.filter(stat => 
-                stat.team_name.toLowerCase().includes(searchQuery.toLowerCase())
-              )
-            : allTeamStats;
-            
-          console.log(`Final team stats: ${filteredStats.length} teams`);
-          setTeamStats(filteredStats);
+          const { data: activities, error: activitiesError } = await activitiesQuery;
           
+          if (activitiesError) {
+            console.error(`Error loading activities for team ${team.id}:`, activitiesError);
+            throw activitiesError;
+          }
+          
+          if (!activities || activities.length === 0) {
+            console.log(`No activities found for team ${team.id} in the selected period`);
+            
+            // Add team with zero stats
+            const emptyStats = [{
+              team_id: team.id,
+              team_name: team.name,
+              present_count: 0,
+              absent_count: 0,
+              total_activities: 0,
+              attendance_percentage: 0
+            }];
+            
+            setTeamStats(emptyStats);
+            setFilteredTeamStats(emptyStats);
+            setIsLoading(false);
+            return;
+          }
+          
+          console.log(`Found ${activities.length} activities for team ${team.id}`);
+          
+          // Get attendance records for these activities
+          const activityIds = activities.map(a => a.id);
+          
+          const { data: attendance, error: attendanceError } = await supabase
+            .from('activity_attendance')
+            .select('activity_id, status')
+            .in('activity_id', activityIds);
+            
+          if (attendanceError) {
+            console.error(`Error loading attendance for team ${team.id}:`, attendanceError);
+            throw attendanceError;
+          }
+          
+          // Calculate statistics
+          let presentCount = 0;
+          let absentCount = 0;
+          
+          attendance?.forEach(record => {
+            if (record.status === 'present') {
+              presentCount++;
+            } else if (record.status === 'absent') {
+              absentCount++;
+            }
+          });
+          
+          const totalAttendance = presentCount + absentCount;
+          const attendancePercentage = totalAttendance > 0
+            ? Math.round((presentCount / totalAttendance) * 100)
+            : 0;
+            
+          console.log(`Team ${team.id} stats: ${presentCount} present, ${absentCount} absent, ${attendancePercentage}%`);
+          
+          const teamStats = [{
+            team_id: team.id,
+            team_name: team.name,
+            present_count: presentCount,
+            absent_count: absentCount,
+            total_activities: totalAttendance,
+            attendance_percentage: attendancePercentage
+          }];
+          
+          setTeamStats(teamStats);
+          setFilteredTeamStats(teamStats);
         } catch (error) {
           console.error('Team stats error:', error);
           // Fallback - just show empty stats
           setTeamStats([]);
+          setFilteredTeamStats([]);
         }
       }
     } catch (error) {
@@ -512,24 +531,78 @@ export const StatisticsScreen = () => {
     }
   };
 
+  // Add effect to filter stats when search query changes
+  useEffect(() => {
+    if (activeView === 'player') {
+      const filtered = searchQuery
+        ? playerStats.filter(stat => 
+            stat.player_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            stat.team_name.toLowerCase().includes(searchQuery.toLowerCase())
+          )
+        : playerStats;
+      setFilteredPlayerStats(filtered);
+    } else {
+      const filtered = searchQuery
+        ? teamStats.filter(stat => 
+            stat.team_name.toLowerCase().includes(searchQuery.toLowerCase())
+          )
+        : teamStats;
+      setFilteredTeamStats(filtered);
+    }
+  }, [searchQuery, playerStats, teamStats, activeView]);
+
   // Add useEffect to load players when a team is selected
   useEffect(() => {
     if (selectedTeamId) {
-      loadPlayersForTeam(selectedTeamId);
+      // Update the latest team ID reference
+      latestTeamIdRef.current = selectedTeamId;
+      
+      // Generate a unique request ID for this selection
+      const requestId = Date.now();
+      console.log(`[StatisticsScreen] Team selection changed to ${selectedTeamId} (request ${requestId})`);
+      
+      // Load players for the selected team
+      loadPlayersForTeam(selectedTeamId, requestId);
+    } else {
+      // Clear players when no team is selected
+      setPlayers([]);
+      setPlayerStats([]);
+      setFilteredPlayerStats([]);
+      setTeamStats([]);
+      setFilteredTeamStats([]);
     }
   }, [selectedTeamId]);
   
-  // Add effect to reload statistics when filters change
+  // Update the useEffect for loading statistics to only run when month/year/activity type changes
   useEffect(() => {
-    if (userRole) {
-      loadStatistics();
+    if (userRole && selectedTeamId) {
+      // Only load statistics if this is still the latest team ID
+      if (latestTeamIdRef.current === selectedTeamId) {
+        console.log(`[StatisticsScreen] Loading statistics due to filter change for team ${selectedTeamId}`);
+        loadStatistics(selectedTeamId);
+      } else {
+        console.log(`[StatisticsScreen] Skipping statistics load - team ID ${selectedTeamId} is not the latest`);
+      }
     }
-  }, [activeView, selectedMonth, selectedYear, selectedActivityType, selectedTeamId, searchQuery, userRole, coachId]);
+  }, [activeView, selectedMonth, selectedYear, selectedActivityType, userRole, coachId]);
 
   // Add function to load players for a team
-  const loadPlayersForTeam = async (teamId: string) => {
+  const loadPlayersForTeam = async (teamId: string, requestId?: number) => {
     try {
-      console.log('Loading players for team:', teamId);
+      // Update the latest team ID reference to prevent race conditions
+      latestTeamIdRef.current = teamId;
+      const currentTeamId = teamId;
+      
+      console.log(`[StatisticsScreen] Loading players for team: ${teamId}${requestId ? ` (request ${requestId})` : ''}`);
+      setIsLoading(true); // Show loading indicator
+      
+      // Clear previous data immediately to prevent showing stale data
+      setPlayers([]);
+      setPlayerStats([]);
+      setFilteredPlayerStats([]);
+      setTeamStats([]);
+      setFilteredTeamStats([]);
+      
       let query;
       
       if (userRole === 'admin') {
@@ -552,13 +625,13 @@ export const StatisticsScreen = () => {
           
         if (teamError) {
           console.error('Error verifying coach team access:', teamError);
-          setPlayers([]);
+          setIsLoading(false);
           return;
         }
         
         if (!teamData || teamData.length === 0) {
           console.log('Coach does not have access to this team');
-          setPlayers([]);
+          setIsLoading(false);
           return;
         }
         
@@ -569,7 +642,13 @@ export const StatisticsScreen = () => {
           .eq('is_active', true)
           .order('name');
       } else {
-        setPlayers([]);
+        setIsLoading(false);
+        return;
+      }
+      
+      // Check if this is still the latest team ID request
+      if (latestTeamIdRef.current !== currentTeamId) {
+        console.log(`[StatisticsScreen] Aborting player load for team ${teamId} - newer request in progress`);
         return;
       }
       
@@ -577,37 +656,59 @@ export const StatisticsScreen = () => {
       
       if (error) {
         console.error('Error loading players:', error);
-        setPlayers([]);
+        setIsLoading(false);
         return;
       }
       
-      console.log(`Loaded ${data?.length || 0} players for team ${teamId}`);
-      // Always update the players state with fresh data
+      // Check again if this is still the latest team ID request
+      if (latestTeamIdRef.current !== currentTeamId) {
+        console.log(`[StatisticsScreen] Aborting player load for team ${teamId} - newer request in progress`);
+        return;
+      }
+      
+      console.log(`[StatisticsScreen] Loaded ${data?.length || 0} players for team ${teamId}`);
+      
+      // Update the players state with fresh data
       setPlayers(data || []);
       
-      // If we're in player view, trigger a statistics reload to ensure we have fresh data
-      if (activeView === 'player') {
-        loadStatistics();
+      // Always load statistics when team changes to ensure immediate update
+      await loadStatistics(teamId); // Wait for statistics to load
+      
+      // Final check before completing
+      if (latestTeamIdRef.current !== currentTeamId) {
+        console.log(`[StatisticsScreen] Aborting statistics completion for team ${teamId} - newer request in progress`);
+        return;
       }
+      
+      setIsLoading(false); // Hide loading indicator
     } catch (error) {
       console.error('Error in loadPlayersForTeam:', error);
       setPlayers([]);
+      setIsLoading(false);
     }
   };
 
   // After setting the selected month in the initialization, add effect to scroll to it
   useEffect(() => {
-    // Scroll to center the selected month
-    setTimeout(() => {
-      const currentMonthIndex = new Date().getMonth();
-      if (monthScrollViewRef.current) {
-        // Calculate position to center the month
-        const itemWidth = 80; // Approximate width of month item
-        const screenWidth = 390; // Average screen width
-        const offset = Math.max(0, (currentMonthIndex * itemWidth) - (screenWidth / 2) + (itemWidth / 2));
-        monthScrollViewRef.current.scrollTo({ x: offset, animated: true });
-      }
-    }, 100);
+    // Scroll to center the selected month with multiple attempts for reliability
+    const currentMonthIndex = new Date().getMonth();
+    
+    // Use a sequence of timeouts at different intervals for more reliable centering
+    const timers = [100, 300, 600, 1000].map(delay => 
+      setTimeout(() => {
+        if (monthScrollViewRef.current) {
+          // Calculate position to center the month
+          const itemWidth = 90; // Approximate width of month item including margins
+          const screenWidth = Dimensions.get('window').width;
+          const offset = Math.max(0, (currentMonthIndex * itemWidth) - (screenWidth / 2) + (itemWidth / 2));
+          
+          console.log(`Scrolling to month ${currentMonthIndex} at offset ${offset}px with delay ${delay}ms`);
+          monthScrollViewRef.current.scrollTo({ x: offset, animated: false });
+        }
+      }, delay)
+    );
+    
+    return () => timers.forEach(clearTimeout);
   }, []);
 
   // Render month selector
@@ -739,10 +840,11 @@ export const StatisticsScreen = () => {
         <Text style={styles.sectionLabel}>Team:</Text>
         <TouchableOpacity 
           style={styles.teamSelectorButton}
+          disabled={isLoading} // Disable when loading
           onPress={() => setIsTeamDropdownOpen(!isTeamDropdownOpen)}
         >
           <Text style={styles.teamSelectorButtonText}>
-            {selectedTeam?.name || 'All Teams'}
+            {selectedTeam?.name || 'Select Team'}
           </Text>
           <MaterialCommunityIcons 
             name={isTeamDropdownOpen ? "chevron-up" : "chevron-down"} 
@@ -752,43 +854,42 @@ export const StatisticsScreen = () => {
         </TouchableOpacity>
         
         {isTeamDropdownOpen && (
-          <View style={styles.teamDropdownMenu}>
-            <TouchableOpacity
-              style={[
-                styles.teamDropdownMenuItem,
-                !selectedTeamId && styles.teamDropdownMenuItemSelected
-              ]}
-              onPress={() => {
-                setSelectedTeamId(null);
-                setIsTeamDropdownOpen(false);
-              }}
-            >
-              <Text style={[
-                styles.teamDropdownMenuItemText,
-                !selectedTeamId && styles.teamDropdownMenuItemTextSelected
-              ]}>
-                All Teams
-              </Text>
-              {!selectedTeamId && (
-                <MaterialCommunityIcons name="check" size={20} color={COLORS.primary} />
-              )}
-            </TouchableOpacity>
-            
+          <View style={styles.dropdownMenu}>
             {teams.map((team) => (
               <TouchableOpacity
                 key={team.id}
                 style={[
-                  styles.teamDropdownMenuItem,
-                  selectedTeamId === team.id && styles.teamDropdownMenuItemSelected
+                  styles.dropdownMenuItem,
+                  selectedTeamId === team.id && styles.dropdownMenuItemSelected
                 ]}
+                disabled={isLoading} // Disable when loading
                 onPress={() => {
-                  setSelectedTeamId(team.id);
+                  // Close dropdown first to prevent multiple selections
                   setIsTeamDropdownOpen(false);
+                  
+                  // Only reload if selecting a different team
+                  if (team.id !== selectedTeamId) {
+                    // Generate a unique request ID
+                    const requestId = Date.now();
+                    
+                    // Set the team ID first
+                    setSelectedTeamId(team.id);
+                    
+                    // Clear previous data immediately
+                    setPlayers([]);
+                    setPlayerStats([]);
+                    setFilteredPlayerStats([]);
+                    setTeamStats([]);
+                    setFilteredTeamStats([]);
+                    
+                    // Load the players immediately with the request ID
+                    loadPlayersForTeam(team.id, requestId);
+                  }
                 }}
               >
                 <Text style={[
-                  styles.teamDropdownMenuItemText,
-                  selectedTeamId === team.id && styles.teamDropdownMenuItemTextSelected
+                  styles.dropdownMenuItemText,
+                  selectedTeamId === team.id && styles.dropdownMenuItemTextSelected
                 ]}>
                   {team.name}
                 </Text>
@@ -821,12 +922,12 @@ export const StatisticsScreen = () => {
 
   // Update the renderPlayerStats function to handle different data scenarios
   const renderPlayerStats = () => {
-    // If team is selected but no players, show empty state
-    if (selectedTeamId && players.length === 0) {
+    // If loading, show a loading indicator
+    if (isLoading) {
       return (
         <View style={styles.emptyStateContainer}>
-          <MaterialCommunityIcons name="account-search" size={48} color={COLORS.grey[400]} />
-          <Text style={styles.emptyStateText}>No players found for the selected team</Text>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.loadingText}>Loading player data...</Text>
         </View>
       );
     }
@@ -841,8 +942,18 @@ export const StatisticsScreen = () => {
       );
     }
     
+    // If team is selected but no players, show empty state
+    if (selectedTeamId && players.length === 0) {
+      return (
+        <View style={styles.emptyStateContainer}>
+          <MaterialCommunityIcons name="account-search" size={48} color={COLORS.grey[400]} />
+          <Text style={styles.emptyStateText}>No players found for the selected team</Text>
+        </View>
+      );
+    }
+    
     // If we have playerStats, show them
-    if (playerStats.length === 0) {
+    if (filteredPlayerStats.length === 0) {
       return (
         <View style={styles.emptyStateContainer}>
           <MaterialCommunityIcons name="calendar-question" size={48} color={COLORS.grey[400]} />
@@ -868,165 +979,158 @@ export const StatisticsScreen = () => {
       );
     }
 
-    // Calculate summary statistics
-    const totalPresent = playerStats.reduce((sum, player) => sum + player.present_count, 0);
-    const totalAbsent = playerStats.reduce((sum, player) => sum + player.absent_count, 0);
-    const totalActivities = totalPresent + totalAbsent;
-
     return (
       <View style={styles.statsContainer}>
-        {/* Search Bar */}
-        {renderSearchBar()}
-        
-        {/* Stats Summary */}
-        <View style={styles.statsSummary}>
-          <View style={styles.statsSummaryItem}>
-            <MaterialCommunityIcons name="check-circle" size={24} color={COLORS.success} />
-            <Text style={styles.statsSummaryLabel}>Present</Text>
-            <Text style={styles.statsSummaryValue}>{totalPresent}</Text>
-          </View>
-          
-          <View style={styles.statsSummaryItem}>
-            <MaterialCommunityIcons name="close-circle" size={24} color={COLORS.error} />
-            <Text style={styles.statsSummaryLabel}>Absent</Text>
-            <Text style={styles.statsSummaryValue}>{totalAbsent}</Text>
-          </View>
-          
-          <View style={styles.statsSummaryItem}>
-            <MaterialCommunityIcons name="account-group" size={24} color={COLORS.primary} />
-            <Text style={styles.statsSummaryLabel}>Total</Text>
-            <Text style={styles.statsSummaryValue}>{totalActivities}</Text>
-          </View>
-        </View>
-        
-        {/* Player List - Display only players from the selected team or all teams */}
+        {/* Player List */}
         <Text style={styles.sectionTitle}>Player Attendance</Text>
-        {playerStats.map((player) => (
-          <View key={player.player_id} style={styles.playerCard}>
-            <View style={styles.playerCardHeader}>
-              <View style={styles.playerInfo}>
-                <MaterialCommunityIcons name="account" size={24} color={COLORS.primary} />
-                <Text style={styles.playerName}>{player.player_name}</Text>
-              </View>
-              <View style={styles.attendanceStatus}>
-                {player.attendance_percentage > 0 ? (
-                  player.attendance_percentage >= 70 ? (
-                    <>
-                      <MaterialCommunityIcons name="check" size={20} color={COLORS.success} />
-                      <Text style={[styles.attendanceStatusText, { color: COLORS.success }]}>Good</Text>
-                    </>
-                  ) : player.attendance_percentage >= 50 ? (
-                    <>
-                      <MaterialCommunityIcons name="alert" size={20} color={COLORS.warning} />
-                      <Text style={[styles.attendanceStatusText, { color: COLORS.warning }]}>Average</Text>
-                    </>
+        {filteredPlayerStats.map((player) => (
+          <TouchableOpacity
+            key={player.player_id}
+            onPress={() => navigation.navigate('PlayerAttendanceReportScreen', {
+              playerId: player.player_id,
+              playerName: player.player_name,
+              teamName: player.team_name,
+              selectedMonth,
+              selectedYear,
+              selectedActivityType
+            })}
+            activeOpacity={0.8}
+          >
+            <View style={styles.playerCard}>
+              <View style={styles.playerCardHeader}>
+                <View style={styles.playerInfo}>
+                  <MaterialCommunityIcons name="account" size={24} color={COLORS.primary} />
+                  <Text style={styles.playerName}>{player.player_name}</Text>
+                </View>
+                <View style={styles.playerAttendanceStatus}>
+                  {player.attendance_percentage > 0 ? (
+                    player.attendance_percentage >= 70 ? (
+                      <>
+                        <MaterialCommunityIcons name="check" size={20} color={COLORS.success} />
+                        <Text style={[styles.playerAttendanceStatusText, { color: COLORS.success }]}>Good</Text>
+                      </>
+                    ) : player.attendance_percentage >= 50 ? (
+                      <>
+                        <MaterialCommunityIcons name="alert" size={20} color={COLORS.warning} />
+                        <Text style={[styles.playerAttendanceStatusText, { color: COLORS.warning }]}>Average</Text>
+                      </>
+                    ) : (
+                      <>
+                        <MaterialCommunityIcons name="close" size={20} color={COLORS.error} />
+                        <Text style={[styles.playerAttendanceStatusText, { color: COLORS.error }]}>Poor</Text>
+                      </>
+                    )
                   ) : (
                     <>
-                      <MaterialCommunityIcons name="close" size={20} color={COLORS.error} />
-                      <Text style={[styles.attendanceStatusText, { color: COLORS.error }]}>Poor</Text>
+                      <MaterialCommunityIcons name="minus" size={20} color={COLORS.grey[500]} />
+                      <Text style={[styles.playerAttendanceStatusText, { color: COLORS.grey[500] }]}>No data</Text>
                     </>
-                  )
-                ) : (
-                  <>
-                    <MaterialCommunityIcons name="minus" size={20} color={COLORS.grey[500]} />
-                    <Text style={[styles.attendanceStatusText, { color: COLORS.grey[500] }]}>No Data</Text>
-                  </>
-                )}
+                  )}
+                </View>
+              </View>
+              <View style={styles.playerCardDetails}>
+                <Text style={styles.attendanceDetailText}>
+                  Present: {player.present_count} | Absent: {player.absent_count} | Total: {player.total_activities}
+                </Text>
+                <Text style={styles.attendanceDetailText}>
+                  Attendance Rate: {player.attendance_percentage}%
+                </Text>
               </View>
             </View>
-            
-            <View style={styles.playerCardContent}>
-              {!selectedTeamId && <Text style={styles.teamNameText}>{player.team_name}</Text>}
-              {player.total_activities > 0 ? (
-                <>
-                  <Text style={styles.attendanceDetailText}>
-                    Present: <Text style={styles.attendanceDetailValue}>{player.present_count}</Text> |
-                    Absent: <Text style={styles.attendanceDetailValue}>{player.absent_count}</Text> |
-                    Total: <Text style={styles.attendanceDetailValue}>{player.total_activities}</Text>
-                  </Text>
-                  <Text style={styles.attendanceRateText}>
-                    Attendance Rate: <Text style={styles.attendanceRateValue}>{player.attendance_percentage}%</Text>
-                  </Text>
-                </>
-              ) : (
-                <Text style={styles.attendanceDetailText}>No attendance data available for this period</Text>
-              )}
-            </View>
-          </View>
+          </TouchableOpacity>
         ))}
       </View>
     );
   };
 
-  // Render team statistics
+  // Update the renderTeamStats function to handle different data scenarios
   const renderTeamStats = () => {
-    if (teamStats.length === 0) {
+    // If loading, show a loading indicator
+    if (isLoading) {
       return (
         <View style={styles.emptyStateContainer}>
-          <MaterialCommunityIcons name="account-group" size={48} color={COLORS.grey[400]} />
-          <Text style={styles.emptyStateText}>No team statistics found for this period</Text>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.loadingText}>Loading team data...</Text>
+        </View>
+      );
+    }
+    
+    // If no team is selected, show instruction
+    if (!selectedTeamId) {
+      return (
+        <View style={styles.emptyStateContainer}>
+          <MaterialCommunityIcons name="arrow-up-drop-circle" size={48} color={COLORS.primary} />
+          <Text style={styles.emptyStateText}>Please select a team to view team statistics</Text>
+        </View>
+      );
+    }
+    
+    // If no team stats available
+    if (filteredTeamStats.length === 0) {
+      return (
+        <View style={styles.emptyStateContainer}>
+          <MaterialCommunityIcons name="calendar-question" size={48} color={COLORS.grey[400]} />
+          <Text style={styles.emptyStateText}>No attendance data found for this period</Text>
         </View>
       );
     }
 
-    // Calculate summary statistics
-    const totalTeams = teamStats.length;
-    const totalPresent = teamStats.reduce((sum, team) => sum + team.present_count, 0);
-    const totalAbsent = teamStats.reduce((sum, team) => sum + team.absent_count, 0);
-    const totalAttendance = totalPresent + totalAbsent;
-    const overallPercentage = totalAttendance > 0 
-      ? Math.round((totalPresent / totalAttendance) * 100) 
-      : 0;
-
     return (
       <View style={styles.statsContainer}>
-        {/* Search Bar */}
-        {renderSearchBar()}
-        
-        {/* Summary Header */}
-        <View style={styles.teamStatsSummary}>
-          <Text style={styles.teamStatsSummaryTitle}>Overall Attendance</Text>
-          <View style={styles.teamStatsSummaryContent}>
-            <View style={styles.attendancePercentageCircle}>
-              <Text style={styles.attendancePercentageText}>{overallPercentage}%</Text>
-            </View>
-            <View style={styles.teamStatsSummaryDetails}>
-              <Text style={styles.teamStatsSummaryDetailText}>
-                {totalTeams} Team{totalTeams !== 1 ? 's' : ''} | {totalPresent} Present | {totalAbsent} Absent
-              </Text>
-              <Text style={styles.teamStatsSummaryPeriodText}>
-                {months[selectedMonth]} {selectedYear}
-              </Text>
-            </View>
-          </View>
-        </View>
-        
-        {/* Team List */}
-        <Text style={styles.sectionTitle}>Team Attendance</Text>
-        
-        {teamStats.map((team) => (
+        {/* Team Stats */}
+        {filteredTeamStats.map((team) => (
           <View key={team.team_id} style={styles.teamStatCard}>
-            <Text style={styles.teamStatTitle}>{team.team_name}</Text>
-            <View style={styles.teamStatContent}>
-              <MaterialCommunityIcons 
-                name={team.attendance_percentage >= 70 ? "check-circle" : team.attendance_percentage >= 50 ? "alert-circle" : "close-circle"} 
-                size={24} 
-                color={team.attendance_percentage >= 70 ? COLORS.success : team.attendance_percentage >= 50 ? COLORS.warning : COLORS.error} 
-              />
-              <Text style={styles.teamStatValue}>{team.attendance_percentage}%</Text>
-              {team.total_activities > 0 ? (
-                <Text style={styles.teamStatDetail}>
-                  ({team.present_count}/{team.total_activities} players present)
-                </Text>
-              ) : (
-                <Text style={styles.teamStatDetail}>(No attendance records)</Text>
-              )}
+            <View style={styles.teamStatHeader}>
+              <View style={styles.teamInfo}>
+                <MaterialCommunityIcons name="account-group" size={24} color={COLORS.primary} />
+                <Text style={styles.teamName}>{team.team_name}</Text>
+              </View>
+              <View style={styles.teamAttendanceStatus}>
+                {team.attendance_percentage > 0 ? (
+                  team.attendance_percentage >= 70 ? (
+                    <>
+                      <MaterialCommunityIcons name="check" size={20} color={COLORS.success} />
+                      <Text style={[styles.teamAttendanceStatusText, { color: COLORS.success }]}>Good</Text>
+                    </>
+                  ) : team.attendance_percentage >= 50 ? (
+                    <>
+                      <MaterialCommunityIcons name="alert" size={20} color={COLORS.warning} />
+                      <Text style={[styles.teamAttendanceStatusText, { color: COLORS.warning }]}>Average</Text>
+                    </>
+                  ) : (
+                    <>
+                      <MaterialCommunityIcons name="close" size={20} color={COLORS.error} />
+                      <Text style={[styles.teamAttendanceStatusText, { color: COLORS.error }]}>Poor</Text>
+                    </>
+                  )
+                ) : (
+                  <>
+                    <MaterialCommunityIcons name="minus" size={20} color={COLORS.grey[500]} />
+                    <Text style={[styles.teamAttendanceStatusText, { color: COLORS.grey[500] }]}>No data</Text>
+                  </>
+                )}
+              </View>
             </View>
-            {selectedActivityType !== 'all' && (
-              <Text style={styles.teamStatActivityType}>
-                Activity type: {selectedActivityType}
-              </Text>
-            )}
+            
+            <View style={styles.teamStatsSummary}>
+              <View style={styles.teamStatsSummaryItem}>
+                <MaterialCommunityIcons name="check-circle" size={20} color={COLORS.success} />
+                <Text style={styles.teamStatsSummaryLabel}>Present</Text>
+                <Text style={styles.teamStatsSummaryValue}>{team.present_count}</Text>
+              </View>
+              
+              <View style={styles.teamStatsSummaryItem}>
+                <MaterialCommunityIcons name="close-circle" size={20} color={COLORS.error} />
+                <Text style={styles.teamStatsSummaryLabel}>Absent</Text>
+                <Text style={styles.teamStatsSummaryValue}>{team.absent_count}</Text>
+              </View>
+              
+              <View style={styles.teamStatsSummaryItem}>
+                <MaterialCommunityIcons name="percent" size={20} color={COLORS.primary} />
+                <Text style={styles.teamStatsSummaryLabel}>Rate</Text>
+                <Text style={styles.teamStatsSummaryValue}>{team.attendance_percentage}%</Text>
+              </View>
+            </View>
           </View>
         ))}
       </View>
@@ -1034,15 +1138,6 @@ export const StatisticsScreen = () => {
   };
 
   // Main render function
-  if (isLoading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.loadingText}>Loading statistics...</Text>
-      </View>
-    );
-  }
-
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -1084,7 +1179,7 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: SPACING.lg,
-    paddingTop: 60,
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
     paddingBottom: SPACING.md,
     backgroundColor: COLORS.white,
     borderBottomWidth: 1,
@@ -1275,32 +1370,6 @@ const styles = StyleSheet.create({
     marginHorizontal: SPACING.lg,
     marginTop: SPACING.md,
   },
-  statsSummary: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    backgroundColor: COLORS.white,
-    borderRadius: 8,
-    padding: SPACING.md,
-    marginBottom: SPACING.md,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  statsSummaryItem: {
-    alignItems: 'center',
-  },
-  statsSummaryLabel: {
-    fontSize: 14,
-    color: COLORS.grey[600],
-    marginTop: 4,
-  },
-  statsSummaryValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: COLORS.text,
-  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
@@ -1311,18 +1380,18 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     borderRadius: 8,
     padding: SPACING.md,
-    marginBottom: SPACING.md,
+    marginBottom: SPACING.sm,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   playerCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: SPACING.sm,
+    marginBottom: SPACING.xs,
   },
   playerInfo: {
     flexDirection: 'row',
@@ -1334,87 +1403,22 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     marginLeft: SPACING.sm,
   },
-  attendanceStatus: {
+  playerAttendanceStatus: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  attendanceStatusText: {
+  playerAttendanceStatusText: {
     fontSize: 14,
     fontWeight: '500',
     marginLeft: 4,
   },
-  playerCardContent: {
-    marginTop: SPACING.sm,
+  playerCardDetails: {
+    marginTop: SPACING.xs,
   },
   attendanceDetailText: {
     fontSize: 14,
     color: COLORS.grey[600],
-    marginBottom: 4,
-  },
-  attendanceDetailValue: {
-    fontWeight: '500',
-    color: COLORS.text,
-  },
-  attendanceRateText: {
-    fontSize: 14,
-    color: COLORS.grey[600],
-  },
-  attendanceRateValue: {
-    fontWeight: '500',
-    color: COLORS.text,
-  },
-  teamStatsSummary: {
-    backgroundColor: COLORS.white,
-    borderRadius: 8,
-    padding: SPACING.md,
-    marginBottom: SPACING.md,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  teamStatsSummaryTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORS.text,
-    marginBottom: SPACING.sm,
-  },
-  teamStatsSummaryContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  attendancePercentageCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: COLORS.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: SPACING.md,
-  },
-  attendancePercentageText: {
-    color: COLORS.white,
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  teamStatsSummaryDetails: {
-    flex: 1,
-  },
-  teamStatsSummaryDetailText: {
-    fontSize: 14,
-    color: COLORS.text,
-    marginBottom: SPACING.xs,
-  },
-  teamStatsSummaryPeriodText: {
-    fontSize: 12,
-    color: COLORS.grey[600],
-  },
-  teamStatActivityType: {
-    fontSize: 12,
-    color: COLORS.grey[600],
-    marginTop: SPACING.xs,
-    fontStyle: 'italic',
+    marginBottom: 0,
   },
   teamStatCard: {
     backgroundColor: COLORS.white,
@@ -1427,63 +1431,56 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  teamStatTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORS.text,
+  teamStatHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: SPACING.sm,
   },
-  teamStatContent: {
+  teamInfo: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  teamStatValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
+  teamName: {
+    fontSize: 16,
+    fontWeight: '500',
     color: COLORS.text,
     marginLeft: SPACING.sm,
   },
-  teamStatDetail: {
-    fontSize: 14,
-    color: COLORS.grey[600],
-    marginLeft: SPACING.sm,
+  teamAttendanceStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  teamDropdownMenu: {
-    position: 'absolute',
-    top: '100%',
-    left: 0,
-    right: 0,
+  teamAttendanceStatusText: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: 4,
+  },
+  teamStatsSummary: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     backgroundColor: COLORS.white,
-    borderWidth: 1,
-    borderColor: COLORS.grey[300],
     borderRadius: 8,
-    marginTop: 4,
+    padding: SPACING.md,
+    marginBottom: SPACING.md,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 3,
-    zIndex: 20,
+    elevation: 2,
   },
-  teamDropdownMenuItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  teamStatsSummaryItem: {
     alignItems: 'center',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.grey[200],
   },
-  teamDropdownMenuItemSelected: {
-    backgroundColor: COLORS.primary + '10',
+  teamStatsSummaryLabel: {
+    fontSize: 14,
+    color: COLORS.grey[600],
+    marginTop: 4,
   },
-  teamDropdownMenuItemText: {
-    fontSize: 16,
-    color: COLORS.text,
-  },
-  teamDropdownMenuItemTextSelected: {
-    color: COLORS.primary,
+  teamStatsSummaryValue: {
+    fontSize: 20,
     fontWeight: 'bold',
+    color: COLORS.text,
   },
   emptyStateContainer: {
     alignItems: 'center',

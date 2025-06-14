@@ -27,6 +27,7 @@ import { AttendanceReportDetailsScreen } from '../screens/AttendanceReportDetail
 import AddAttendanceScreen from '../screens/AddAttendanceScreen';
 import { PlayerDetailsScreen } from '../screens/PlayerDetailsScreen';
 import { StatisticsScreen } from '../screens/StatisticsScreen';
+import PlayerAttendanceReportScreen from '../screens/PlayerAttendanceReportScreen';
 
 // Add global type declaration for reloadRole
 declare global {
@@ -146,6 +147,11 @@ export const Navigation = () => {
                   headerShown: false,
                 }}
               />
+              <Stack.Screen
+                name="PlayerAttendanceReportScreen"
+                component={PlayerAttendanceReportScreen}
+                options={{ headerShown: false }}
+              />
             </>
           ) : role === 'admin' ? (
             <>
@@ -205,6 +211,11 @@ export const Navigation = () => {
                 options={{
                   headerShown: false,
                 }}
+              />
+              <Stack.Screen
+                name="PlayerAttendanceReportScreen"
+                component={PlayerAttendanceReportScreen}
+                options={{ headerShown: false }}
               />
             </>
           ) : role === 'coach' ? (
@@ -273,6 +284,11 @@ export const Navigation = () => {
                   headerShown: false,
                 }}
               />
+              <Stack.Screen
+                name="PlayerAttendanceReportScreen"
+                component={PlayerAttendanceReportScreen}
+                options={{ headerShown: false }}
+              />
             </>
           ) : (
             <>
@@ -307,6 +323,11 @@ export const Navigation = () => {
                 options={{
                   headerShown: false,
                 }}
+              />
+              <Stack.Screen
+                name="PlayerAttendanceReportScreen"
+                component={PlayerAttendanceReportScreen}
+                options={{ headerShown: false }}
               />
             </>
           )}

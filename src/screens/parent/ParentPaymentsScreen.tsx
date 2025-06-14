@@ -149,13 +149,39 @@ export const ParentPaymentsScreen = () => {
   const loadChildren = async () => {
     try {
       setIsLoading(true);
+      
+      // Get the current auth session first
+      const { data: authData } = await supabase.auth.getSession();
+      const authUserId = authData?.session?.user?.id;
+      
+      if (!authUserId) {
+        console.error('[ParentPaymentsScreen] No authenticated user found');
+        throw new Error('You are not logged in. Please log in again.');
+      }
+      
+      console.log(`[ParentPaymentsScreen] Authenticated as user: ${authUserId}`);
+      
+      // Get parent data - but use the authenticated user ID for queries
       const parentData = await AsyncStorage.getItem('parent_data');
-      if (!parentData) throw new Error('No parent data found');
+      let parentId = authUserId; // Default to the authenticated user ID
       
-      const parent = JSON.parse(parentData);
+      if (parentData) {
+        const storedParent = JSON.parse(parentData);
+        console.log(`[ParentPaymentsScreen] Stored parent ID: ${storedParent.id}`);
+        
+        // Check if stored parent ID matches authenticated user
+        if (storedParent.id !== authUserId) {
+          console.warn(`[ParentPaymentsScreen] Stored parent ID (${storedParent.id}) does not match auth user ID (${authUserId}). Using stored parent ID for now.`);
+          parentId = storedParent.id; // Use stored parent ID even if it doesn't match
+        } else {
+          parentId = storedParent.id;
+        }
+      } else {
+        console.warn('[ParentPaymentsScreen] No parent data found in storage. Using authenticated user ID.');
+      }
       
-      console.log("[ParentPaymentsScreen] Loading children for parent:", parent.id);
-      setDebugInfo(prev => prev + `\nLoading children for parent: ${parent.id}`);
+      console.log(`[ParentPaymentsScreen] Loading children for parent ID: ${parentId}`);
+      setDebugInfo(prev => prev + `\nLoading children for parent: ${parentId}`);
       
       // Force clear any cached data
       try {
@@ -168,7 +194,7 @@ export const ParentPaymentsScreen = () => {
       const { data: childrenData, error: childrenError } = await supabase
         .from('parent_children')
         .select('*')
-        .eq('parent_id', parent.id)
+        .eq('parent_id', parentId)
         .eq('is_active', true);
         
       if (childrenError) {
@@ -213,11 +239,11 @@ export const ParentPaymentsScreen = () => {
       
       // Filter to only the active players with this parent's ID
       const parentPlayers = allPlayers?.filter((player: Player) => 
-        player.is_active && player.parent_id === parent.id
+        player.is_active && player.parent_id === parentId
       ) || [];
       
-      console.log("[ParentPaymentsScreen] Filtered parent players:", parentPlayers.length);
-      setDebugInfo(prev => prev + `\nFiltered to ${parentPlayers.length} players for this parent`);
+      console.log('[ParentPaymentsScreen] Parent player IDs:', parentPlayers.map(p => p.id));
+      setDebugInfo(prev => prev + `\nParent player IDs: ${parentPlayers.map(p => p.id).join(', ')}`);
       
       // Get teams info
       const teamIds = [...new Set(childrenData.map(child => child.team_id))];
@@ -234,6 +260,87 @@ export const ParentPaymentsScreen = () => {
         teamMap.set(team.id, team.name);
       });
       
+      // Get current date info
+      const currentDate = new Date();
+      const currentYear = currentDate.getFullYear();
+      const currentMonth = currentDate.getMonth() + 1; // 1-12 format
+      
+      // Get all player IDs
+      const playerIds = parentPlayers.map(p => p.id);
+      
+      // Fetch all payment statuses at once from monthly_payments table
+      // This is how the coach view does it, and it works correctly
+      console.log(`[ParentPaymentsScreen] Fetching all payment statuses for ${playerIds.length} players for ${currentYear}-${currentMonth}`);
+      
+      // Check if the parent ID in our data matches the authenticated user ID
+      if (authUserId !== parentId) {
+        console.warn(`[ParentPaymentsScreen] Auth user ID (${authUserId}) does not match parent ID (${parentId})`);
+      }
+      
+      // Standard query through the API - affected by RLS
+      let paymentRecords: { player_id: string; status: string; updated_at: string | null }[] = [];
+      const { data: paymentsData, error: paymentsError } = await supabase
+        .from('monthly_payments')
+        .select('player_id, status, updated_at')
+        .eq('year', currentYear)
+        .eq('month', currentMonth)
+        .in('player_id', playerIds);
+      
+      if (paymentsError) {
+        console.error('Error fetching monthly payments:', paymentsError);
+        console.log(`[ParentPaymentsScreen] Error fetching monthly payments: ${paymentsError.message}`);
+      } else if (paymentsData) {
+        paymentRecords = paymentsData;
+      }
+      
+      console.log(`[ParentPaymentsScreen] Found ${paymentRecords.length || 0} payment records for current month`);
+      
+      // Try alternative direct SQL query approach - might bypass RLS
+      try {
+        console.log(`[ParentPaymentsScreen] Trying direct SQL query as fallback`);
+        const { data: sqlData, error: sqlError } = await supabase.rpc('get_parent_payments', {
+          p_parent_id: parentId,
+          p_year: currentYear,
+          p_month: currentMonth
+        });
+        
+        if (sqlError) {
+          console.error(`[ParentPaymentsScreen] SQL query error: ${sqlError.message}`);
+        } else {
+          console.log(`[ParentPaymentsScreen] Direct SQL query found ${sqlData?.length || 0} records:`, JSON.stringify(sqlData));
+          
+          // If we got data from SQL but not from the standard query, use this data instead
+          if (sqlData && sqlData.length > 0 && paymentRecords.length === 0) {
+            console.log(`[ParentPaymentsScreen] Using SQL query results instead of standard query`);
+            
+            // Process JSON results from the SQL function
+            paymentRecords = sqlData.map((item: any) => {
+              console.log(`[ParentPaymentsScreen] Processing SQL item:`, JSON.stringify(item));
+              // The item might be a JSON string or an object, handle both cases
+              const record = typeof item === 'string' ? JSON.parse(item) : item;
+              return {
+                player_id: record.player_id,
+                status: record.status,
+                updated_at: record.updated_at
+              };
+            });
+            
+            console.log(`[ParentPaymentsScreen] Processed ${paymentRecords.length} SQL records`);
+          }
+        }
+      } catch (sqlException) {
+        console.error(`[ParentPaymentsScreen] SQL exception:`, sqlException);
+      }
+      
+      // Create a map of payment statuses
+      const paymentMap = new Map();
+      paymentRecords.forEach(payment => {
+        paymentMap.set(payment.player_id, {
+          status: payment.status,
+          updated_at: payment.updated_at
+        });
+      });
+      
       // Process all children with player details
       const enhancedChildren = await Promise.all(childrenData.map(async (child) => {
         // Find matching player by name
@@ -241,22 +348,28 @@ export const ParentPaymentsScreen = () => {
           p.name?.toLowerCase() === child.full_name.toLowerCase()
         );
         
-        if (player) {
-          console.log(`[ParentPaymentsScreen] Processing player: ${player.name}`);
+        // If we have player_id directly in the child record, use that
+        const playerId = child.player_id || (player ? player.id : null);
+        
+        if (playerId) {
+          console.log(`[ParentPaymentsScreen] Processing player: ${child.full_name} (ID: ${playerId})`);
           
-          // IMPORTANT: Get the CURRENT MONTH payment status specifically
-          const currentMonthStatus = await getCurrentMonthPaymentStatus(player.id);
-          console.log(`[ParentPaymentsScreen] Current month status for ${player.name}: ${currentMonthStatus}`);
+          // Get payment status from our map instead of calling getCurrentMonthPaymentStatus
+          const paymentInfo = paymentMap.get(playerId);
+          const paymentStatus = paymentInfo ? paymentInfo.status : 'unpaid';
+          
+          console.log(`[ParentPaymentsScreen] Payment status for player ${playerId}: ${paymentStatus}`);
           
           return {
             ...child,
             team_name: teamMap.get(child.team_id) || 'No Team',
-            player_id: player.id,
-            payment_status: currentMonthStatus, // Use current month status for the card
-            last_payment_date: player.last_payment_date
+            player_id: playerId,
+            payment_status: paymentStatus,
+            last_payment_date: paymentInfo?.updated_at || (player ? player.last_payment_date : null)
           };
         } else {
           // No matching player found
+          console.log(`[ParentPaymentsScreen] No player found for child: ${child.full_name}`);
           return {
             ...child,
             team_name: teamMap.get(child.team_id) || 'No Team',
@@ -338,7 +451,7 @@ export const ParentPaymentsScreen = () => {
       
       // Fetch payment history data
       const { data, error } = await supabase
-        .from('player_payments')
+        .from('monthly_payments')
         .select('id, player_id, year, month, status, updated_at')
         .eq('player_id', child.player_id)
         .eq('year', currentYear) // Only get current year
@@ -385,123 +498,17 @@ export const ParentPaymentsScreen = () => {
       setHistoryLoading(true);
       setSelectedChild(child);
       
-      console.log("[ParentPaymentsScreen] Fetching payment history for player:", 
+      console.log("[ParentPaymentsScreen] Opening payment history for player:", 
         child.player_id, "Name:", child.full_name);
-      setDebugInfo(prev => prev + `\nFetching history for: ${child.full_name}`);
       
-      // First check if we're using a hardcoded player ID
-      if (!child.player_id || (child.player_id && child.player_id.startsWith('hdcoded-'))) {
-        console.log("[ParentPaymentsScreen] Using hardcoded data for payment history");
-        setDebugInfo(prev => prev + `\nUsing hardcoded data for payment history`);
-        
-        // If we're using hardcoded data, create a complete payment history for all months
-        const currentDate = new Date();
-        const currentYear = currentDate.getFullYear();
-        const currentMonth = currentDate.getMonth() + 1; // 1-12 format
-        
-        // Create months for the current year
-        const months = [];
-        for (let i = 1; i <= currentMonth; i++) {
-          months.push({
-            year: currentYear,
-            month: i,
-            date: new Date(currentYear, i-1, 1)
-          });
-        }
-        
-        // Reverse to show most recent first
-        months.reverse();
-        setHistoryMonths(months);
-        
-        // Generate payment history for ALL months with the current status
-        const playerId = child.player_id || `hdcoded-${child.full_name.toLowerCase().replace(/\s/g, '-')}-id`;
-        const currentStatus = child.payment_status === 'paid' ? 'paid' : 'not_paid';
-        
-        const historyRecords: PaymentHistory[] = months.map(({ year, month }) => ({
-          id: `virtual-${Date.now()}-${month}`,
-          player_id: playerId,
-          year: year,
-          month: month,
-          status: currentStatus,
-          updated_at: new Date().toISOString()
-        }));
-        
-        console.log("[ParentPaymentsScreen] Hardcoded payment history for all months:", 
-          JSON.stringify(historyRecords, null, 2));
-        setPaymentHistory(historyRecords);
-        setHistoryLoading(false);
-        setIsPaymentHistoryModalVisible(true);
-        return;
-      }
-      
-      // We have a valid player_id, proceed with normal loading
-      await loadPaymentHistory(child);
+      // Simply open the modal - the PaymentHistoryModal component will
+      // handle the data loading using the get_player_payment_history function
+      setIsPaymentHistoryModalVisible(true);
     } catch (error) {
       console.error('Error preparing payment history:', error);
-      setDebugInfo(prev => prev + `\nError: ${(error as Error).message}`);
-      Alert.alert('Error', 'Failed to load payment history');
-      setHistoryLoading(false);
-    }
-  };
-  
-  // Updated loadPaymentHistory function to ensure consistent display
-  const loadPaymentHistory = async (child: Child) => {
-    if (!child.player_id) {
-      setHistoryLoading(false);
-      return;
-    }
-    const currentDate = new Date();
-    const currentYear = currentDate.getFullYear();
-    const currentMonth = currentDate.getMonth() + 1; // 1-12
-    // Generate all months for the current year up to the current month
-    const months = [];
-    for (let m = 1; m <= currentMonth; m++) {
-      months.push({ year: currentYear, month: m, date: new Date(currentYear, m - 1, 1) });
-    }
-    months.reverse();
-    setHistoryMonths(months);
-    try {
-      // Fetch all payment records for this player for the current year
-      const { data, error } = await supabase
-        .from('monthly_payments')
-        .select('*')
-        .eq('player_id', child.player_id)
-        .eq('year', currentYear);
-      if (error) throw error;
-      const recordsByMonth: Record<string, any> = {};
-      (data || []).forEach(record => {
-        recordsByMonth[`${record.year}-${record.month}`] = record;
-      });
-      // Build the history for each month
-      const processedHistory: PaymentHistory[] = months.map(({ year, month }) => {
-        const key = `${year}-${month}`;
-        if (recordsByMonth[key]) {
-          return {
-            id: `${year}-${month}`,
-            player_id: child.player_id as string,
-            year,
-            month,
-            status: recordsByMonth[key].status,
-            updated_at: recordsByMonth[key].updated_at
-          };
-        } else {
-          return {
-            id: `virtual-${year}-${month}`,
-            player_id: child.player_id as string,
-            year,
-            month,
-            status: 'not_paid',
-            updated_at: null
-          };
-        }
-      });
-      setPaymentHistory(processedHistory);
-    } catch (error) {
-      console.error('Error fetching payment history:', error);
       Alert.alert('Error', 'Failed to load payment history');
     } finally {
       setHistoryLoading(false);
-      setIsPaymentHistoryModalVisible(true);
     }
   };
   

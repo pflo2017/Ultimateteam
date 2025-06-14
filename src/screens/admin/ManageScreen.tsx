@@ -178,7 +178,8 @@ export const AdminManageScreen = () => {
 
       console.log('Fetching teams for club:', clubId);
       
-      // First get the teams with basic info
+      // IMPORTANT: Always filter by club_id to ensure proper data isolation between clubs
+      // This prevents admins from seeing teams from other clubs/academies
       const { data: teamsData, error: teamsError } = await supabase
         .from('teams')
         .select(`
@@ -188,10 +189,11 @@ export const AdminManageScreen = () => {
           created_at,
           is_active,
           coach_id,
-          players(count)
+          players!inner(count)
         `)
         .eq('club_id', clubId)
         .eq('is_active', true)
+        .eq('players.is_active', true) // Only count active players
         .order('name');
 
       if (teamsError) {
@@ -248,6 +250,8 @@ export const AdminManageScreen = () => {
         return;
       }
 
+      // IMPORTANT: Always filter by club_id to ensure proper data isolation between clubs
+      // This prevents admins from seeing coaches from other clubs/academies
       const { data: coachesData, error: coachesError } = await supabase
         .from('coaches')
         .select(`
@@ -346,14 +350,16 @@ export const AdminManageScreen = () => {
         childrenMap.get(child.parent_id)!.push(child);
       });
 
-      // Get all team data
+      // Get teams data ONLY for the current club
       const { data: teamsData, error: teamsError } = await supabase
         .from('teams')
-        .select('id, name');
+        .select('id, name')
+        .eq('club_id', clubId) // Add club_id filter to ensure data isolation
+        .eq('is_active', true); // Only get active teams
       
       if (teamsError) throw teamsError;
       
-      console.log('Teams data:', JSON.stringify(teamsData, null, 2));
+      console.log('Teams data for club:', JSON.stringify(teamsData, null, 2));
       
       // Create a map of teams for easy lookup
       const teamsMap = new Map();

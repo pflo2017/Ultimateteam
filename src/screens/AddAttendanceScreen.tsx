@@ -71,8 +71,44 @@ export default function AddAttendanceScreen() {
       const adminData = await AsyncStorage.getItem('admin_data');
       const coachData = await AsyncStorage.getItem('coach_data');
       if (adminData) {
-        const { data, error } = await supabase.from('teams').select('id, name').eq('is_active', true).order('name');
-        if (!error && data) setTeams(data);
+        // Get the admin's club_id first
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          console.error('No authenticated user found');
+          return;
+        }
+        
+        // Get admin's club_id
+        const { data: club, error: clubError } = await supabase
+          .from('clubs')
+          .select('id')
+          .eq('admin_id', user.id)
+          .single();
+          
+        if (clubError) {
+          console.error('Error getting club for admin:', clubError);
+          return;
+        }
+        
+        if (!club) {
+          console.error('No club found for admin');
+          return;
+        }
+        
+        console.log('[AddAttendanceScreen] Admin club_id:', club.id);
+        
+        // For admins, get teams filtered by club_id for data isolation
+        const { data, error } = await supabase
+          .from('teams')
+          .select('id, name')
+          .eq('club_id', club.id) // CRITICAL: Filter by club_id for data isolation
+          .eq('is_active', true)
+          .order('name');
+          
+        if (!error && data) {
+          console.log('[AddAttendanceScreen] Teams loaded for admin:', data.length);
+          setTeams(data);
+        }
       } else if (coachData) {
         const coach = JSON.parse(coachData);
         const { data, error } = await supabase.rpc('get_coach_teams', { p_coach_id: coach.id });

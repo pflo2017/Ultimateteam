@@ -55,8 +55,8 @@ export const ActivityDetailsScreen = () => {
   // State for lineup player names
   const [lineupNames, setLineupNames] = useState<string[]>([]);
   
-  // State for attendance responses - renamed variables to "presence" for clarity
-  const [presenceResponses, setPresenceResponses] = useState<{[playerId: string]: 'going' | 'not-going' | undefined}>({});
+  // State for attendance responses - now stores both status and note
+  const [presenceResponses, setPresenceResponses] = useState<{[playerId: string]: { status: 'going' | 'not-going', note?: string } | undefined}>({});
   const [showPresenceDialog, setShowPresenceDialog] = useState(false);
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [presenceNote, setPresenceNote] = useState('');
@@ -148,17 +148,15 @@ export const ActivityDetailsScreen = () => {
     // Load presence responses
     const loadPresenceResponses = async () => {
       if (!activity || !activity.id) return;
-      
       try {
         const { data, error } = await supabase
           .from('activity_presence')
           .select('*')
           .eq('activity_id', activity.id);
-          
         if (!error && data) {
-          const responses: {[playerId: string]: 'going' | 'not-going' | undefined} = {};
+          const responses: {[playerId: string]: { status: 'going' | 'not-going', note?: string } } = {};
           data.forEach(response => {
-            responses[response.player_id] = response.status;
+            responses[response.player_id] = { status: response.status, note: response.note };
           });
           setPresenceResponses(responses);
           console.log('Presence responses:', responses);
@@ -167,7 +165,6 @@ export const ActivityDetailsScreen = () => {
         console.error('Error loading presence responses:', error);
       }
     };
-    
     loadPresenceResponses();
   }, [activity?.id]);
   
@@ -272,7 +269,7 @@ export const ActivityDetailsScreen = () => {
       
       if (error) throw error;
       
-      Alert.alert('Success', 'Activity deleted successfully');
+      Alert.alert('Success', 'Activity deleted successfully. Any attendance records and statistics for this activity have also been removed.');
       navigation.goBack();
     } catch (error) {
       console.error('Error deleting activity:', error);
@@ -419,7 +416,7 @@ export const ActivityDetailsScreen = () => {
       // Update local state
       setPresenceResponses({
         ...presenceResponses,
-        [selectedPlayerId]: presenceStatus
+        [selectedPlayerId]: { status: presenceStatus, note: presenceStatus === 'not-going' ? presenceNote : undefined }
       });
       
       setShowPresenceDialog(false);
@@ -485,7 +482,7 @@ export const ActivityDetailsScreen = () => {
   
   // Open presence dialog
   const openPresenceDialog = (playerId: string) => {
-    const currentStatus = presenceResponses[playerId] || 'going';
+    const currentStatus = presenceResponses[playerId]?.status || 'going';
     setSelectedPlayerId(playerId);
     setPresenceStatus(currentStatus);
     setShowPresenceDialog(true);
@@ -515,7 +512,9 @@ export const ActivityDetailsScreen = () => {
               if (!playerId) return null;
               
               const isChild = userRole === 'parent' && isParentChild(playerId);
-              const status = presenceResponses[playerId];
+              const presence = presenceResponses[playerId];
+              const status = presence?.status;
+              const note = presence?.note;
               const canShowPresence = isChild || userRole === 'coach' || userRole === 'admin';
               return (
                 <View key={idx} style={styles.lineupPlayerRow}>
@@ -540,6 +539,12 @@ export const ActivityDetailsScreen = () => {
                           }}>
                             {status === 'going' ? 'Going' : 'Not Going'}
                           </Text>
+                          {/* Show reason for not going if available and user is coach/admin */}
+                          {status === 'not-going' && note && (userRole === 'coach' || userRole === 'admin') && (
+                            <Text style={{ color: '#C62828', fontSize: 13, marginLeft: 8 }}>
+                              ({note.charAt(0).toUpperCase() + note.slice(1)})
+                            </Text>
+                          )}
                         </View>
                       ) : null}
                       {/* Only parents can update for their own children */}
@@ -565,7 +570,9 @@ export const ActivityDetailsScreen = () => {
             activity.lineup_players.map((id, idx) => {
               const name = idx === 0 ? "Patrick Grigore" : "Simon Popescu";
               const isChild = userRole === 'parent' && isParentChild(id);
-              const status = presenceResponses[id];
+              const presence = presenceResponses[id];
+              const status = presence?.status;
+              const note = presence?.note;
               const canShowPresence = isChild || userRole === 'coach' || userRole === 'admin';
               return (
                 <View key={idx} style={styles.lineupPlayerRow}>
@@ -590,6 +597,12 @@ export const ActivityDetailsScreen = () => {
                           }}>
                             {status === 'going' ? 'Going' : 'Not Going'}
                           </Text>
+                          {/* Show reason for not going if available and user is coach/admin */}
+                          {status === 'not-going' && note && (userRole === 'coach' || userRole === 'admin') && (
+                            <Text style={{ color: '#C62828', fontSize: 13, marginLeft: 8 }}>
+                              ({note.charAt(0).toUpperCase() + note.slice(1)})
+                            </Text>
+                          )}
                         </View>
                       ) : null}
                       {isChild && userRole === 'parent' && (
@@ -917,6 +930,9 @@ export const ActivityDetailsScreen = () => {
           <Dialog.Title>Delete Activity</Dialog.Title>
           <Dialog.Content>
             <Text>Are you sure you want to delete this activity? This action cannot be undone.</Text>
+            <Text style={styles.warningText}>
+              All attendance records and statistics associated with this activity will also be deleted.
+            </Text>
             {activity?.is_repeating && !activity.is_recurring_instance && (
               <Text style={styles.warningText}>
                 This will delete all recurring instances of this activity.
@@ -1040,10 +1056,25 @@ export const ActivityDetailsScreen = () => {
               </TouchableOpacity>
             </View>
             
-            {presenceStatus === 'not-going' && false && (
-              // TODO: Display the parent's note here, e.g., as a tooltip or expandable text
-              // Example: <Text style={{ color: COLORS.grey[600], fontSize: 12 }}>Reason: {presenceNote}</Text>
-              null
+            {presenceStatus === 'not-going' && (
+              <View style={{ marginTop: 16 }}>
+                <Text style={{ fontSize: 15, fontWeight: '500', marginBottom: 8 }}>Reason for not going</Text>
+                {['sick', 'injured', 'vacation', 'school', 'work', 'other'].map(reason => (
+                  <TouchableOpacity
+                    key={reason}
+                    style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}
+                    onPress={() => setPresenceNote(reason)}
+                  >
+                    <MaterialCommunityIcons
+                      name={presenceNote === reason ? 'radiobox-marked' : 'radiobox-blank'}
+                      size={22}
+                      color={presenceNote === reason ? COLORS.primary : COLORS.grey[400]}
+                      style={{ marginRight: 8 }}
+                    />
+                    <Text style={{ fontSize: 15, color: COLORS.text }}>{reason.charAt(0).toUpperCase() + reason.slice(1)}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             )}
           </Dialog.Content>
           <Dialog.Actions style={styles.dialogActions}>

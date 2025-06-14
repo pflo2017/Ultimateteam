@@ -1,6 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, TextInput, ScrollView, TouchableOpacity, Modal, Alert, Platform, SafeAreaView, KeyboardAvoidingView, Dimensions, ActivityIndicator as RNActivityIndicator } from 'react-native';
-import { Text, Card, ActivityIndicator, Button, Divider } from 'react-native-paper';
+import { 
+  View, 
+  StyleSheet, 
+  TextInput, 
+  ScrollView, 
+  TouchableOpacity, 
+  Modal, 
+  Alert, 
+  Platform, 
+  SafeAreaView, 
+  KeyboardAvoidingView, 
+  Dimensions, 
+  ActivityIndicator,
+  Text,
+  Button
+} from 'react-native';
 import { COLORS, SPACING, FONT_SIZES } from '../../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
@@ -20,8 +34,10 @@ interface Player {
   team_name: string;
   payment_status: string;
   attendance?: {
-    attended: number;
+    present: number;
+    absent: number;
     total: number;
+    percentage: number;
   };
   parent_id?: string;
   last_payment_date?: string;
@@ -83,7 +99,7 @@ export const CoachPaymentsScreen = () => {
   
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [selectedTeamId, setSelectedTeamId] = useState<string | undefined>(undefined);
   const [isTeamModalVisible, setIsTeamModalVisible] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [isPlayerDetailsModalVisible, setIsPlayerDetailsModalVisible] = useState(false);
@@ -123,7 +139,7 @@ export const CoachPaymentsScreen = () => {
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
 
-  const [attendanceData, setAttendanceData] = useState<{[playerId: string]: {attended: number, total: number}}>({});
+  const [attendanceData, setAttendanceData] = useState<{[playerId: string]: {present: number, absent: number, total: number, percentage: number}}>({});
 
   const [expandedPlayerId, setExpandedPlayerId] = useState<string | null>(null); // Track expanded card
 
@@ -589,7 +605,7 @@ export const CoachPaymentsScreen = () => {
       // Fetch all activities for the selected team and month
       const { data: activitiesData, error: activitiesError } = await supabase
         .from('activities')
-        .select('id, start_time')
+        .select('id, start_time, type')
         .eq('team_id', teamId)
         .gte('start_time', startDateStr)
         .lte('start_time', endDateStr);
@@ -600,59 +616,58 @@ export const CoachPaymentsScreen = () => {
       }
       
       console.log(`Found ${activitiesData?.length || 0} activities for this period (${month}/${year})`);
-      
-      // Fetch attendance records for these activities
-      const activityIds = (activitiesData || []).map((a: any) => a.id);
-      
-      if (activityIds.length === 0) {
-        // No activities this month
-        console.log(`No activities found for month ${month}/${year}`);
-        const emptyAttendance: {[playerId: string]: {attended: number, total: number}} = {};
-        playersList.forEach(player => {
-          emptyAttendance[player.id] = { attended: 0, total: 0 };
-        });
-        setAttendanceData(emptyAttendance);
-        
-        // Update players with empty attendance data
-        setPlayers(playersList.map(player => ({
-          ...player,
-          attendance: { attended: 0, total: 0 }
-        })));
-        
-        return;
+      if (activitiesData && activitiesData.length > 0) {
+        console.log(`Activities by type: ${
+          activitiesData.reduce((acc: {[key: string]: number}, activity: any) => {
+            const type = activity.type || 'unknown';
+            acc[type] = (acc[type] || 0) + 1;
+            return acc;
+          }, {})}`);
       }
       
+      // Filter activities to only include 'training' type
+      const trainingActivities = (activitiesData || []).filter((a: any) => a.type === 'training');
+      const trainingActivityIds = trainingActivities.map((a: any) => a.id);
+
+      if (trainingActivityIds.length === 0) {
+        // No training sessions this month
+        const emptyAttendance: {[playerId: string]: {present: number, absent: number, total: number, percentage: number}} = {};
+        playersList.forEach(player => {
+          emptyAttendance[player.id] = { present: 0, absent: 0, total: 0, percentage: 0 };
+        });
+        setAttendanceData(emptyAttendance);
+        setPlayers(playersList.map(player => ({
+          ...player,
+          attendance: { present: 0, absent: 0, total: 0, percentage: 0 }
+        })));
+        return;
+      }
+
+      // Fetch attendance records for these training activities
       const { data: attendanceData, error: attendanceError } = await supabase
         .from('activity_attendance')
         .select('activity_id, player_id, status')
-        .in('activity_id', activityIds);
-      
+        .in('activity_id', trainingActivityIds);
+
       if (attendanceError) {
-        console.error("Error fetching attendance:", attendanceError);
+        console.error('Error fetching attendance:', attendanceError);
         throw attendanceError;
       }
-      
-      console.log(`Found ${attendanceData?.length || 0} attendance records for month ${month}/${year}`);
-      
-      // Calculate attendance for each player for this specific month only
-      const attendance: {[playerId: string]: {attended: number, total: number}} = {};
-      
+
+      // Calculate attendance for each player for trainings only
+      const attendance: {[playerId: string]: {present: number, absent: number, total: number, percentage: number}} = {};
       playersList.forEach(player => {
-        // Only include attendance records for activities in the current month
-        const playerAttendance = (attendanceData || []).filter((a: any) => a.player_id === player.id);
-        const attended = playerAttendance.filter((a: any) => a.status === 'present').length;
-        // Total sessions is the total number of activities for this month
-        const total = activityIds.length;
-        
-        attendance[player.id] = { attended, total };
+        const playerAttendance = (attendanceData || []).filter((a: any) => a.player_id === player.id && trainingActivityIds.includes(a.activity_id));
+        const present = playerAttendance.filter((a: any) => a.status === 'present').length;
+        const absent = playerAttendance.filter((a: any) => a.status === 'absent').length;
+        const total = playerAttendance.length; // Only trainings where attendance is marked for this player
+        const percentage = total > 0 ? Math.round((present / total) * 100) : 0;
+        attendance[player.id] = { present, absent, total, percentage };
       });
-      
       setAttendanceData(attendance);
-      
-      // Update players with attendance data for this specific month
       setPlayers(playersList.map(player => ({
         ...player,
-        attendance: attendance[player.id] || { attended: 0, total: 0 }
+        attendance: attendance[player.id] || { present: 0, absent: 0, total: 0, percentage: 0 }
       })));
       
     } catch (error) {
@@ -661,25 +676,17 @@ export const CoachPaymentsScreen = () => {
   };
   
   // Handle team selection
-  const handleTeamSelect = (teamId: string | null) => {
-    console.log(`Team selected: ${teamId || 'All Teams'}`);
+  const handleTeamSelect = (teamId: string) => {
+    console.log(`Team selected: ${teamId}`);
     setSelectedTeamId(teamId);
     setIsTeamModalVisible(false);
     
-    // Fetch data for the new team selection
+    // Fetch data for the selected team
     if (selectedMonth) {
-      if (teamId) {
-        // Fetch data for a specific team
-        console.log(`Fetching data for team ${teamId} and month ${selectedMonth.value}/${selectedMonth.year}`);
-        fetchMonthlyPaymentsForTeam(selectedMonth.year, selectedMonth.value, teamId);
-      } else {
-        // Fetch data for all teams
-        console.log(`Fetching data for all teams and month ${selectedMonth.value}/${selectedMonth.year}`);
-        fetchAllTeamsPayments(selectedMonth.year, selectedMonth.value);
-      }
+      console.log(`Fetching data for team ${teamId} and month ${selectedMonth.value}/${selectedMonth.year}`);
+      fetchMonthlyPaymentsForTeam(selectedMonth.year, selectedMonth.value, teamId);
       
       // Ensure the month selector stays centered on the current month after team selection
-      // Using multiple timeouts at different intervals for more reliable centering
       const currentIndex = currentMonthIndex;
       setTimeout(() => {
         if (currentIndex > 0) scrollToMonth(currentIndex);
@@ -1302,10 +1309,54 @@ export const CoachPaymentsScreen = () => {
   };
 
   const formatDate = (dateString: string) => {
-    if (!dateString) return '';
     const date = new Date(dateString);
-    if (isNaN(date.getTime())) return dateString; // Return as-is if not a valid date
-    return date.toLocaleDateString('en-GB');
+    return `${date.getDate()}/${date.getMonth() + 1}/${date.getFullYear()}`;
+  };
+  
+  // Send payment reminder to parent
+  const sendPaymentReminder = async (player: Player) => {
+    try {
+      if (!selectedMonth) return;
+      
+      // Get current user
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError) throw userError;
+      
+      if (!user) {
+        Alert.alert('Error', 'You must be logged in to send reminders.');
+        return;
+      }
+      
+      // Call the Edge Function to send the reminder
+      const { data, error } = await supabase.functions.invoke('send-payment-reminder', {
+        body: {
+          playerId: player.id,
+          parentId: player.parent_id,
+          month: selectedMonth.value,
+          monthName: selectedMonth.name,
+          year: selectedMonth.year,
+          playerName: player.player_name,
+          senderId: user.id,
+          senderType: 'coach'
+        }
+      });
+      
+      if (error) throw error;
+      
+      // Show success message
+      setToastMessage(data.message || 'Payment reminder sent');
+      setShowToast(true);
+      
+      // Hide toast after 3 seconds
+      setTimeout(() => {
+        setShowToast(false);
+      }, 3000);
+      
+    } catch (error) {
+      console.error('Error sending payment reminder:', error);
+      Alert.alert('Error', 'Failed to send payment reminder. Please try again.');
+    }
   };
 
   // Function to fetch payments data for all teams managed by the coach
@@ -1539,9 +1590,9 @@ export const CoachPaymentsScreen = () => {
       if (activityIds.length === 0) {
         // No activities this month across any team
         console.log(`[DEBUG] fetchAttendanceDataForAllTeams - No activities found for month ${month}/${year} across any team`);
-        const emptyAttendance: {[playerId: string]: {attended: number, total: number}} = {};
+        const emptyAttendance: {[playerId: string]: {present: number, absent: number, total: number, percentage: number}} = {};
         playersList.forEach(player => {
-          emptyAttendance[player.id] = { attended: 0, total: 0 };
+          emptyAttendance[player.id] = { present: 0, absent: 0, total: 0, percentage: 0 };
         });
         setAttendanceData(emptyAttendance);
         
@@ -1549,7 +1600,7 @@ export const CoachPaymentsScreen = () => {
         console.log(`[DEBUG] fetchAttendanceDataForAllTeams - Updating ${playersList.length} players with empty attendance data`);
         setPlayers(playersList.map(player => ({
           ...player,
-          attendance: { attended: 0, total: 0 }
+          attendance: { present: 0, absent: 0, total: 0, percentage: 0 }
         })));
         
         return;
@@ -1569,21 +1620,20 @@ export const CoachPaymentsScreen = () => {
       console.log(`[DEBUG] fetchAttendanceDataForAllTeams - Found ${attendanceData?.length || 0} attendance records`);
       
       // Calculate attendance for each player
-      const attendance: {[playerId: string]: {attended: number, total: number}} = {};
+      const attendance: {[playerId: string]: {present: number, absent: number, total: number, percentage: number}} = {};
       
       playersList.forEach(player => {
         // Get activities for this player's team
         const teamActivities = teamActivitiesMap.get(player.team_id) || [];
-        const total = teamActivities.length;
-        
         // Only count attendance for activities in this player's team
         const playerAttendance = (attendanceData || []).filter(
           (a: any) => a.player_id === player.id && teamActivities.includes(a.activity_id)
         );
-        
-        const attended = playerAttendance.filter((a: any) => a.status === 'present').length;
-        
-        attendance[player.id] = { attended, total };
+        const present = playerAttendance.filter((a: any) => a.status === 'present').length;
+        const absent = playerAttendance.filter((a: any) => a.status === 'absent').length;
+        const total = playerAttendance.length; // Only trainings where attendance is marked for this player
+        const percentage = total > 0 ? Math.round((present / total) * 100) : 0;
+        attendance[player.id] = { present, absent, total, percentage };
       });
       
       console.log(`[DEBUG] fetchAttendanceDataForAllTeams - Calculated attendance for ${Object.keys(attendance).length} players`);
@@ -1593,7 +1643,7 @@ export const CoachPaymentsScreen = () => {
       console.log(`[DEBUG] fetchAttendanceDataForAllTeams - Updating ${playersList.length} players with attendance data`);
       setPlayers(playersList.map(player => ({
         ...player,
-        attendance: attendance[player.id] || { attended: 0, total: 0 }
+        attendance: attendance[player.id] || { present: 0, absent: 0, total: 0, percentage: 0 }
       })));
       
       console.log(`[DEBUG] fetchAttendanceDataForAllTeams - Completed successfully`);
@@ -1663,163 +1713,210 @@ export const CoachPaymentsScreen = () => {
             onPress={() => setIsTeamModalVisible(true)}
           >
             <MaterialCommunityIcons 
-              name={selectedTeamId ? "account-group" : "view-grid"} 
+              name="account-group" 
               size={20} 
               color={COLORS.primary} 
               style={styles.teamSelectorIcon} 
             />
             <Text style={styles.teamSelectorText} numberOfLines={1}>
-              {selectedTeamId ? teams.find(t => t.id === selectedTeamId)?.name : 'All Teams'}
+              {selectedTeamId ? teams.find(t => t.id === selectedTeamId)?.name : 'Select Team'}
             </Text>
             <MaterialCommunityIcons name="chevron-down" size={20} color={COLORS.grey[400]} />
           </TouchableOpacity>
           
-          {/* Search Bar */}
-          <View style={styles.searchContainer}>
-            <MaterialCommunityIcons name="magnify" size={20} color={COLORS.grey[400]} style={styles.searchIcon} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search player"
-              placeholderTextColor={COLORS.grey[400]}
-              value={searchQuery}
-              onChangeText={handleSearchChange}
-            />
-          </View>
+          {/* Add empty state message when no team is selected */}
+          {!selectedTeamId && (
+            <View style={styles.emptyStateContainer}>
+              <MaterialCommunityIcons name="arrow-up-drop-circle" size={48} color={COLORS.primary} />
+              <Text style={styles.emptyStateTextCentered}>Please select a team to view payments</Text>
+            </View>
+          )}
+          
+          {/* Search Bar - Only show when a team is selected */}
+          {selectedTeamId && (
+            <View style={styles.searchContainer}>
+              <MaterialCommunityIcons name="magnify" size={20} color={COLORS.grey[400]} style={styles.searchIcon} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search player"
+                placeholderTextColor={COLORS.grey[400]}
+                value={searchQuery}
+                onChangeText={handleSearchChange}
+              />
+            </View>
+          )}
           
           {/* Stats Summary */}
-          <View style={styles.statsContainer}>
-            <View style={styles.statItem}>
-              <MaterialCommunityIcons name="check-circle" size={24} color={COLORS.success} />
-              <Text style={styles.statLabel}>Paid</Text>
-              <Text style={styles.statValue}>{stats.paidPlayers}</Text>
-            </View>
-            
-            <View style={styles.statDivider} />
-            
-            <View style={styles.statItem}>
-              <MaterialCommunityIcons name="close-circle" size={24} color={COLORS.error} />
-              <Text style={styles.statLabel}>Not Paid</Text>
-              <Text style={styles.statValue}>{stats.unpaidPlayers}</Text>
-            </View>
-            
-            <View style={styles.statDivider} />
-            
-            <View style={styles.statItem}>
-              <MaterialCommunityIcons name="account-group" size={24} color={COLORS.primary} />
-              <Text style={styles.statLabel}>Total</Text>
-              <Text style={styles.statValue}>{stats.totalPlayers}</Text>
-            </View>
-          </View>
-          
-          {/* Player List */}
-          <View style={styles.playersContainer}>
-            {filteredPlayers.length === 0 ? (
-              <View style={styles.emptyState}>
-                <MaterialCommunityIcons name="account-off" size={48} color={COLORS.grey[400]} />
-                <Text style={styles.emptyStateText}>No players found</Text>
+          {selectedTeamId && (
+            <>
+              <View style={styles.statsContainer}>
+                <View style={styles.statItem}>
+                  <MaterialCommunityIcons name="check-circle" size={24} color={COLORS.success} />
+                  <Text style={styles.statLabel}>Paid</Text>
+                  <Text style={styles.statValue}>{stats.paidPlayers}</Text>
+                </View>
+                <View style={styles.statDivider} />
+                <View style={styles.statItem}>
+                  <MaterialCommunityIcons name="close-circle" size={24} color={COLORS.error} />
+                  <Text style={styles.statLabel}>Not Paid</Text>
+                  <Text style={styles.statValue}>{stats.unpaidPlayers}</Text>
+                </View>
+                <View style={styles.statDivider} />
+                <View style={styles.statItem}>
+                  <MaterialCommunityIcons name="account-group" size={24} color={COLORS.primary} />
+                  <Text style={styles.statLabel}>Total</Text>
+                  <Text style={styles.statValue}>{stats.totalPlayers}</Text>
+                </View>
               </View>
-            ) : (
-              filteredPlayers.map(player => (
-                <View key={player.id} style={styles.playerCard}>
-                  <View 
-                    style={[
-                      styles.playerCardContent,
-                      { 
-                        borderLeftWidth: 4,
-                        borderLeftColor: player.payment_status === 'paid' ? COLORS.success : COLORS.error,
-                        borderTopWidth: 1,
-                        borderRightWidth: 1,
-                        borderBottomWidth: 1,
-                        borderTopColor: COLORS.grey[200],
-                        borderRightColor: COLORS.grey[200],
-                        borderBottomColor: COLORS.grey[200]
-                      }
-                    ]}
-                  >
-                    {/* Player Name and Status */}
-                    <View style={styles.playerHeader}>
-                      <View style={styles.playerInfo}>
-                        <MaterialCommunityIcons name="account" size={24} color={COLORS.text} style={styles.playerIcon} />
-                        <Text style={styles.playerName}>{player.player_name}</Text>
-                      </View>
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <View style={[
-                          styles.statusBadge,
-                          { backgroundColor: player.payment_status === 'paid' ? COLORS.success + '20' : COLORS.error + '20' }
-                        ]}>
-                          <MaterialCommunityIcons 
-                            name={player.payment_status === 'paid' ? 'check' : 'close'} 
-                            size={14} 
-                            color={player.payment_status === 'paid' ? COLORS.success : COLORS.error} 
-                          />
-                          <Text style={[
-                            styles.statusText,
-                            { color: player.payment_status === 'paid' ? COLORS.success : COLORS.error }
-                          ]}>
-                            {player.payment_status === 'paid' ? 'Paid' : 'Not Paid'}
-                          </Text>
+              {/* Player List */}
+              <View style={styles.playersContainer}>
+                {filteredPlayers.length === 0 ? (
+                  <View style={styles.emptyState}>
+                    <MaterialCommunityIcons name="account-off" size={48} color={COLORS.grey[400]} />
+                    <Text style={styles.emptyStateText}>No players found</Text>
+                  </View>
+                ) : (
+                  filteredPlayers.map(player => (
+                    <View key={player.id} style={styles.playerCard}>
+                      <View 
+                        style={[
+                          styles.playerCardContent,
+                          { 
+                            borderLeftWidth: 4,
+                            borderLeftColor: player.payment_status === 'paid' ? COLORS.success : COLORS.error,
+                            borderTopWidth: 1,
+                            borderRightWidth: 1,
+                            borderBottomWidth: 1,
+                            borderTopColor: COLORS.grey[200],
+                            borderRightColor: COLORS.grey[200],
+                            borderBottomColor: COLORS.grey[200]
+                          }
+                        ]}
+                      >
+                        {/* Player Name and Status */}
+                        <View style={styles.playerHeader}>
+                          <View style={styles.playerInfo}>
+                            <MaterialCommunityIcons name="account" size={24} color={COLORS.text} style={styles.playerIcon} />
+                            <Text style={styles.playerName}>{player.player_name}</Text>
+                          </View>
+                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <View style={[
+                              styles.statusBadge,
+                              { backgroundColor: player.payment_status === 'paid' ? COLORS.success + '20' : COLORS.error + '20' }
+                            ]}>
+                              <MaterialCommunityIcons 
+                                name={player.payment_status === 'paid' ? 'check' : 'close'} 
+                                size={14} 
+                                color={player.payment_status === 'paid' ? COLORS.success : COLORS.error} 
+                              />
+                              <Text style={[
+                                styles.statusText,
+                                { color: player.payment_status === 'paid' ? COLORS.success : COLORS.error }
+                              ]}>
+                                {player.payment_status === 'paid' ? 'Paid' : 'Not Paid'}
+                              </Text>
+                            </View>
+                            
+                            {/* Payment reminder bell icon - only show for unpaid players */}
+                            {player.payment_status !== 'paid' && (
+                              <TouchableOpacity 
+                                style={styles.reminderButton}
+                                onPress={() => sendPaymentReminder(player)}
+                                accessibilityLabel="Send payment reminder"
+                              >
+                                <MaterialCommunityIcons 
+                                  name="bell" 
+                                  size={20} 
+                                  color={COLORS.warning} 
+                                />
+                              </TouchableOpacity>
+                            )}
+                            
+                            {/* Expand/collapse arrow */}
+                            <TouchableOpacity
+                              onPress={() => setExpandedPlayerId(expandedPlayerId === player.id ? null : player.id)}
+                              style={{ marginLeft: 8 }}
+                              accessibilityLabel={expandedPlayerId === player.id ? 'Collapse actions' : 'Expand actions'}
+                            >
+                              <MaterialCommunityIcons 
+                                name={expandedPlayerId === player.id ? 'chevron-up' : 'chevron-down'} 
+                                size={24} 
+                                color={COLORS.grey[600]} 
+                              />
+                            </TouchableOpacity>
+                          </View>
                         </View>
-                        {/* Expand/collapse arrow */}
-                        <TouchableOpacity
-                          onPress={() => setExpandedPlayerId(expandedPlayerId === player.id ? null : player.id)}
-                          style={{ marginLeft: 8 }}
-                          accessibilityLabel={expandedPlayerId === player.id ? 'Collapse actions' : 'Expand actions'}
-                        >
-                          <MaterialCommunityIcons 
-                            name={expandedPlayerId === player.id ? 'chevron-up' : 'chevron-down'} 
-                            size={24} 
-                            color={COLORS.grey[600]} 
-                          />
-                        </TouchableOpacity>
+                        {/* Payment Update Info - Show only for paid payments */}
+                        {player.payment_status === 'paid' && player.payment_updated_at && (
+                          <View style={styles.paymentUpdateContainer}>
+                            <MaterialCommunityIcons name="clock-outline" size={16} color={COLORS.grey[600]} />
+                            <Text style={styles.paymentUpdateText}>
+                              Marked as paid on {formatDate(player.payment_updated_at)}
+                            </Text>
+                          </View>
+                        )}
+                        {/* Attendance Info */}
+                        {player.attendance && (
+                          <View style={styles.attendanceContainer}>
+                            {/* Training label */}
+                            <MaterialCommunityIcons name="whistle" size={16} color={COLORS.primary} style={{ marginRight: 4 }} />
+                            <Text style={[styles.attendanceLabel, { marginRight: 8 }]}>Training:</Text>
+                            
+                            {/* Present icon */}
+                            <MaterialCommunityIcons 
+                              name="check-circle" 
+                              size={16} 
+                              color={COLORS.success} 
+                              style={{ marginRight: 2 }} 
+                            />
+                            <Text style={styles.attendanceText}>{player.attendance.present}</Text>
+                            
+                            {/* Absent icon */}
+                            <MaterialCommunityIcons 
+                              name="close-circle" 
+                              size={16} 
+                              color={COLORS.error} 
+                              style={{ marginLeft: 8, marginRight: 2 }} 
+                            />
+                            <Text style={styles.attendanceText}>{player.attendance.absent}</Text>
+                            
+                            {/* Total and percentage */}
+                            <Text style={{ marginHorizontal: 8, color: COLORS.grey[400], fontWeight: 'bold', fontSize: 16 }}>|</Text>
+                            <Text style={styles.attendanceText}>{player.attendance.total} total</Text>
+                            <Text style={[styles.attendanceText, { marginLeft: 4 }]}>({player.attendance.percentage}%)</Text>
+                          </View>
+                        )}
+                        {/* Expandable Payment Toggle Button */}
+                        {expandedPlayerId === player.id && (
+                          <TouchableOpacity 
+                            style={[
+                              styles.paymentToggleButton,
+                              { backgroundColor: player.payment_status === 'paid' ? COLORS.error + '20' : COLORS.success + '20' }
+                            ]}
+                            onPress={() => togglePaymentStatus(player)}
+                          >
+                            <MaterialCommunityIcons 
+                              name={player.payment_status === 'paid' ? 'close' : 'check'} 
+                              size={20} 
+                              color={player.payment_status === 'paid' ? COLORS.error : COLORS.success} 
+                            />
+                            <Text style={[
+                              styles.paymentToggleText,
+                              { color: player.payment_status === 'paid' ? COLORS.error : COLORS.success }
+                            ]}>
+                              Mark as {player.payment_status === 'paid' ? 'Not Paid' : 'Paid'}
+                            </Text>
+                          </TouchableOpacity>
+                        )}
                       </View>
                     </View>
-                    {/* Payment Update Info - Show only for paid payments */}
-                    {player.payment_status === 'paid' && player.payment_updated_at && (
-                      <View style={styles.paymentUpdateContainer}>
-                        <MaterialCommunityIcons name="clock-outline" size={16} color={COLORS.grey[600]} />
-                        <Text style={styles.paymentUpdateText}>
-                          Marked as paid on {formatDate(player.payment_updated_at)}
-                        </Text>
-                      </View>
-                    )}
-                    {/* Attendance Info */}
-                    {player.attendance && (
-                      <View style={styles.attendanceContainer}>
-                        <MaterialCommunityIcons name="calendar-check" size={16} color={COLORS.grey[600]} />
-                        <Text style={styles.attendanceText}>
-                          Attendance: {player.attendance.attended} / {player.attendance.total} sessions
-                        </Text>
-                      </View>
-                    )}
-                    {/* Expandable Payment Toggle Button */}
-                    {expandedPlayerId === player.id && (
-                      <TouchableOpacity 
-                        style={[
-                          styles.paymentToggleButton,
-                          { backgroundColor: player.payment_status === 'paid' ? COLORS.error + '20' : COLORS.success + '20' }
-                        ]}
-                        onPress={() => togglePaymentStatus(player)}
-                      >
-                        <MaterialCommunityIcons 
-                          name={player.payment_status === 'paid' ? 'close' : 'check'} 
-                          size={20} 
-                          color={player.payment_status === 'paid' ? COLORS.error : COLORS.success} 
-                        />
-                        <Text style={[
-                          styles.paymentToggleText,
-                          { color: player.payment_status === 'paid' ? COLORS.error : COLORS.success }
-                        ]}>
-                          Mark as {player.payment_status === 'paid' ? 'Not Paid' : 'Paid'}
-                        </Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                </View>
-              ))
-            )}
-            {/* Add extra padding at bottom for better scrolling */}
-            <View style={{ height: 24 }} />
-          </View>
+                  ))
+                )}
+                {/* Add extra padding at bottom for better scrolling */}
+                <View style={{ height: 24 }} />
+              </View>
+            </>
+          )}
         </ScrollView>
 
         {/* Team Selection Modal */}
@@ -1839,22 +1936,6 @@ export const CoachPaymentsScreen = () => {
                   <MaterialCommunityIcons name="close" size={24} color={COLORS.text} />
                 </TouchableOpacity>
               </View>
-              
-              {/* All Teams option */}
-              <TouchableOpacity
-                style={[styles.teamOption, selectedTeamId === null && styles.teamOptionSelected]}
-                onPress={() => handleTeamSelect(null)}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <MaterialCommunityIcons name="view-grid" size={20} color={COLORS.primary} style={{ marginRight: 8 }} />
-                  <Text style={[styles.teamOptionText, selectedTeamId === null && styles.teamOptionTextSelected]}>
-                    All Teams
-                  </Text>
-                </View>
-                {selectedTeamId === null && (
-                  <MaterialCommunityIcons name="check" size={20} color={COLORS.primary} />
-                )}
-              </TouchableOpacity>
               
               {teams.map(team => (
                 <TouchableOpacity
@@ -2197,17 +2278,25 @@ const styles = StyleSheet.create({
   // Toast styles
   toast: {
     position: 'absolute',
-    bottom: 20,
+    bottom: 100,
     left: 20,
     right: 20,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: COLORS.primary,
     padding: SPACING.md,
     borderRadius: 8,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   toastText: {
-    color: COLORS.white,
+    color: 'white',
     fontSize: 14,
+    fontWeight: '500',
   },
   // Payment update styles
   paymentUpdateContainer: {
@@ -2263,5 +2352,29 @@ const styles = StyleSheet.create({
   monthGridItemTextSelected: {
     color: COLORS.primary,
     fontWeight: 'bold',
+  },
+  emptyStateContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.xl,
+    marginTop: SPACING.xl,
+  },
+  emptyStateTextCentered: {
+    fontSize: 16,
+    color: COLORS.grey[600],
+    textAlign: 'center',
+    marginTop: SPACING.md,
+  },
+  attendanceLabel: {
+    fontSize: 14,
+    color: COLORS.grey[600],
+    marginTop: 4,
+  },
+  reminderButton: {
+    padding: 4,
+    borderRadius: 20,
+    backgroundColor: COLORS.warning + '20',
+    marginLeft: SPACING.sm,
   },
 }); 
