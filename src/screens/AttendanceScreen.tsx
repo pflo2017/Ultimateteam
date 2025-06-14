@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, StyleSheet, FlatList, ActivityIndicator, Alert, TouchableOpacity, ScrollView, TouchableWithoutFeedback, Modal } from 'react-native';
 import { Text, Button, Checkbox, FAB, TextInput } from 'react-native-paper';
 import { Chip } from 'react-native-paper';
@@ -101,6 +101,9 @@ export const AttendanceScreen = () => {
   const [attendanceRecords, setAttendanceRecords] = useState<{ activity: Activity, records: any[] }[]>([]);
   const [isLoadingAttendanceRecords, setIsLoadingAttendanceRecords] = useState(false);
 
+  // Add a ref to track the last fetch time
+  const lastFetchRef = useRef<number>(0);
+
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute();
 
@@ -138,8 +141,9 @@ export const AttendanceScreen = () => {
   useFocusEffect(
     useCallback(() => {
       if (userRole) {
+        console.log('[AttendanceScreen] Screen focused, loading teams only');
         loadTeams();
-        loadActivities();
+        // Don't call loadActivities here - it will be called by the useEffect hook
       }
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [userRole, userId])
@@ -147,9 +151,17 @@ export const AttendanceScreen = () => {
 
   // Load activities for date range and type
   useEffect(() => {
+    console.log('[AttendanceScreen] useEffect triggered for loadActivities');
     loadActivities();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDate, selectedType, currentWeek]);
+  }, [selectedDate, selectedType, currentWeek, selectedTeam]);
+
+  // Add useEffect to fetch attendance records when dependencies change
+  useEffect(() => {
+    console.log('[AttendanceScreen] useEffect triggered for fetchAttendanceRecords');
+    fetchAttendanceRecords();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDate, selectedType, selectedTeam, currentWeek]);
 
   // Load players when team is selected
   useEffect(() => {
@@ -172,8 +184,17 @@ export const AttendanceScreen = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedActivity]);
 
-  // Move fetchAttendanceRecords function above hooks and ensure it's only defined once
+  // Modified fetchAttendanceRecords function with debounce mechanism
   const fetchAttendanceRecords = async (activityId?: string) => {
+    // Debounce mechanism to prevent multiple calls within 500ms
+    const now = Date.now();
+    if (now - lastFetchRef.current < 500) {
+      console.log('[AttendanceScreen] Skipping duplicate fetch, too soon after last fetch');
+      return;
+    }
+    lastFetchRef.current = now;
+    
+    console.log('[AttendanceScreen] Starting fetchAttendanceRecords...');
     setIsLoadingAttendanceRecords(true);
     try {
       // 1. Get activities for the selected date, team, and type
@@ -288,16 +309,6 @@ export const AttendanceScreen = () => {
     }
   };
 
-  useEffect(() => {
-    fetchAttendanceRecords();
-  }, [selectedDate, selectedType, selectedTeam, currentWeek]);
-
-  useFocusEffect(
-    useCallback(() => {
-      fetchAttendanceRecords();
-    }, [selectedDate, selectedType, selectedTeam, currentWeek])
-  );
-
   // Week navigation
   const handlePrevWeek = () => {
     setCurrentWeek(prevWeek => subWeeks(prevWeek, 1));
@@ -406,10 +417,10 @@ export const AttendanceScreen = () => {
       const weekStart = startOfWeek(currentWeek, { weekStartsOn: 1 });
       const weekEnd = endOfWeek(currentWeek, { weekStartsOn: 1 });
       
-      console.log('Loading activities from', format(weekStart, 'yyyy-MM-dd'), 'to', format(weekEnd, 'yyyy-MM-dd'));
-      console.log('Selected date:', format(selectedDate, 'yyyy-MM-dd'));
-      console.log('Selected type:', selectedType);
-      console.log('Selected team:', selectedTeam?.id);
+      console.log('[AttendanceScreen] Loading activities from', format(weekStart, 'yyyy-MM-dd'), 'to', format(weekEnd, 'yyyy-MM-dd'));
+      console.log('[AttendanceScreen] Selected date:', format(selectedDate, 'yyyy-MM-dd'));
+      console.log('[AttendanceScreen] Selected type:', selectedType);
+      console.log('[AttendanceScreen] Selected team:', selectedTeam?.id);
       
       // Always pass the selected team ID if available
       const { data, error } = await getActivitiesByDateRange(
@@ -420,14 +431,14 @@ export const AttendanceScreen = () => {
       
       if (error) throw error;
       
-      console.log('Activities found:', data?.length || 0);
+      console.log('[AttendanceScreen] Activities found:', data?.length || 0);
       
       // Filter activities by type if needed
       const typeFilteredActivities = selectedType === 'all' 
         ? (data || [])
         : (data || []).filter(activity => activity.type === selectedType);
       
-      console.log('Activities after type filtering:', typeFilteredActivities.length);
+      console.log('[AttendanceScreen] Activities after type filtering:', typeFilteredActivities.length);
       setActivities(typeFilteredActivities);
       
       // Set filtered activities based on selected date
@@ -438,21 +449,20 @@ export const AttendanceScreen = () => {
           return activityDateStr === selectedDateStr;
         });
         
-        console.log('Activities for selected date:', activitiesForDate.length);
+        console.log('[AttendanceScreen] Activities for selected date:', activitiesForDate.length);
         // Update the filtered activities for the current date
         setActivities(activitiesForDate);
         
         // If there are filtered activities, update the selectedActivity
+        // but DON'T call fetchAttendanceRecords here as it will be called by the useEffect
         if (activitiesForDate.length > 0 && !selectedActivity) {
           setSelectedActivity(activitiesForDate[0]);
-          await fetchAttendanceRecords(activitiesForDate[0].id);
         } else if (activitiesForDate.length === 0) {
           setSelectedActivity(null);
-          setAttendanceRecords([]);
         }
       }
     } catch (error) {
-      console.error('Error loading activities:', error);
+      console.error('[AttendanceScreen] Error loading activities:', error);
     } finally {
       setIsLoadingActivities(false);
     }
@@ -703,6 +713,7 @@ export const AttendanceScreen = () => {
   useEffect(() => {
     const params = (route as any).params;
     if (params?.restoreDate && !isLoadingActivities) {
+      console.log('[AttendanceScreen] Restoring date from route params:', params.restoreDate);
       const restoreDate = new Date(params.restoreDate);
       setSelectedDate(restoreDate);
       
@@ -710,27 +721,16 @@ export const AttendanceScreen = () => {
       if (params.activityId && activities.length > 0) {
         const activity = activities.find(a => a.id === params.activityId);
         if (activity) {
+          console.log('[AttendanceScreen] Setting selected activity from route params:', activity.id);
           setSelectedActivity(activity);
-          fetchAttendanceRecords(activity.id);
+          // Don't call fetchAttendanceRecords here - it will be called by the useEffect
         }
       }
       
       // Clear the params after restoring
       (route as any).params = undefined;
     }
-  }, [route, isLoadingActivities]); // Only depend on route and loading state
-
-  // Add a separate effect to handle activity selection after activities are loaded
-  useEffect(() => {
-    const params = (route as any).params;
-    if (params?.activityId && !isLoadingActivities && activities.length > 0) {
-      const activity = activities.find(a => a.id === params.activityId);
-      if (activity) {
-        setSelectedActivity(activity);
-        fetchAttendanceRecords(activity.id);
-      }
-    }
-  }, [activities, isLoadingActivities]);
+  }, [route, isLoadingActivities, activities]); // Include activities in dependencies
 
   return (
     <SafeAreaView style={styles.container}>
