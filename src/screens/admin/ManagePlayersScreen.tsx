@@ -957,11 +957,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 8,
   },
-  infoValue: {
-    fontSize: 14,
-    color: COLORS.text,
-    fontWeight: '500',
-  },
   emptyText: {
     textAlign: 'center',
     color: COLORS.grey[400],

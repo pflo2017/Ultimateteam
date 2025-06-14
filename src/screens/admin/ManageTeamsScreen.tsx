@@ -103,6 +103,7 @@ const TeamCard: React.FC<TeamCardProps> = ({ team, onPress, onCopyAccessCode, na
               </Text>
             </View>
           </View>
+          
           <IconButton
             icon="pencil"
             size={20}

@@ -361,13 +361,6 @@ const PlayerCard = ({ player, onDetailsPress, onDelete, onUpdateMedicalVisa }: {
           </TouchableOpacity>
         </View>
       </Card.Content>
-      
-      <TouchableOpacity 
-        style={styles.viewDetailsButton}
-        onPress={onDetailsPress}
-      >
-        <Text style={styles.viewDetailsText}>View Details</Text>
-      </TouchableOpacity>
     </Card>
   );
 };
