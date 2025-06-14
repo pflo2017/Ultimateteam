@@ -1,61 +1,61 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { View, StyleSheet, ScrollView, ActivityIndicator, Pressable, TouchableOpacity, TextInput as RNTextInput, Alert, Modal } from 'react-native';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { View, StyleSheet, ScrollView, ActivityIndicator, Pressable, TouchableOpacity, TextInput as RNTextInput, Alert, Modal, FlatList, Dimensions, TouchableWithoutFeedback } from 'react-native';
 import { Text, Card, Button, Chip, SegmentedButtons, Portal, Menu, IconButton, Divider, TextInput as PaperTextInput } from 'react-native-paper';
-import { COLORS, SPACING } from '@/constants/theme';
-import { supabase } from '@/lib/supabase';
-import { format, subMonths, startOfMonth, endOfMonth, subDays, isWithinInterval, parseISO, addMonths, startOfWeek, endOfWeek, addWeeks, subWeeks, differenceInMinutes } from 'date-fns';
+import { FAB } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import DateTimePickerModal from 'react-native-modal-datetime-picker';
+import { getUserClubId } from '@/services/activitiesService';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '@/types/navigation';
 import { TeamSelector } from '@/components/Attendance/TeamSelector';
 import { ActivityTypeSelector } from '@/components/Attendance/ActivityTypeSelector';
 import { 
-  ActivityType, 
-  AttendanceRecord, 
-  AttendanceStatus, 
-  AttendanceStats,
   FilterPreset,
   ColumnConfig,
   AttendanceSummary
 } from '@/types/attendance';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { LineChart } from 'react-native-chart-kit';
-import { Dimensions } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useNavigation } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { RootStackParamList } from '@/types/navigation';
+import { TeamFilterModal } from '../components/Teams/TeamFilterModal';
+import { COLORS, SPACING } from '@/constants/theme';
+import { supabase } from '@/lib/supabase';
+import { format, subMonths, startOfMonth, endOfMonth, subDays, isWithinInterval, parseISO, addMonths, startOfWeek, endOfWeek, addWeeks, subWeeks, differenceInMinutes, isBefore, isAfter, isSameDay, getDay } from 'date-fns';
+import { useFocusEffect } from '@react-navigation/native';
 
+// Define types
 type Team = {
   id: string;
   name: string;
+  is_active?: boolean;
+  club_id?: string;
 };
 
-interface GroupedRecord {
-  activity: AttendanceRecord;
-  records: AttendanceRecord[];
-}
+type ActivityType = 'training' | 'game' | 'tournament' | 'other';
+type AttendanceStatus = 'present' | 'absent' | 'excused';
 
-// Add type annotations for the trend data
-interface TrendDataPoint {
-  date: string;
-  rate: number;
-}
-
-// Add type for player record
-interface PlayerRecord {
+interface AttendanceRecord {
+  id: string;
+  activity_id: string;
   player_id: string;
   player_name: string;
   status: AttendanceStatus;
+  recorded_by: string;
+  recorded_at: string;
 }
 
-// Add type guards
-const isAttendanceRecord = (record: AttendanceRecord | AttendanceStats): record is AttendanceRecord => {
-  return 'player_name' in record && 'status' in record && 'recorded_by_name' in record && 'recorded_at' in record;
-};
-
-const isAttendanceStats = (record: AttendanceRecord | AttendanceStats): record is AttendanceStats => {
-  return 'present_count' in record && 'absent_count' in record && 'total_players' in record && 'attendance_percentage' in record;
-};
+interface AttendanceStats {
+  player_id: string;
+  player_name: string;
+  team_id: string;
+  team_name: string;
+  total_activities: number;
+  attended: number;
+  excused: number;
+  absent: number;
+  attendance_rate: number;
+}
 
 interface GroupedActivity {
   id: string;
@@ -83,7 +83,7 @@ export const AttendanceReportsScreen = () => {
   });
 
   // State for data
-  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
+  const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
   const [attendanceStats, setAttendanceStats] = useState<AttendanceStats[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   
@@ -183,83 +183,71 @@ export const AttendanceReportsScreen = () => {
       setIsLoadingTeams(true);
       console.log('[AttendanceReportsScreen] Loading teams for user role:', userRole);
       
-      if (userRole === 'admin') {
-        // For admin, fetch all teams from their club
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-          console.error('[AttendanceReportsScreen] No auth user found');
-          return;
-        }
-
-        const { data: club } = await supabase
-          .from('clubs')
-          .select('id')
-          .eq('admin_id', user.id)
-          .single();
-
-        if (!club) {
-          console.error('[AttendanceReportsScreen] No club found for admin');
-          return;
-        }
-        
-        const { data, error } = await supabase
-          .from('teams')
-          .select('id, name')
-          .eq('club_id', club.id)
-          .eq('is_active', true)
-          .order('name');
-
-        if (error) {
-          console.error('[AttendanceReportsScreen] Error fetching teams:', error);
-          return;
-        }
-
-        if (data) {
-          console.log('[AttendanceReportsScreen] Loaded', data.length, 'teams for admin');
-          setTeams(data);
-          setSelectedTeam(null); // Default to All Teams
-        }
-      } else if (userRole === 'coach') {
-        // For coach, get coach ID from storage and use get_coach_teams function
-        const coachDataRaw = await AsyncStorage.getItem('coach_data');
-        if (!coachDataRaw) {
-          console.error('[AttendanceReportsScreen] No coach data found in storage');
-          return;
-        }
-        
-        const coachData = JSON.parse(coachDataRaw);
-        const coachId = coachData?.id;
-        
-        if (!coachId) {
-          console.error('[AttendanceReportsScreen] No coach ID found in storage');
-          return;
-        }
-        
-        console.log('[AttendanceReportsScreen] Using coach ID for teams:', coachId);
-        
-        const { data, error } = await supabase
-          .rpc('get_coach_teams', { p_coach_id: coachId });
-
-        if (error) {
-          console.error('[AttendanceReportsScreen] Error fetching teams:', error);
-          return;
-        }
-        
-        if (data) {
-          // Transform the data to match the expected format
-          const transformedTeams = data.map((team: { team_id: string; team_name: string }) => ({
-            id: team.team_id,
-            name: team.team_name
-          }));
-          console.log('[AttendanceReportsScreen] Loaded', transformedTeams.length, 'teams for coach:', transformedTeams);
-          setTeams(transformedTeams);
-          setSelectedTeam(null); // Default to All Teams
-        } else {
-          console.log('[AttendanceReportsScreen] No teams found for coach');
-        }
+      // Get user's club_id - this ensures data isolation
+      const clubId = await getUserClubId();
+      if (!clubId) {
+        console.error('[AttendanceReportsScreen] No club ID found for user');
+        setTeams([]);
+        return;
+      }
+      
+      console.log('[AttendanceReportsScreen] Using club ID for data isolation:', clubId);
+      
+      // Try the new get_user_teams_direct function first
+      console.log('[AttendanceReportsScreen] RPC QUERY: Calling get_user_teams_direct()');
+      const { data: directTeams, error: directError } = await supabase
+        .rpc('get_user_teams_direct');
+      
+      console.log('[AttendanceReportsScreen] DIRECT TEAMS RPC RESULT:', directTeams);
+      
+      if (directTeams && directTeams.length > 0) {
+        console.log('[AttendanceReportsScreen] Using teams from get_user_teams_direct()');
+        setTeams(directTeams);
+        return;
+      }
+      
+      if (directError) {
+        console.error('[AttendanceReportsScreen] Error from get_user_teams_direct:', directError);
+      }
+      
+      // If direct function fails, try the get_teams_by_club_direct function
+      console.log('[AttendanceReportsScreen] RPC QUERY: Calling get_teams_by_club_direct() with clubId:', clubId);
+      const { data: clubDirectTeams, error: clubDirectError } = await supabase
+        .rpc('get_teams_by_club_direct', { p_club_id: clubId });
+      
+      console.log('[AttendanceReportsScreen] CLUB DIRECT TEAMS RPC RESULT:', clubDirectTeams);
+      
+      if (clubDirectTeams && clubDirectTeams.length > 0) {
+        console.log('[AttendanceReportsScreen] Using teams from get_teams_by_club_direct()');
+        setTeams(clubDirectTeams);
+        return;
+      }
+      
+      if (clubDirectError) {
+        console.error('[AttendanceReportsScreen] Error from get_teams_by_club_direct:', clubDirectError);
+      }
+      
+      // Last resort: direct query with club_id filter
+      console.log('[AttendanceReportsScreen] DIRECT QUERY: Using direct teams query with club_id filter');
+      const { data: directQueryTeams, error: directQueryError } = await supabase
+        .from('teams')
+        .select('id, name, is_active, club_id')
+        .eq('club_id', clubId)
+        .eq('is_active', true)
+        .order('name');
+      
+      console.log('[AttendanceReportsScreen] DIRECT QUERY TEAMS RESULT:', directQueryTeams);
+      
+      if (directQueryTeams && directQueryTeams.length > 0) {
+        console.log('[AttendanceReportsScreen] Using teams from direct query');
+        setTeams(directQueryTeams);
+      } else {
+        console.log('[AttendanceReportsScreen] No teams found through any method');
+        setTeams([]);
       }
     } catch (error) {
       console.error('[AttendanceReportsScreen] Error loading teams:', error);
+      setTeams([]);
     } finally {
       setIsLoadingTeams(false);
     }
@@ -271,9 +259,114 @@ export const AttendanceReportsScreen = () => {
       setIsLoading(true);
       console.log('[AttendanceReportsScreen] Loading attendance records...');
       console.log('[AttendanceReportsScreen] Selected team:', selectedTeam);
-      console.log('[AttendanceReportsScreen] All teams:', teams);
       console.log('[AttendanceReportsScreen] Date range:', dateRange.start.toISOString(), 'to', dateRange.end.toISOString());
       console.log('[AttendanceReportsScreen] Selected type:', selectedType);
+      
+      // Get user's club_id for data isolation
+      const clubId = await getUserClubId();
+      if (!clubId) {
+        console.error('[AttendanceReportsScreen] No club ID found for user');
+        setAttendanceRecords([]);
+        setIsLoading(false);
+        return;
+      }
+      
+      // Cast the activity_type to explicitly handle the type compatibility
+      let activityTypeParam = null;
+      if (selectedType !== 'all') {
+        activityTypeParam = selectedType;
+      }
+      
+      // Try the new get_attendance_reports_by_club function
+      console.log('[AttendanceReportsScreen] RPC QUERY: Calling get_attendance_reports_by_club()');
+      
+      const params: any = {
+        p_club_id: clubId,
+        p_start_date: dateRange.start.toISOString(),
+        p_end_date: dateRange.end.toISOString(),
+      };
+      
+      if (selectedTeam) {
+        params.p_team_id = selectedTeam.id;
+      }
+      
+      if (activityTypeParam) {
+        params.p_activity_type = activityTypeParam;
+      }
+      
+      const { data: reportData, error: reportError } = await supabase
+        .rpc('get_attendance_reports_by_club', params);
+      
+      console.log('[AttendanceReportsScreen] REPORT DATA COUNT:', reportData?.length || 0);
+      
+      if (reportError) {
+        console.error('[AttendanceReportsScreen] Error from get_attendance_reports_by_club:', reportError);
+        
+        // Fall back to the old method if the RPC fails
+        console.log('[AttendanceReportsScreen] Falling back to manual query method');
+        await loadAttendanceRecordsLegacy();
+        return;
+      }
+      
+      if (!reportData || reportData.length === 0) {
+        console.log('[AttendanceReportsScreen] No attendance records found');
+        setAttendanceRecords([]);
+        setIsLoading(false);
+        return;
+      }
+      
+      // Process the report data
+      const groupedActivities: { [key: string]: GroupedActivity } = {};
+      
+      reportData.forEach((record: any) => {
+        const activityId = record.activity_id;
+        
+        if (!groupedActivities[activityId]) {
+          groupedActivities[activityId] = {
+            id: activityId,
+            title: record.activity_title,
+            type: record.activity_type as ActivityType,
+            date: format(parseISO(record.activity_start_time), 'yyyy-MM-dd'),
+            team: record.team_name,
+            records: []
+          };
+        }
+        
+        groupedActivities[activityId].records.push({
+          id: `${activityId}-${record.player_id}`,
+          activity_id: activityId,
+          player_id: record.player_id,
+          player_name: record.player_name,
+          status: record.attendance_status as AttendanceStatus,
+          recorded_by: record.recorded_by,
+          recorded_at: record.recorded_at
+        });
+      });
+      
+      const activitiesList = Object.values(groupedActivities);
+      console.log('[AttendanceReportsScreen] Processed activities count:', activitiesList.length);
+      
+      setAttendanceRecords(activitiesList);
+    } catch (error) {
+      console.error('[AttendanceReportsScreen] Error loading attendance records:', error);
+      setAttendanceRecords([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Legacy method for loading attendance records (as fallback)
+  const loadAttendanceRecordsLegacy = async () => {
+    try {
+      console.log('[AttendanceReportsScreen] Using legacy method for loading attendance records');
+      
+      // Get user's club_id for data isolation
+      const clubId = await getUserClubId();
+      if (!clubId) {
+        console.error('[AttendanceReportsScreen] No club ID found for user');
+        setAttendanceRecords([]);
+        return;
+      }
       
       // Cast the activity_type to explicitly handle the type compatibility
       let activityTypeParam = null;
@@ -285,6 +378,7 @@ export const AttendanceReportsScreen = () => {
       let activitiesQuery = supabase
         .from('activities')
         .select('id, title, type, start_time, team_id')
+        .eq('club_id', clubId) // CRITICAL: Always filter by club_id for data isolation
         .gte('start_time', dateRange.start.toISOString())
         .lte('start_time', dateRange.end.toISOString());
         
@@ -301,7 +395,6 @@ export const AttendanceReportsScreen = () => {
         // No teams available
         console.log('[AttendanceReportsScreen] No teams available');
         setAttendanceRecords([]);
-        setIsLoading(false);
         return;
       }
       
@@ -326,7 +419,6 @@ export const AttendanceReportsScreen = () => {
       if (filteredActivities.length === 0) {
         console.log('[AttendanceReportsScreen] No activities match the criteria');
         setAttendanceRecords([]);
-        setIsLoading(false);
         return;
       }
       
@@ -347,7 +439,6 @@ export const AttendanceReportsScreen = () => {
       if (!attendanceData || attendanceData.length === 0) {
         console.log('[AttendanceReportsScreen] No attendance records found for the selected activities');
         setAttendanceRecords([]);
-        setIsLoading(false);
         return;
       }
       
@@ -379,74 +470,63 @@ export const AttendanceReportsScreen = () => {
         throw teamsError;
       }
       
-      // Create maps for quick lookup
-      interface PlayerMap {
-        [key: string]: string;
-      }
+      // Create maps for faster lookups
+      const playerMap: { [key: string]: string } = {};
+      playersData?.forEach(player => {
+        playerMap[player.id] = player.name;
+      });
       
-      interface ActivityMap {
-        [key: string]: {
-          id: string;
-          title: string;
-          type: string;
-          start_time: string;
-          team_id: string;
-        };
-      }
+      const teamMap: { [key: string]: string } = {};
+      teamsData?.forEach(team => {
+        teamMap[team.id] = team.name;
+      });
       
-      interface TeamMap {
-        [key: string]: string;
-      }
+      const activityMap: { [key: string]: any } = {};
+      filteredActivities.forEach(activity => {
+        activityMap[activity.id] = activity;
+      });
       
-      const playerMap: PlayerMap = (playersData || []).reduce((map: PlayerMap, player) => {
-        map[player.id] = player.name;
-        return map;
-      }, {});
+      // Group attendance records by activity
+      const groupedActivities: { [key: string]: GroupedActivity } = {};
       
-      const activityMap: ActivityMap = filteredActivities.reduce((map: ActivityMap, activity) => {
-        map[activity.id] = activity;
-        return map;
-      }, {});
-      
-      const teamMap: TeamMap = (teamsData || []).reduce((map: TeamMap, team) => {
-        map[team.id] = team.name;
-        return map;
-      }, {});
-      
-      // Step 4: Combine all data into the expected format
-      const formattedRecords = attendanceData.map(record => {
-        const activity = activityMap[record.activity_id];
-        // Ensure activity_type is a valid ActivityType
-        let activityType: ActivityType = 'other';
-        if (activity?.type === 'training' || activity?.type === 'game' || 
-            activity?.type === 'tournament' || activity?.type === 'other') {
-          activityType = activity.type as ActivityType;
+      attendanceData.forEach((record: any) => {
+        const activityId = record.activity_id;
+        const activity = activityMap[activityId];
+        
+        if (!activity) {
+          console.warn(`[AttendanceReportsScreen] Activity not found for record:`, record);
+          return;
         }
         
-        return {
-          activity_id: record.activity_id,
-          activity_title: activity?.title || 'Unknown Activity',
-          activity_type: activityType,
-          activity_date: activity?.start_time,
-          team_id: activity?.team_id,
-          team_name: teamMap[activity?.team_id] || (selectedTeam?.name || 'Unknown Team'),
+        if (!groupedActivities[activityId]) {
+          groupedActivities[activityId] = {
+            id: activityId,
+            title: activity.title,
+            type: activity.type as ActivityType,
+            date: format(parseISO(activity.start_time), 'yyyy-MM-dd'),
+            team: teamMap[activity.team_id] || 'Unknown Team',
+            records: []
+          };
+        }
+        
+        groupedActivities[activityId].records.push({
+          id: record.id,
+          activity_id: activityId,
           player_id: record.player_id,
           player_name: playerMap[record.player_id] || 'Unknown Player',
           status: record.status as AttendanceStatus,
           recorded_by: record.recorded_by,
-          recorded_by_name: 'Coach', // Simplified for now
           recorded_at: record.recorded_at
-        };
+        });
       });
       
-      console.log(`[AttendanceReportsScreen] Formatted ${formattedRecords.length} attendance records`);
-      setAttendanceRecords(formattedRecords);
+      const activitiesList = Object.values(groupedActivities);
+      console.log('[AttendanceReportsScreen] Processed activities count:', activitiesList.length);
       
+      setAttendanceRecords(activitiesList);
     } catch (error) {
-      console.error('[AttendanceReportsScreen] Error loading attendance records:', error);
+      console.error('[AttendanceReportsScreen] Error in legacy attendance records loading:', error);
       setAttendanceRecords([]);
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -488,7 +568,12 @@ export const AttendanceReportsScreen = () => {
   const groupedActivities = useMemo(() => {
     const grouped: Record<string, GroupedActivity> = {};
     
-    attendanceRecords.forEach(record => {
+    // Skip grouping if records don't have the expected structure
+    if (attendanceRecords.length > 0 && !('activity_id' in attendanceRecords[0])) {
+      return attendanceRecords as GroupedActivity[];
+    }
+    
+    attendanceRecords.forEach((record: any) => {
       if (!grouped[record.activity_id]) {
         grouped[record.activity_id] = {
           id: record.activity_id,
@@ -510,7 +595,10 @@ export const AttendanceReportsScreen = () => {
 
   // Handle activity card tap
   const handleActivityPress = (activity: GroupedActivity) => {
-    navigation.navigate('AttendanceReportDetails', { activityId: activity.id });
+    // Navigate to the activity detail screen with the correct parameters
+    navigation.navigate('AttendanceReportDetails', { 
+      activityId: activity.id
+    });
   };
 
   // Get icon for activity type
@@ -550,107 +638,59 @@ export const AttendanceReportsScreen = () => {
     if (isLoading) {
       return (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
+          <ActivityIndicator size="large" color="#0000ff" />
           <Text style={styles.loadingText}>Loading attendance records...</Text>
         </View>
       );
     }
 
-    if (groupedActivities.length === 0) {
-      let emptyMessage = '';
-      if (teams.length === 0) {
-        emptyMessage = 'No teams found.';
-      } else if (!selectedTeam) {
-        emptyMessage = 'No attendance records found for your teams in this date range.';
-      } else {
-        emptyMessage = `No attendance has been recorded for ${selectedTeam.name} in ${format(selectedMonth, 'MMMM yyyy')}.`;
-      }
+    if (attendanceRecords.length === 0) {
       return (
         <View style={styles.emptyContainer}>
-          <MaterialCommunityIcons 
-            name="clipboard-text-outline" 
-            size={50} 
-            color={COLORS.grey[400]} 
-          />
-          <Text style={styles.emptyText}>No attendance records found</Text>
-          <Text style={styles.emptySubText}>{emptyMessage}</Text>
-          {selectedTeam && (
-            <TouchableOpacity
-              style={styles.emptyActionButton}
-              onPress={() => {
-                setSelectedMonth(new Date());
-                setDateRange({
-                  start: startOfMonth(new Date()),
-                  end: endOfMonth(new Date())
-                });
-                setSelectedType('all');
-              }}
-            >
-              <Text style={styles.emptyActionButtonText}>Reset Filters</Text>
-            </TouchableOpacity>
-          )}
+          <Text style={styles.emptyText}>No attendance records found for the selected criteria.</Text>
         </View>
       );
     }
 
     return (
-      <ScrollView style={{ flex: 1 }}>
-        {groupedActivities.map((activity) => (
-          <View key={activity.id} style={{ width: '100%' }}>
-          <TouchableOpacity 
-            onPress={() => handleActivityPress(activity)}
-            activeOpacity={0.7}
+      <FlatList
+        data={attendanceRecords}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <TouchableOpacity
+            style={styles.activityCard}
+            onPress={() => handleActivityPress(item)}
           >
-              <Card
-                style={[
-                  styles.eventCard,
-                  {
-                    borderLeftWidth: 4,
-                    borderLeftColor: getActivityTypeColor(activity.type),
-                    marginHorizontal: 4, // Tiny gap for shadow
-                    marginBottom: SPACING.md,
-                  },
-                ]}
-              >
-              <Card.Content>
-                  <View style={styles.eventHeader}>
-                    <View style={styles.eventType}>
-                      <MaterialCommunityIcons 
-                        name={getActivityTypeIcon(activity.type)}
-                        size={18} 
-                        color={getActivityTypeColor(activity.type)} 
-                      />
-                      <Text style={[styles.eventTypeText, { color: getActivityTypeColor(activity.type) }]}>
-                        {activity.type.charAt(0).toUpperCase() + activity.type.slice(1)}
-                      </Text>
-                    </View>
-                    <Text style={styles.eventTime}>
-                      {format(new Date(activity.date), 'HH:mm')}
-                    </Text>
-                  </View>
-                  <View style={styles.eventTitleRow}>
-                    <Text style={styles.eventTitle}>{activity.title}</Text>
-                  </View>
-                  {/* Team name below the title */}
-                  <Text style={styles.eventTeam}>{activity.team}</Text>
-                  {/* Schedule date and presence count on the same row */}
-                  <View style={styles.eventDateRow}>
-                    <Text style={styles.eventDate}>{format(new Date(activity.date), 'EEE, d MMM')}</Text>
-                    <View style={styles.attendanceSummaryRow}>
-                      <Text style={styles.attendanceCount}>
-                        <Text style={styles.presentCount}>{activity.records.filter(r => r.status === 'present').length}</Text>
-                        <Text> / </Text>
-                        <Text>{activity.records.length}</Text>
-                      </Text>
-                      <Text style={styles.attendanceLabel}>present</Text>
-                  </View>
-                </View>
-              </Card.Content>
-            </Card>
-              </TouchableOpacity>
-                </View>
-              ))}
-            </ScrollView>
+            <View style={styles.activityHeader}>
+              <View style={styles.activityTypeContainer}>
+                {getActivityTypeIcon(item.type)}
+                <Text style={styles.activityType}>{getActivityTypeLabel(item.type)}</Text>
+              </View>
+              <Text style={styles.activityDate}>{item.date}</Text>
+            </View>
+            <Text style={styles.activityTitle}>{item.title}</Text>
+            <Text style={styles.teamName}>{item.team}</Text>
+            <View style={styles.attendanceStats}>
+              <View style={styles.statItem}>
+                <Text style={styles.statCount}>{item.records.filter((r: AttendanceRecord) => r.status === 'present').length}</Text>
+                <Text style={styles.statLabel}>Present</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.statCount}>{item.records.filter((r: AttendanceRecord) => r.status === 'excused').length}</Text>
+                <Text style={styles.statLabel}>Excused</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.statCount}>{item.records.filter((r: AttendanceRecord) => r.status === 'absent').length}</Text>
+                <Text style={styles.statLabel}>Absent</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.statCount}>{item.records.length}</Text>
+                <Text style={styles.statLabel}>Total</Text>
+              </View>
+            </View>
+          </TouchableOpacity>
+        )}
+      />
     );
   };
 
@@ -752,68 +792,14 @@ export const AttendanceReportsScreen = () => {
       {renderActivityCards()}
       </ScrollView>
 
-      {/* Team Filter Modal */}
-      <Modal
+      {/* Team Filter Modal - This component ensures proper data isolation by filtering teams by club_id */}
+      <TeamFilterModal
         visible={showTeamFilter}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowTeamFilter(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Team</Text>
-              <TouchableOpacity 
-                onPress={() => setShowTeamFilter(false)}
-                style={styles.closeButton}
-              >
-                <MaterialCommunityIcons name="close" size={24} color={COLORS.text} />
-              </TouchableOpacity>
-            </View>
-            
-            <TouchableOpacity
-              style={[styles.optionItem, !selectedTeam && styles.optionSelected]}
-              onPress={() => { 
-                setSelectedTeam(null); 
-                setShowTeamFilter(false); 
-              }}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <MaterialCommunityIcons name="account-group" size={20} color={COLORS.primary} style={{ marginRight: 8 }} />
-                <Text style={[styles.optionText, !selectedTeam && styles.optionTextSelected]}>All Teams</Text>
-              </View>
-              {!selectedTeam && (
-                <MaterialCommunityIcons name="check" size={20} color={COLORS.primary} />
-              )}
-            </TouchableOpacity>
-            
-            <ScrollView>
-              {teams.map((team) => {
-                const isSelected = selectedTeam?.id === team.id;
-                
-                return (
-                  <TouchableOpacity
-                    key={team.id}
-                    style={[styles.optionItem, isSelected && styles.optionSelected]}
-                    onPress={() => { 
-                      setSelectedTeam(team);
-                      setShowTeamFilter(false); 
-                    }}
-                  >
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <MaterialCommunityIcons name="account-group" size={20} color={COLORS.primary} style={{ marginRight: 8 }} />
-                      <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>{team.name}</Text>
-                    </View>
-                    {isSelected && (
-                      <MaterialCommunityIcons name="check" size={20} color={COLORS.primary} />
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+        onClose={() => setShowTeamFilter(false)}
+        onSelectTeam={(team) => setSelectedTeam(team)}
+        selectedTeam={selectedTeam}
+        styles={styles}
+      />
 
       {/* Activity Type Filter Modal */}
       <Modal
@@ -1446,5 +1432,60 @@ const styles = StyleSheet.create({
   cardContent: {
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.md,
+  },
+  activityCard: {
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.grey[200],
+    borderRadius: 8,
+    marginBottom: SPACING.md,
+  },
+  activityHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.xs,
+  },
+  activityTypeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  activityType: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: SPACING.xs,
+  },
+  activityDate: {
+    fontSize: 14,
+    color: COLORS.grey[700],
+  },
+  activityTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: SPACING.xs,
+  },
+  teamName: {
+    fontSize: 14,
+    color: COLORS.grey[600],
+  },
+  attendanceStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: SPACING.xs,
+  },
+  statItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statCount: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.primary,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: COLORS.grey[700],
+    marginLeft: SPACING.xs,
   },
 }); 
