@@ -12,12 +12,11 @@ import {
   Paper,
   Loader,
   Center,
-  Switch,
   Tooltip,
   Modal,
   Stack
 } from '@mantine/core';
-import { IconSearch, IconEdit, IconTrash, IconPlus, IconLock, IconLockOpen } from '@tabler/icons-react';
+import { IconSearch, IconEdit, IconPlus, IconLock, IconLockOpen } from '@tabler/icons-react';
 import { supabase } from '../lib/supabase';
 
 interface Club {

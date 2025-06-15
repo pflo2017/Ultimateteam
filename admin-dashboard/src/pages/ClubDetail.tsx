@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Title,
@@ -65,16 +65,11 @@ interface ClubData {
 export default function ClubDetail() {
   const { id: clubId } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<string | null>('overview');
   const [clubData, setClubData] = useState<ClubData | null>(null);
   const [loading, setLoading] = useState(true);
   const [suspendLoading, setSuspendLoading] = useState(false);
 
-  useEffect(() => {
-    fetchClubData();
-  }, [clubId]);
-
-  const fetchClubData = async () => {
+  const fetchClubData = useCallback(async () => {
     setLoading(true);
     try {
       if (!clubId) return;
@@ -182,7 +177,11 @@ export default function ClubDetail() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [clubId]);
+
+  useEffect(() => {
+    fetchClubData();
+  }, [fetchClubData]);
 
   const handleSuspendToggle = async (suspend: boolean) => {
     if (!clubData) return;
