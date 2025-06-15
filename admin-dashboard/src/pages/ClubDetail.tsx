@@ -37,6 +37,7 @@ import {
   IconCheck,
   IconX,
   IconArrowLeft,
+  IconInfoCircle,
 } from '@tabler/icons-react';
 import { supabase } from '../lib/supabase';
 
@@ -68,6 +69,7 @@ export default function ClubDetail() {
   const [clubData, setClubData] = useState<ClubData | null>(null);
   const [loading, setLoading] = useState(true);
   const [suspendLoading, setSuspendLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<string | null>('overview');
 
   const fetchClubData = useCallback(async () => {
     setLoading(true);
@@ -257,153 +259,155 @@ export default function ClubDetail() {
             </Button>
           </Group>
 
-          <Grid>
-            <Grid.Col span={8}>
-              <Card shadow="sm" p="lg" radius="md" withBorder>
-                <Group position="apart" mb="md">
-                  <Group>
-                    {clubData.logo_url && (
-                      <Avatar 
-                        src={clubData.logo_url} 
-                        size={64} 
-                        radius="xl" 
-                      />
-                    )}
-                    <div>
-                      <Title order={3}>{clubData.name}</Title>
-                      <Text color="dimmed" size="sm">
-                        {clubData.city || 'No location data'}
-                      </Text>
-                    </div>
-                  </Group>
-                  <Group>
-                    {!clubData.is_suspended ? (
-                      <Button 
-                        color="red" 
-                        onClick={() => handleSuspendToggle(true)}
-                        loading={suspendLoading}
-                      >
-                        Suspend Club
-                      </Button>
-                    ) : null}
-                    <Button color="blue" onClick={() => navigate(`/clubs/${clubId}/edit`)}>
-                      Edit Club
-                    </Button>
-                  </Group>
-                </Group>
-
-                <Divider my="sm" />
-                
-                <Grid>
-                  <Grid.Col span={6}>
-                    <Text size="sm" weight={500}>Club Admin:</Text>
-                    <Text size="sm">{clubData.admin_name || 'Unknown'}</Text>
-                    
-                    <Text size="sm" weight={500} mt="md">Admin Email:</Text>
-                    <Text size="sm">{clubData.admin_email || 'No email'}</Text>
-                    
-                    <Text size="sm" weight={500} mt="md">Contact Email:</Text>
-                    <Text size="sm">{clubData.contact_email || 'Not provided'}</Text>
-                  </Grid.Col>
-                  
-                  <Grid.Col span={6}>
-                    <Text size="sm" weight={500}>Location:</Text>
-                    <Text size="sm">{clubData.city || 'No location data'}</Text>
-                    
-                    <Text size="sm" weight={500} mt="md">Contact Phone:</Text>
-                    <Text size="sm">{clubData.contact_phone || 'Not provided'}</Text>
-                    
-                    <Text size="sm" weight={500} mt="md">Created:</Text>
-                    <Text size="sm">{new Date(clubData.created_at).toLocaleDateString()}</Text>
-                  </Grid.Col>
-                </Grid>
-
-                {clubData.description && (
-                  <>
-                    <Text size="sm" weight={500} mt="md">Description:</Text>
-                    <Text size="sm">{clubData.description}</Text>
-                  </>
+          <Card shadow="sm" p="lg" radius="md" withBorder mb="md">
+            <Group position="apart" mb="md">
+              <Group>
+                {clubData.logo_url && (
+                  <Avatar 
+                    src={clubData.logo_url} 
+                    size={64} 
+                    radius="xl" 
+                  />
                 )}
-              </Card>
-            </Grid.Col>
-            
-            <Grid.Col span={4}>
-              <Paper p="md" withBorder mt="md">
-                <Title order={4} mb="md">Club Details</Title>
-                <Text size="sm" weight={500}>Player Count:</Text>
-                <Text size="sm">{clubData.player_count || 'N/A'}</Text>
+                <div>
+                  <Title order={3}>{clubData.name}</Title>
+                  <Text color="dimmed" size="sm">
+                    {clubData.city || 'No location data'}
+                  </Text>
+                </div>
+              </Group>
+              <Group>
+                {!clubData.is_suspended ? (
+                  <Button 
+                    color="red" 
+                    onClick={() => handleSuspendToggle(true)}
+                    loading={suspendLoading}
+                  >
+                    Suspend Club
+                  </Button>
+                ) : null}
+                <Button color="blue" onClick={() => navigate(`/clubs/${clubId}/edit`)}>
+                  Edit Club
+                </Button>
+              </Group>
+            </Group>
+          </Card>
+
+          <Tabs value={activeTab} onTabChange={setActiveTab} mb="md">
+            <Tabs.List>
+              <Tabs.Tab value="overview" icon={<IconInfoCircle size={16} />}>Overview</Tabs.Tab>
+              <Tabs.Tab value="players" icon={<IconUsers size={16} />}>
+                Players ({clubData.player_count || 0})
+              </Tabs.Tab>
+              <Tabs.Tab value="coaches" icon={<IconUser size={16} />}>
+                Coaches ({clubData.coach_count || 0})
+              </Tabs.Tab>
+            </Tabs.List>
+
+            <Tabs.Panel value="overview" pt="md">
+              <Grid>
+                <Grid.Col span={8}>
+                  <Card shadow="sm" p="lg" radius="md" withBorder>
+                    <Grid>
+                      <Grid.Col span={6}>
+                        <Text size="sm" weight={500}>Club Admin:</Text>
+                        <Text size="sm">{clubData.admin_name || 'Unknown'}</Text>
+                        
+                        <Text size="sm" weight={500} mt="md">Admin Email:</Text>
+                        <Text size="sm">{clubData.admin_email || 'No email'}</Text>
+                        
+                        <Text size="sm" weight={500} mt="md">Contact Email:</Text>
+                        <Text size="sm">{clubData.contact_email || 'Not provided'}</Text>
+                      </Grid.Col>
+                      
+                      <Grid.Col span={6}>
+                        <Text size="sm" weight={500}>Location:</Text>
+                        <Text size="sm">{clubData.city || 'No location data'}</Text>
+                        
+                        <Text size="sm" weight={500} mt="md">Contact Phone:</Text>
+                        <Text size="sm">{clubData.contact_phone || 'Not provided'}</Text>
+                        
+                        <Text size="sm" weight={500} mt="md">Created:</Text>
+                        <Text size="sm">{new Date(clubData.created_at).toLocaleDateString()}</Text>
+                      </Grid.Col>
+                    </Grid>
+
+                    {clubData.description && (
+                      <>
+                        <Divider my="md" />
+                        <Text size="sm" weight={500}>Description:</Text>
+                        <Text size="sm">{clubData.description}</Text>
+                      </>
+                    )}
+                  </Card>
+                </Grid.Col>
                 
-                <Text size="sm" weight={500} mt="md">Team Count:</Text>
-                <Text size="sm">{clubData.team_count || 'N/A'}</Text>
-                
-                <Text size="sm" weight={500} mt="md">Coach Count:</Text>
-                <Text size="sm">{clubData.coach_count || 'N/A'}</Text>
+                <Grid.Col span={4}>
+                  <Paper p="md" withBorder>
+                    <Title order={4} mb="md">Club Statistics</Title>
+                    <Text size="sm" weight={500}>Player Count:</Text>
+                    <Text size="sm">{clubData.player_count || 'N/A'}</Text>
+                    
+                    <Text size="sm" weight={500} mt="md">Team Count:</Text>
+                    <Text size="sm">{clubData.team_count || 'N/A'}</Text>
+                    
+                    <Text size="sm" weight={500} mt="md">Coach Count:</Text>
+                    <Text size="sm">{clubData.coach_count || 'N/A'}</Text>
+                  </Paper>
+                </Grid.Col>
+              </Grid>
+            </Tabs.Panel>
+
+            <Tabs.Panel value="players" pt="md">
+              <Paper p="md" withBorder>
+                <Title order={4} mb="md">Players</Title>
+                {clubData.players && clubData.players.length > 0 ? (
+                  <Table striped highlightOnHover>
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Team</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {clubData.players.map(player => (
+                        <tr key={player.id}>
+                          <td>{player.name}</td>
+                          <td>{player.team_name}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                ) : (
+                  <Text size="sm" color="dimmed">No players found</Text>
+                )}
               </Paper>
+            </Tabs.Panel>
 
-              {/* Players and Coaches Accordion */}
-              <Accordion mt="md">
-                <Accordion.Item value="players">
-                  <Accordion.Control>
-                    <Group>
-                      <IconUsers size={16} />
-                      <Text>Players ({clubData.player_count || 0})</Text>
-                    </Group>
-                  </Accordion.Control>
-                  <Accordion.Panel>
-                    {clubData.players && clubData.players.length > 0 ? (
-                      <Table striped highlightOnHover>
-                        <thead>
-                          <tr>
-                            <th>Name</th>
-                            <th>Team</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {clubData.players.map(player => (
-                            <tr key={player.id}>
-                              <td>{player.name}</td>
-                              <td>{player.team_name}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </Table>
-                    ) : (
-                      <Text size="sm" color="dimmed">No players found</Text>
-                    )}
-                  </Accordion.Panel>
-                </Accordion.Item>
-
-                <Accordion.Item value="coaches">
-                  <Accordion.Control>
-                    <Group>
-                      <IconUser size={16} />
-                      <Text>Coaches ({clubData.coach_count || 0})</Text>
-                    </Group>
-                  </Accordion.Control>
-                  <Accordion.Panel>
-                    {clubData.coaches && clubData.coaches.length > 0 ? (
-                      <Table striped highlightOnHover>
-                        <thead>
-                          <tr>
-                            <th>Name</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {clubData.coaches.map(coach => (
-                            <tr key={coach.id}>
-                              <td>{coach.name}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </Table>
-                    ) : (
-                      <Text size="sm" color="dimmed">No coaches found</Text>
-                    )}
-                  </Accordion.Panel>
-                </Accordion.Item>
-              </Accordion>
-            </Grid.Col>
-          </Grid>
+            <Tabs.Panel value="coaches" pt="md">
+              <Paper p="md" withBorder>
+                <Title order={4} mb="md">Coaches</Title>
+                {clubData.coaches && clubData.coaches.length > 0 ? (
+                  <Table striped highlightOnHover>
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {clubData.coaches.map(coach => (
+                        <tr key={coach.id}>
+                          <td>{coach.name}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                ) : (
+                  <Text size="sm" color="dimmed">No coaches found</Text>
+                )}
+              </Paper>
+            </Tabs.Panel>
+          </Tabs>
         </>
       ) : (
         <Center>
