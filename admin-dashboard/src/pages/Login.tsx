@@ -19,14 +19,19 @@ const Login: React.FC = () => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [debug, setDebug] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setDebug(null);
 
     try {
+      // Log for debugging
+      console.log('Attempting login with:', email);
+      
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
@@ -35,20 +40,35 @@ const Login: React.FC = () => {
       if (error) throw error;
 
       if (data.user) {
+        // Log for debugging
+        console.log('User authenticated:', data.user.id);
+        setDebug(`User authenticated: ${data.user.id}`);
+        
         // Check if the user is a master admin
         const { data: adminData, error: adminError } = await supabase
           .from('master_admins')
-          .select('id')
-          .eq('user_id', data.user.id)
-          .single();
+          .select('*')
+          .eq('user_id', data.user.id);
           
-        if (adminError || !adminData) {
+        // Log query results
+        console.log('Admin check result:', { adminData, adminError });
+        setDebug(prev => `${prev}\nAdmin check: ${JSON.stringify({ adminData, adminError })}`);
+        
+        if (adminError) {
+          console.error('Error checking admin status:', adminError);
+          setDebug(prev => `${prev}\nError: ${adminError.message}`);
+          throw adminError;
+        }
+        
+        if (!adminData || adminData.length === 0) {
           // If not a master admin, sign out and show error
           await supabase.auth.signOut();
           throw new Error('You do not have permission to access this dashboard');
         }
         
         // Successfully authenticated as master admin
+        console.log('Successfully authenticated as admin');
+        setDebug(prev => `${prev}\nSuccess! Redirecting...`);
         navigate('/');
       }
     } catch (error: any) {
@@ -74,6 +94,14 @@ const Login: React.FC = () => {
             <Text color="red" size="sm" mb={15}>
               {error}
             </Text>
+          )}
+          
+          {debug && (
+            <Paper withBorder p="xs" mb={15} style={{maxHeight: '150px', overflow: 'auto'}}>
+              <Text size="xs" style={{whiteSpace: 'pre-wrap', fontFamily: 'monospace'}}>
+                {debug}
+              </Text>
+            </Paper>
           )}
           
           <TextInput

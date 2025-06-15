@@ -4,9 +4,11 @@
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web"
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web",
+    "start:mobile": "expo start",
+    "start:admin": "cd admin-dashboard && npm start"
   },
   "dependencies": {
     "@callstack/react-theme-provider": "^3.0.9",
@@ -84,7 +86,8 @@
     "util": "^0.12.5",
     "vm-browserify": "0.0.4",
     "whatwg-url-without-unicode": "^8.0.0-3",
-    "yup": "^1.6.1"
+    "yup": "^1.6.1",
+    "expo-updates": "~0.28.14"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
