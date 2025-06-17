@@ -102,23 +102,26 @@ export const CoachSettingsScreen = () => {
         setIsSavingEmail(false);
         return;
       }
-      // Update email in coaches table
+      
+      // Get the stored coach data
       const storedCoachData = await AsyncStorage.getItem('coach_data');
       if (storedCoachData) {
         const coachData = JSON.parse(storedCoachData);
-        const { error: dbError } = await supabase
-          .from('coaches')
-          .update({ email: emailInput.trim() })
-          .eq('id', coachData.id);
-        if (dbError) {
-          Alert.alert('Error', dbError.message || 'Failed to update email in database');
-          setIsSavingEmail(false);
-          return;
-        }
-        // Update AsyncStorage
-        await AsyncStorage.setItem('coach_data', JSON.stringify({ ...coachData, email: emailInput.trim() }));
+        
+        // Update AsyncStorage with the new email
+        const updatedCoachData = { 
+          ...coachData, 
+          email: emailInput.trim(),
+          user_metadata: {
+            ...(coachData.user_metadata || {}),
+            email: emailInput.trim()
+          }
+        };
+        
+        await AsyncStorage.setItem('coach_data', JSON.stringify(updatedCoachData));
         setProfile((prev) => ({ ...prev, email: emailInput.trim() }));
       }
+      
       Alert.alert('Success', 'Email updated successfully');
     } catch (error) {
       console.error('Error updating email:', error);
