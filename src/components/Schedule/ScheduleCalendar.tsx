@@ -13,6 +13,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../types/navigation';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { TeamFilterModal } from '../../components/Teams/TeamFilterModal';
+import { getUserClubId } from '../../services/activitiesService';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -113,23 +114,30 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
     const fetchTeams = async () => {
       try {
         if (userRole === 'admin') {
-          // Fetch all teams for admin
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-        const { data: club } = await supabase
-          .from('clubs')
-          .select('id')
-          .eq('admin_id', user.id)
-          .single();
-        if (!club) return;
-        const { data: teamsData, error } = await supabase
-          .from('teams')
-          .select('id, name')
-          .eq('club_id', club.id)
-          .eq('is_active', true)
-          .order('name');
-        if (!error && teamsData) {
-          setTeams(teamsData);
+          // Get club_id using the reliable utility function
+          const clubId = await getUserClubId();
+          
+          if (!clubId) {
+            console.error('Error fetching teams: No club ID found for admin');
+            return;
+          }
+          
+          console.log('Admin club ID for teams:', clubId);
+          
+          const { data: teamsData, error } = await supabase
+            .from('teams')
+            .select('id, name')
+            .eq('club_id', clubId)
+            .eq('is_active', true)
+            .order('name');
+            
+          if (error) {
+            console.error('Error fetching teams:', error);
+            return;
+          }
+          
+          if (teamsData) {
+            setTeams(teamsData);
           }
         } else if (userRole === 'coach' && coachTeamIds.length > 0) {
           // Fetch team details for coach's teams

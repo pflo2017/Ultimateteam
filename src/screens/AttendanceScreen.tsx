@@ -13,7 +13,8 @@ import {
   Activity, 
   ActivityType,
   getActivitiesByDateRange, 
-  getPlayersByTeamId
+  getPlayersByTeamId,
+  getUserClubId
 } from '../services/activitiesService';
 import { format, addWeeks, subWeeks, startOfWeek, endOfWeek, isSameDay } from 'date-fns';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -324,44 +325,29 @@ export const AttendanceScreen = () => {
       setIsLoadingTeams(true);
       
       if (userRole === 'admin') {
-        // Get the admin's club_id first
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-          console.error('No authenticated user found');
+        // Get club_id using the reliable utility function
+        const clubId = await getUserClubId();
+        
+        if (!clubId) {
+          console.error('[AttendanceScreen] Error getting club for admin: No club ID found');
           setTeams([]);
           return;
         }
         
-        // Get admin's club_id
-        const { data: club, error: clubError } = await supabase
-          .from('clubs')
-          .select('id')
-          .eq('admin_id', user.id)
-          .single();
-          
-        if (clubError) {
-          console.error('Error getting club for admin:', clubError);
-          setTeams([]);
-          return;
-        }
-        
-        if (!club) {
-          console.error('No club found for admin');
-          setTeams([]);
-          return;
-        }
-        
-        console.log('[AttendanceScreen] Admin club_id:', club.id);
+        console.log('[AttendanceScreen] Admin club_id:', clubId);
         
         // For admins, get teams filtered by club_id for data isolation
         const { data, error } = await supabase
           .from('teams')
           .select('id, name')
-          .eq('club_id', club.id) // CRITICAL: Filter by club_id for data isolation
+          .eq('club_id', clubId) // CRITICAL: Filter by club_id for data isolation
           .eq('is_active', true)
           .order('name');
           
-        if (error) throw error;
+        if (error) {
+          console.error('[AttendanceScreen] Error fetching teams:', error);
+          throw error;
+        }
         
         if (data) {
           console.log('[AttendanceScreen] Teams loaded for admin:', data.length);
@@ -786,7 +772,10 @@ export const AttendanceScreen = () => {
                 key={record.activity.id}
                 style={[styles.reportCard, idx > 0 && { marginTop: 16 }]}
                 activeOpacity={0.8}
-                onPress={() => navigation.navigate('AttendanceReportDetails', { activityId: record.activity.id, selectedDate: format(selectedDate, 'yyyy-MM-dd') })}
+                onPress={() => navigation.navigate('AttendanceReportDetails', { 
+                  activityId: record.activity.id, // Use the full activity ID
+                  selectedDate: format(selectedDate, 'yyyy-MM-dd') 
+                })}
               >
                 <View style={styles.reportHeader}>
                   <MaterialCommunityIcons 

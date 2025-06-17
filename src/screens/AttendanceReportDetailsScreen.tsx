@@ -116,49 +116,52 @@ export const AttendanceReportDetailsScreen = () => {
       setIsLoading(true);
       setError(null);
       try {
-        // Use getActivityById to fetch the correct instance (handles recurring logic)
+        // Fetch attendance records using the new view
+        const { data: attendanceData, error: attendanceError } = await supabase
+          .from('attendance_with_correct_dates')
+          .select('*')
+          .eq('activity_id', activityId);
+        
+        if (attendanceError) throw attendanceError;
+        
+        // Fetch activity details - use the full activity ID
+        console.log(`Getting activity details for ID: ${activityId}`);
         const { data: activityData, error: activityError } = await getActivityById(activityId);
-        if (activityError || !activityData) throw activityError || new Error('Activity not found');
-        setActivity(activityData as ActivityInfo);
-
-        // 2. Fetch team info
+        
+        if (activityError) throw activityError;
+        
+        // Fetch team details if we have a team_id
         let teamData = null;
         if (activityData?.team_id) {
-          const { data: teamResult, error: teamError } = await supabase
+          const { data, error: teamError } = await supabase
             .from('teams')
             .select('id, name')
             .eq('id', activityData.team_id)
             .single();
-          if (teamError) throw teamError;
-          teamData = teamResult;
-          setTeam(teamResult);
+          
+          if (!teamError) teamData = data;
         }
-
-        // 3. Fetch attendance records - use the FULL activity ID
-        const { data: attendanceData, error: attendanceError } = await supabase
-          .from('activity_attendance')
-          .select('*')
-          .eq('activity_id', activityId);
-        if (attendanceError) throw attendanceError;
-        setAttendance(attendanceData || []);
-
-        // 4. Fetch player names for all player_ids
-        if (attendanceData && attendanceData.length > 0) {
-          const playerIds = Array.from(new Set(attendanceData.map(record => record.player_id)));
-          if (playerIds.length > 0) {
-            const { data: playersData, error: playersError } = await supabase
-              .from('players')
-              .select('id, name')
-              .in('id', playerIds);
-            if (!playersError && playersData) {
-              const playerNameMap: { [key: string]: string } = {};
-              playersData.forEach(player => {
-                playerNameMap[player.id] = player.name;
-              });
-              setPlayerMap(playerNameMap);
-            }
-          }
+        
+        // Create a map of player IDs to names
+        const playerIds = attendanceData.map(record => record.player_id);
+        const { data: playersData, error: playersError } = await supabase
+          .from('players')
+          .select('id, name')
+          .in('id', playerIds);
+        
+        if (playersError) throw playersError;
+        
+        const playerNameMap: { [key: string]: string } = {};
+        if (playersData) {
+          playersData.forEach(player => {
+            playerNameMap[player.id] = player.name;
+          });
         }
+        
+        setAttendance(attendanceData);
+        setActivity(activityData);
+        setTeam(teamData);
+        setPlayerMap(playerNameMap);
       } catch (err) {
         console.error('Failed to load attendance details:', err);
         setError('Failed to load attendance details.');

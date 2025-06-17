@@ -7,7 +7,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../types/navigation';
 import { supabase } from '../lib/supabase';
-import { Activity, getActivitiesByDateRange } from '../services/activitiesService';
+import { Activity, getActivitiesByDateRange, getUserClubId } from '../services/activitiesService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Utility function to extract the base UUID from a recurring activity ID
@@ -38,10 +38,34 @@ export default function AddAttendanceScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [showTeamModal, setShowTeamModal] = useState(false);
   const [showActivityModal, setShowActivityModal] = useState(false);
+  const [activityFetched, setActivityFetched] = useState(false);
 
-  useEffect(() => { loadTeams(); }, []);
-  useEffect(() => { if (selectedTeam) { loadPlayers(selectedTeam.id); loadActivitiesForTeam(selectedTeam.id); } }, [selectedTeam]);
-  useEffect(() => { if (selectedActivity) { loadAttendance(); } else { setAttendance({}); } }, [selectedActivity]);
+  // Initial load of teams
+  useEffect(() => { 
+    loadTeams(); 
+    
+    // If activityId is provided, fetch the activity directly
+    if (activityId) {
+      fetchActivityDetails(activityId);
+    }
+  }, []);
+  
+  // Load players and activities when team is selected
+  useEffect(() => { 
+    if (selectedTeam) { 
+      loadPlayers(selectedTeam.id); 
+      loadActivitiesForTeam(selectedTeam.id); 
+    } 
+  }, [selectedTeam]);
+  
+  // Load attendance when activity is selected
+  useEffect(() => { 
+    if (selectedActivity) { 
+      loadAttendance(); 
+    } else { 
+      setAttendance({}); 
+    } 
+  }, [selectedActivity]);
 
   // Pre-select team if teamId is provided
   useEffect(() => {
@@ -51,73 +75,168 @@ export default function AddAttendanceScreen() {
     }
   }, [teamId, teams]);
 
-  // Pre-select activity if activityId is provided
+  // Pre-select activity if activityId is provided and activities are loaded
   useEffect(() => {
-    if (activityId && activities.length > 0) {
+    if (activityId && activities.length > 0 && !activityFetched) {
       const found = activities.find(a => a.id === activityId);
-      if (found) setSelectedActivity(found);
-      else {
-        // If not found, fetch the activity directly and add to list
-        (async () => {
-          const { data, error } = await supabase.from('activities').select('*').eq('id', activityId).single();
-          if (data) setActivities(prev => [data, ...prev.filter(a => a.id !== data.id)]);
-        })();
+      if (found) {
+        console.log('[AddAttendanceScreen] Pre-selecting activity from activities list:', found.title);
+        setSelectedActivity(found);
       }
     }
   }, [activityId, activities]);
+  
+  // Fetch activity details directly when activityId is provided
+  const fetchActivityDetails = async (actId: string) => {
+    try {
+      console.log('[AddAttendanceScreen] Fetching activity details for:', actId);
+      
+      // Check if the ID has a date suffix (format: uuid-date)
+      let baseActivityId = actId;
+      let activityDate = null;
+      
+      if (actId.includes('-202')) { // Check for date suffix like -20250613
+        // Extract the base UUID and date parts
+        const parts = actId.split('-');
+        if (parts.length > 4) { // Standard UUID has 5 parts, so anything more has a date suffix
+          const dateSuffix = parts.pop(); // Get the date part
+          baseActivityId = parts.join('-'); // Reconstruct the base UUID
+          activityDate = dateSuffix;
+          console.log('[AddAttendanceScreen] Extracted base activity ID:', baseActivityId);
+          console.log('[AddAttendanceScreen] Extracted date suffix:', activityDate);
+        }
+      }
+      
+      // First try to find the exact activity with the full ID
+      let { data: activityData, error: activityError } = await supabase
+        .from('activities')
+        .select('*')
+        .eq('id', actId)
+        .single();
+      
+      // If not found with the full ID, try with the base ID
+      if (activityError && baseActivityId !== actId) {
+        console.log('[AddAttendanceScreen] Activity not found with full ID, trying with base ID:', baseActivityId);
+        
+        // Try to find the base activity
+        const { data: baseActivityData, error: baseActivityError } = await supabase
+          .from('activities')
+          .select('*')
+          .eq('id', baseActivityId)
+          .single();
+        
+        if (!baseActivityError && baseActivityData) {
+          activityData = baseActivityData;
+          activityError = null;
+          
+          // If we found the base activity and have a date suffix, update the ID to match the requested ID
+          if (activityData && activityDate) {
+            activityData.id = actId;
+          }
+        }
+      }
+      
+      if (activityError) {
+        console.error('[AddAttendanceScreen] Error fetching activity:', activityError);
+        
+        // As a last resort, try to find by title pattern if we have a date
+        if (activityDate) {
+          console.log('[AddAttendanceScreen] Trying to find activity by date:', activityDate);
+          const { data: dateActivities, error: dateError } = await supabase
+            .from('activities')
+            .select('*')
+            .ilike('start_time', `%${activityDate.substring(0, 4)}-${activityDate.substring(4, 6)}-${activityDate.substring(6, 8)}%`);
+            
+          if (!dateError && dateActivities && dateActivities.length > 0) {
+            console.log('[AddAttendanceScreen] Found activities by date:', dateActivities.length);
+            activityData = dateActivities[0];
+            activityData.id = actId; // Use the original ID for consistency
+            activityError = null;
+          }
+        }
+        
+        if (activityError) {
+          return;
+        }
+      }
+      
+      if (activityData) {
+        console.log('[AddAttendanceScreen] Found activity:', activityData);
+        // Set the activity directly
+        setSelectedActivity(activityData);
+        setActivityFetched(true);
+        
+        // Also make sure we select the team for this activity
+        if (activityData.team_id && !selectedTeam) {
+          // Fetch team details if needed
+          const { data: teamData, error: teamError } = await supabase
+            .from('teams')
+            .select('id, name')
+            .eq('id', activityData.team_id)
+            .single();
+          
+          if (!teamError && teamData) {
+            console.log('[AddAttendanceScreen] Setting team from activity:', teamData);
+            setSelectedTeam(teamData);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[AddAttendanceScreen] Error in fetchActivityDetails:', error);
+    }
+  };
 
   const loadTeams = async () => {
     try {
       const adminData = await AsyncStorage.getItem('admin_data');
       const coachData = await AsyncStorage.getItem('coach_data');
+      
       if (adminData) {
-        // Get the admin's club_id first
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-          console.error('No authenticated user found');
+        // Get club_id using the reliable utility function
+        const clubId = await getUserClubId();
+        
+        if (!clubId) {
+          console.error('[AddAttendanceScreen] Error getting club for admin: No club ID found');
           return;
         }
         
-        // Get admin's club_id
-        const { data: club, error: clubError } = await supabase
-          .from('clubs')
-          .select('id')
-          .eq('admin_id', user.id)
-          .single();
-          
-        if (clubError) {
-          console.error('Error getting club for admin:', clubError);
-          return;
-        }
-        
-        if (!club) {
-          console.error('No club found for admin');
-          return;
-        }
-        
-        console.log('[AddAttendanceScreen] Admin club_id:', club.id);
+        console.log('[AddAttendanceScreen] Admin club_id:', clubId);
         
         // For admins, get teams filtered by club_id for data isolation
         const { data, error } = await supabase
           .from('teams')
           .select('id, name')
-          .eq('club_id', club.id) // CRITICAL: Filter by club_id for data isolation
+          .eq('club_id', clubId) // CRITICAL: Filter by club_id for data isolation
           .eq('is_active', true)
           .order('name');
           
-        if (!error && data) {
-          console.log('[AddAttendanceScreen] Teams loaded for admin:', data.length);
+        if (error) {
+          console.error('[AddAttendanceScreen] Error fetching teams:', error);
+          return;
+        }
+        
+        if (data) {
           setTeams(data);
         }
       } else if (coachData) {
         const coach = JSON.parse(coachData);
-        const { data, error } = await supabase.rpc('get_coach_teams', { p_coach_id: coach.id });
-        if (!error && data) {
-          const formatted = data.map((team: any) => ({ id: team.team_id, name: team.team_name }));
-          setTeams(formatted);
+        const { data, error } = await supabase
+          .rpc('get_coach_teams', { p_coach_id: coach.id });
+        if (error) {
+          console.error('Error fetching teams for coach:', error);
+          return;
+        }
+        if (data) {
+          const formattedTeams = data.map((team: any) => ({
+            id: team.team_id,
+            name: team.team_name
+          }));
+          setTeams(formattedTeams);
         }
       }
-    } catch (e) { console.error(e); }
+    } catch (error) {
+      console.error('Error loading teams:', error);
+    }
   };
   const loadPlayers = async (teamId: string) => {
     setIsLoadingPlayers(true);
@@ -135,13 +254,89 @@ export default function AddAttendanceScreen() {
       weekEnd.setDate(weekEnd.getDate() + 7);
       const { data, error } = await getActivitiesByDateRange(weekStart.toISOString(), weekEnd.toISOString(), teamId);
       let allActivities = data || [];
-      // If activityId is provided and not in the list, fetch and add it
-      if (activityId && !allActivities.find(a => a.id === activityId)) {
-        const { data: act, error: actErr } = await supabase.from('activities').select('*').eq('id', activityId).single();
-        if (act) allActivities = [act, ...allActivities];
+      
+      // Helper function to check if an activity is already in the list
+      const isActivityInList = (activity: Activity, list: Activity[]) => {
+        // Check for exact ID match
+        if (list.some(a => a.id === activity.id)) {
+          return true;
+        }
+        
+        // Check for base ID match (without date suffix)
+        if (activity.id.includes('-202')) {
+          const baseParts = activity.id.split('-');
+          if (baseParts.length > 4) {
+            const baseId = baseParts.slice(0, 5).join('-'); // Take first 5 parts which form the UUID
+            return list.some(a => {
+              if (a.id === baseId) return true;
+              
+              // Also check if the other activity has a date suffix with the same base ID
+              if (a.id.includes('-202')) {
+                const otherBaseParts = a.id.split('-');
+                if (otherBaseParts.length > 4) {
+                  const otherBaseId = otherBaseParts.slice(0, 5).join('-');
+                  return baseId === otherBaseId;
+                }
+              }
+              return false;
+            });
+          }
+        }
+        
+        return false;
+      };
+      
+      // If we have a selected activity, make sure it's in the list
+      if (selectedActivity && !isActivityInList(selectedActivity, allActivities)) {
+        console.log('[AddAttendanceScreen] Adding selected activity to activities list:', selectedActivity);
+        allActivities = [selectedActivity, ...allActivities];
       }
+      
+      // If activityId is provided and not in the list, fetch and add it
+      if (activityId && !allActivities.some(a => a.id === activityId) && 
+          (!selectedActivity || selectedActivity.id !== activityId)) {
+        console.log('[AddAttendanceScreen] Fetching activity for activityId:', activityId);
+        
+        // Try to find the activity with the exact ID first
+        let activityData = null;
+        let { data: act, error: actErr } = await supabase
+          .from('activities')
+          .select('*')
+          .eq('id', activityId)
+          .single();
+          
+        if (actErr && activityId.includes('-202')) {
+          // If not found with the full ID, try with the base ID
+          const parts = activityId.split('-');
+          if (parts.length > 4) {
+            const baseId = parts.slice(0, 5).join('-'); // Take first 5 parts which form the UUID
+            console.log('[AddAttendanceScreen] Trying with base ID:', baseId);
+            
+            const { data: baseAct, error: baseErr } = await supabase
+              .from('activities')
+              .select('*')
+              .eq('id', baseId)
+              .single();
+              
+            if (!baseErr && baseAct) {
+              activityData = baseAct;
+              activityData.id = activityId; // Use the original ID
+            }
+          }
+        } else if (!actErr && act) {
+          activityData = act;
+        }
+        
+        if (activityData) {
+          console.log('[AddAttendanceScreen] Adding fetched activity to list:', activityData);
+          allActivities = [activityData, ...allActivities];
+        }
+      }
+      
       setActivities(allActivities);
-    } catch (e) { console.error(e); }
+    } catch (e) { 
+      console.error('[AddAttendanceScreen] Error in loadActivitiesForTeam:', e); 
+    }
     setIsLoadingActivities(false);
   };
   const loadAttendance = async () => {
@@ -151,24 +346,48 @@ export default function AddAttendanceScreen() {
       // Use the FULL activity ID to ensure we're loading attendance for this specific instance
       const activityIdToUse = selectedActivity.id;
       
-      console.log('Loading attendance for specific activity instance:', {
+      console.log('[AddAttendanceScreen] Loading attendance for specific activity instance:', {
         activityId: activityIdToUse,
         title: selectedActivity.title
       });
       
-      const { data, error } = await supabase
+      // First try with the exact ID
+      let { data, error } = await supabase
         .from('activity_attendance')
         .select('*')
         .eq('activity_id', activityIdToUse);
         
+      // If no records found and we have a composite ID, try with the base ID
+      if ((!data || data.length === 0) && activityIdToUse.includes('-202')) {
+        const parts = activityIdToUse.split('-');
+        if (parts.length > 4) {
+          const baseId = parts.slice(0, 5).join('-'); // Take first 5 parts which form the UUID
+          console.log('[AddAttendanceScreen] No records found with full ID, trying base ID:', baseId);
+          
+          const { data: baseData, error: baseError } = await supabase
+            .from('activity_attendance')
+            .select('*')
+            .eq('activity_id', baseId);
+            
+          if (!baseError && baseData && baseData.length > 0) {
+            console.log('[AddAttendanceScreen] Found attendance records with base ID:', baseData.length);
+            data = baseData;
+            error = null;
+          }
+        }
+      }
+        
       if (!error && data) {
+        console.log('[AddAttendanceScreen] Found attendance records:', data.length);
         const attendanceMap = data.reduce((acc: any, record: any) => {
           acc[record.player_id] = record.status;
           return acc;
         }, {});
         setAttendance(attendanceMap);
       }
-    } catch (e) { console.error(e); }
+    } catch (e) { 
+      console.error('[AddAttendanceScreen] Error in loadAttendance:', e); 
+    }
     setIsLoadingPlayers(false);
   };
   const toggleAttendance = (playerId: string, status: 'present' | 'absent') => {
@@ -198,18 +417,37 @@ export default function AddAttendanceScreen() {
         }));
         
       if (attendanceRecords.length > 0) {
+        console.log('[AddAttendanceScreen] Saving attendance records:', attendanceRecords.length);
+        
+        // First, check if we need to delete any existing records
+        const { error: deleteError } = await supabase
+          .from('activity_attendance')
+          .delete()
+          .eq('activity_id', activityIdToUse);
+          
+        if (deleteError) {
+          console.error('[AddAttendanceScreen] Error deleting existing attendance:', deleteError);
+        }
+        
+        // Then insert the new records
         const { error } = await supabase
           .from('activity_attendance')
           .upsert(attendanceRecords, { onConflict: 'activity_id,player_id', ignoreDuplicates: false });
           
-        if (error) throw error;
+        if (error) {
+          console.error('[AddAttendanceScreen] Error saving attendance:', error);
+          throw error;
+        }
       }
       
       alert('Attendance saved successfully');
       if (navigation.canGoBack()) {
         navigation.pop(2);
       }
-    } catch (e) { alert('Failed to save attendance'); console.error(e); }
+    } catch (e) { 
+      alert('Failed to save attendance'); 
+      console.error('[AddAttendanceScreen] Error in handleSave:', e); 
+    }
     setIsSaving(false);
   };
   const filteredPlayers = players.filter(player => player.name.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -277,7 +515,9 @@ export default function AddAttendanceScreen() {
         <Text style={styles.label}>Select Activity</Text>
         <TouchableOpacity style={styles.selector} onPress={() => setShowActivityModal(true)} disabled={!selectedTeam}>
           <View>
-            <Text style={styles.selectorText}>{selectedActivity ? selectedActivity.title : 'Select an activity'}</Text>
+            <Text style={styles.selectorText}>
+              {selectedActivity ? selectedActivity.title : 'Select an activity'}
+            </Text>
             <Text style={styles.selectorSubtext}>Choose the activity for attendance</Text>
           </View>
           <MaterialCommunityIcons name="chevron-down" size={24} color={COLORS.primary} />
@@ -293,9 +533,24 @@ export default function AddAttendanceScreen() {
                 </TouchableOpacity>
               </View>
               <ScrollView style={styles.teamsList}>
-                {activities.length > 0 ? (
+                {isLoadingActivities ? (
+                  <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color={COLORS.primary} />
+                    <Text style={styles.loadingText}>Loading activities...</Text>
+                  </View>
+                ) : activities.length > 0 ? (
                   activities.map(activity => (
-                    <TouchableOpacity key={activity.id} style={[styles.teamItem, selectedActivity?.id === activity.id && styles.selectedTeamItem]} onPress={() => { setSelectedActivity(activity); setShowActivityModal(false); }}>
+                    <TouchableOpacity 
+                      key={activity.id} 
+                      style={[
+                        styles.teamItem, 
+                        selectedActivity?.id === activity.id && styles.selectedTeamItem
+                      ]} 
+                      onPress={() => { 
+                        setSelectedActivity(activity); 
+                        setShowActivityModal(false); 
+                      }}
+                    >
                       <View style={styles.teamItemContent}>
                         <MaterialCommunityIcons name="calendar" size={24} color={COLORS.primary} />
                         <Text style={styles.teamName}>{activity.title}</Text>
@@ -306,7 +561,9 @@ export default function AddAttendanceScreen() {
                     </TouchableOpacity>
                   ))
                 ) : (
-                  <Text style={styles.noTeamsText}>No activities available</Text>
+                  <Text style={styles.noTeamsText}>
+                    {selectedTeam ? 'No activities available for this team' : 'Please select a team first'}
+                  </Text>
                 )}
               </ScrollView>
             </View>
