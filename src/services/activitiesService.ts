@@ -199,11 +199,22 @@ export const deleteActivity = async (id: string): Promise<{ error: Error | null 
   try {
     console.log(`Deleting activity with ID: ${id}`);
     
+    // Handle composite IDs (UUID-date format)
+    let baseId = id;
+    let isCompositeId = false;
+    
+    // Check if this is a composite ID (UUID + date suffix)
+    if (id.includes('-') && id.length > 36) {
+      baseId = id.substring(0, 36);
+      isCompositeId = true;
+      console.log(`Composite ID detected. Base ID: ${baseId}, Full ID: ${id}`);
+    }
+    
     // First check if this is a game activity to properly handle game-specific data
     const { data: activityData, error: activityError } = await supabase
       .from('activities')
       .select('type, lineup_players, is_repeating, team_id')
-      .eq('id', id)
+      .eq('id', baseId) // Use baseId for the activities table
       .single();
     
     if (activityError) {
@@ -217,16 +228,16 @@ export const deleteActivity = async (id: string): Promise<{ error: Error | null 
     
     // Start deleting all related data
     
-    // 1. Delete attendance records
+    // 1. Delete attendance records - use the full composite ID for attendance
     console.log('Deleting official attendance records (marked by coach)');
     const { error: attendanceError } = await supabase
       .from('activity_attendance')
       .delete()
-      .eq('activity_id', id);
+      .eq('activity_id', id); // Use the full ID here
     
     if (attendanceError) {
       console.error('Error deleting attendance records:', attendanceError);
-      throw attendanceError;
+      // Don't throw, continue with other deletions
     }
     
     // 2. Delete presence responses (RSVP)
@@ -234,25 +245,56 @@ export const deleteActivity = async (id: string): Promise<{ error: Error | null 
     const { error: presenceError } = await supabase
       .from('activity_presence')
       .delete()
-      .eq('activity_id', id);
+      .eq('activity_id', id); // Use the full ID here
     
     if (presenceError) {
       console.error('Error deleting presence records:', presenceError);
       // Continue with deletion even if presence deletion fails
     }
     
+    // If this is a composite ID, we're done - we don't delete the base activity
+    if (isCompositeId) {
+      console.log(`Composite activity instance deleted: ${id}`);
+      return { error: null };
+    }
+    
     // 3. If this is a recurring activity, delete all its instances
-    if (activityData?.type && activityData?.is_repeating) {
-      // Extract the base ID (first 36 characters) from recurring instances
-      const baseId = id.slice(0, 36);
-      const { error: recurringError } = await supabase
-        .from('activities')
-        .delete()
-        .like('id', `${baseId}-%`); // Match pattern for recurring instances
+    if (activityData?.is_repeating) {
+      console.log(`Deleting recurring instances for activity: ${baseId}`);
       
-      if (recurringError) {
-        console.error('Error deleting recurring instances:', recurringError);
-        // Continue with deleting the main activity
+      try {
+        // Use a different approach - get all activities and filter on the client side
+        const { data: allActivities, error: fetchError } = await supabase
+          .from('activities')
+          .select('id');
+        
+        if (fetchError) {
+          console.error('Error fetching activities for recurring instance check:', fetchError);
+        } else if (allActivities) {
+          // Filter instances on the client side by checking if they start with baseId + "-"
+          const recurringInstances = allActivities.filter(
+            activity => typeof activity.id === 'string' && 
+                       activity.id.startsWith(baseId + '-')
+          );
+          
+          console.log(`Found ${recurringInstances.length} recurring instances to delete`);
+          
+          // Delete each instance individually
+          for (const instance of recurringInstances) {
+            const { error: deleteError } = await supabase
+              .from('activities')
+              .delete()
+              .eq('id', instance.id);
+            
+            if (deleteError) {
+              console.error(`Error deleting recurring instance ${instance.id}:`, deleteError);
+            } else {
+              console.log(`Successfully deleted recurring instance: ${instance.id}`);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error processing recurring instances:', err);
       }
     }
     
@@ -260,7 +302,7 @@ export const deleteActivity = async (id: string): Promise<{ error: Error | null 
     const { error } = await supabase
       .from('activities')
       .delete()
-      .eq('id', id);
+      .eq('id', baseId);
     
     if (error) throw error;
     
@@ -553,33 +595,46 @@ export const getActivitiesByDateRange = async (startDate: string, endDate: strin
  */
 export const getActivityById = async (id: string): Promise<ActivityResponse> => {
   try {
-    // Detect composite ID (UUID + date)
+    console.log(`Getting activity by ID: ${id}`);
+    
+    // Handle composite IDs (UUID-date format)
+    let baseId = id;
+    
+    // Check if this is a composite ID (UUID + date suffix)
     const compositeIdMatch = id.match(/^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-(\d{8})$/i);
+    
     if (compositeIdMatch) {
-      const baseUuid = compositeIdMatch[1];
+      baseId = compositeIdMatch[1];
       const datePortion = compositeIdMatch[2];
+      console.log(`Composite ID detected. Base ID: ${baseId}, Date portion: ${datePortion}`);
+      
       // Fetch the parent activity by base UUID
       const { data: parentActivity, error: parentError } = await supabase
         .from('activities')
         .select('*')
-        .eq('id', baseUuid)
+        .eq('id', baseId)
         .maybeSingle();
+        
       if (parentError) throw parentError;
       if (!parentActivity) return { data: null, error: new Error('Parent activity not found') };
+      
       // Reconstruct the instance details
       const year = parseInt(datePortion.substring(0, 4));
       const month = parseInt(datePortion.substring(4, 6)) - 1;
       const day = parseInt(datePortion.substring(6, 8));
       const instanceDate = new Date(year, month, day);
       const startDate = new Date(parentActivity.start_time);
+      
       let activityInstance = { ...parentActivity };
+      
       // Adjust the start time for this instance
       const newStartTime = new Date(instanceDate);
       newStartTime.setHours(startDate.getHours(), startDate.getMinutes(), 0, 0);
       activityInstance.start_time = newStartTime.toISOString();
       activityInstance.id = id; // Set the composite ID
-      activityInstance.parent_activity_id = baseUuid;
+      activityInstance.parent_activity_id = baseId;
       activityInstance.is_recurring_instance = true;
+      
       // Adjust end_time if present
       if (parentActivity.end_time) {
         const origStart = new Date(parentActivity.start_time);
@@ -588,20 +643,24 @@ export const getActivityById = async (id: string): Promise<ActivityResponse> => 
         const newEndTime = new Date(newStartTime.getTime() + durationMs);
         activityInstance.end_time = newEndTime.toISOString();
       }
+      
+      console.log(`Successfully retrieved composite activity: ${id}`);
       return { data: activityInstance, error: null };
     }
 
-    // Standard activity lookup
+    // Standard activity lookup for non-composite IDs
     let clubId = await getUserClubId();
     if (clubId) {
       // Admin/coach: fetch by club
       const { data, error } = await supabase
         .from('activities')
         .select('*')
-        .eq('id', id)
+        .eq('id', baseId) // Use baseId which is the same as id for non-composite IDs
         .eq('club_id', clubId)
         .single();
+        
       if (error) throw error;
+      console.log(`Successfully retrieved standard activity: ${id}`);
       return { data, error: null };
     }
 
@@ -617,6 +676,7 @@ export const getActivityById = async (id: string): Promise<ActivityResponse> => 
     } catch (e) {
       parentId = null;
     }
+    
     if (parentId) {
       // Get all children for this parent
       const { data: children, error: childrenError } = await supabase
@@ -624,16 +684,19 @@ export const getActivityById = async (id: string): Promise<ActivityResponse> => 
         .select('team_id')
         .eq('parent_id', parentId)
         .eq('is_active', true);
+        
       if (!childrenError && children && children.length > 0) {
         const teamIds = Array.from(new Set(children.map((c: any) => c.team_id).filter(Boolean)));
+        
         if (teamIds.length > 0) {
           // Fetch the activity if it belongs to one of the parent's children teams
           const { data, error } = await supabase
             .from('activities')
             .select('*')
-            .eq('id', id)
+            .eq('id', baseId) // Use baseId which is the same as id for non-composite IDs
             .in('team_id', teamIds)
             .maybeSingle();
+            
           if (error) throw error;
           if (data) return { data, error: null };
         }

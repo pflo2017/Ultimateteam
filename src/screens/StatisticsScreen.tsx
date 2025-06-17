@@ -9,6 +9,7 @@ import { getCoachInternalId } from '../utils/coachUtils';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../types/navigation';
+import { getUserClubId } from '../services/activitiesService';
 
 export const StatisticsScreen = () => {
   // Navigation
@@ -162,24 +163,29 @@ export const StatisticsScreen = () => {
     try {
       console.log('Loading teams for role:', userRole);
       if (userRole === 'admin') {
-        // Get current admin's club
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-        const { data: club, error: clubError } = await supabase
-          .from('clubs')
-          .select('id')
-          .eq('admin_id', user.id)
-          .single();
-        if (clubError || !club) return;
+        // Get club_id using the reliable utility function
+        const clubId = await getUserClubId();
+        
+        if (!clubId) {
+          console.error('Error getting club for admin: No club ID found');
+          return Promise.resolve();
+        }
+        
+        console.log('Admin club ID:', clubId);
 
         // Fetch only teams from this club
         const { data, error } = await supabase
           .from('teams')
           .select('id, name')
-          .eq('club_id', club.id)
+          .eq('club_id', clubId)
           .eq('is_active', true)
           .order('name');
-        if (error) throw error;
+          
+        if (error) {
+          console.error('Error fetching teams:', error);
+          throw error;
+        }
+        
         setTeams(data || []);
       } else if (userRole === 'coach' && coachId) {
         // Coach sees only their teams
@@ -273,31 +279,58 @@ export const StatisticsScreen = () => {
 
       if (activeView === 'player') {
         try {
-          // First, get activities for the date range and selected team
-          let activitiesQuery = supabase
-            .from('activities')
-            .select('id, title, type, start_time, team_id')
-            .gte('start_time', startDateStr)
-            .lte('start_time', endDateStr)
-            .eq('team_id', currentTeamId); // Always filter by selected team
+          // Get all player IDs for the team
+          const playerIds = playersData?.map(player => player.id) || [];
           
-          if (selectedActivityType !== 'all') {
-            activitiesQuery = activitiesQuery.filter('type', 'eq', selectedActivityType);
+          // Directly fetch all attendance records for these players, like in PlayerAttendanceReportScreen
+          const { data: allAttendanceData, error: allAttendanceError } = await supabase
+            .from('attendance_with_correct_dates')
+            .select('*')
+            .in('player_id', playerIds);
+            
+          if (allAttendanceError) {
+            console.error('Error fetching all attendance:', allAttendanceError);
+            throw allAttendanceError;
           }
           
-          const { data: activitiesData, error: activitiesError } = await activitiesQuery;
+          console.log(`Found ${allAttendanceData?.length || 0} total attendance records`);
           
-          if (activitiesError) {
-            console.error('Error fetching activities:', activitiesError);
-            throw activitiesError;
-          }
+          // Debug: Log all attendance records for Diana Jipa
+          const dianaRecords = allAttendanceData.filter(record => 
+            record.player_name === 'Diana Jipa'
+          );
+          console.log('DEBUG - All Diana Jipa records:', JSON.stringify(dianaRecords, null, 2));
           
-          console.log(`Found ${activitiesData?.length || 0} activities matching criteria`);
+          // Filter attendance records by month, year, and activity type
+          let attendanceData = allAttendanceData.filter(record => {
+            if (!record.actual_activity_date) return false;
+            
+            // Parse the date correctly
+            const activityDate = new Date(record.actual_activity_date);
+            
+            // Debug specific player records
+            if (record.player_name === 'Diana Jipa') {
+              console.log(`Diana record date check: ${record.actual_activity_date} -> month: ${activityDate.getMonth()} (selected: ${selectedMonth})`);
+            }
+            
+            const matchesDate = activityDate.getMonth() === selectedMonth && 
+                               activityDate.getFullYear() === selectedYear;
+            const matchesType = selectedActivityType === 'all' || 
+                               record.activity_type === selectedActivityType;
+                               
+            return matchesDate && matchesType;
+          });
+          
+          // Debug: Log filtered Diana Jipa records
+          const filteredDianaRecords = attendanceData.filter(record => 
+            record.player_name === 'Diana Jipa'
+          );
+          console.log('DEBUG - Filtered Diana Jipa records:', JSON.stringify(filteredDianaRecords, null, 2));
           
           // Get team name for display
           const teamName = teams.find(t => t.id === currentTeamId)?.name || 'Unknown Team';
           
-          if (!activitiesData || activitiesData.length === 0) {
+          if (!attendanceData || attendanceData.length === 0) {
             // No activities found, but we'll still display players
             // Just without attendance data
             if (playersData && playersData.length > 0) {
@@ -323,21 +356,8 @@ export const StatisticsScreen = () => {
             return;
           }
           
-          // Get the activity IDs
-          const activityIds = activitiesData.map(a => a.id);
-          
-          // Get attendance records for these activities
-          const { data: attendanceData, error: attendanceError } = await supabase
-            .from('activity_attendance')
-            .select('activity_id, player_id, status')
-            .in('activity_id', activityIds);
-            
-          if (attendanceError) {
-            console.error('Error fetching attendance:', attendanceError);
-            throw attendanceError;
-          }
-          
-          console.log(`Found ${attendanceData?.length || 0} attendance records`);
+          // Get the activity IDs for the filtered activities
+          const activityIds = attendanceData.map(a => a.activity_id);
           
           // Now create stats for each player
           const playerStatsMap = new Map();
@@ -351,30 +371,49 @@ export const StatisticsScreen = () => {
               team_name: teamName,
               present_count: 0,
               absent_count: 0,
-              total_activities: 0,
+              total_activities: 0, // Start with 0, we'll count actual activities that apply to this player
               attendance_percentage: 0
             });
           });
           
+          // Create a set of activity IDs that have attendance records for each player
+          const playerActivityMap = new Map<string, Set<string>>();
+          
           // Update with actual attendance data
           attendanceData?.forEach(record => {
             const playerId = record.player_id;
-            // Only count this attendance record if it belongs to a valid activity and player
-            if (playerStatsMap.has(playerId) && activityIds.includes(record.activity_id)) {
+            // Only count this attendance record if it belongs to a valid player
+            if (playerStatsMap.has(playerId)) {
               const stats = playerStatsMap.get(playerId);
-              stats.total_activities++;
               
               if (record.status === 'present') {
                 stats.present_count++;
               } else if (record.status === 'absent') {
                 stats.absent_count++;
               }
+              
+              // Increment total activities count for this player
+              // This ensures we count each activity only once per player
+              if (!playerActivityMap.has(playerId)) {
+                playerActivityMap.set(playerId, new Set());
+              }
+              playerActivityMap.get(playerId)?.add(record.activity_id);
+            }
+          });
+          
+          // Now set the total_activities count for each player based on the activities they have records for
+          playerStatsMap.forEach((stats, playerId) => {
+            if (playerActivityMap.has(playerId)) {
+              const playerActivities = playerActivityMap.get(playerId)!;
+              stats.total_activities = playerActivities.size;
             }
           });
           
           // Calculate attendance percentages
-          playerStatsMap.forEach(stats => {
+          playerStatsMap.forEach((stats, playerId) => {
             if (stats.total_activities > 0) {
+              // Log detailed stats for debugging
+              console.log(`Player ${stats.player_name}: ${stats.present_count} present, ${stats.absent_count} absent, ${stats.total_activities} total`);
               stats.attendance_percentage = Math.round((stats.present_count / stats.total_activities) * 100);
             }
           });
@@ -434,27 +473,22 @@ export const StatisticsScreen = () => {
           
           console.log(`Showing statistics for team: ${team.name} (${team.id})`);
           
-          // Get activities for this team within the date range and of the selected type
-          let activitiesQuery = supabase
-            .from('activities')
-            .select('id, title, type, start_time')
-            .eq('team_id', team.id)
-            .gte('start_time', startDateStr)
-            .lte('start_time', endDateStr);
+          // Get all player IDs for the team
+          const playerIds = playersData?.map(player => player.id) || [];
+          
+          // Directly fetch all attendance records for these players
+          const { data: attendance, error: attendanceError } = await supabase
+            .from('attendance_with_correct_dates')
+            .select('*')
+            .in('player_id', playerIds);
             
-          if (selectedActivityType !== 'all') {
-            activitiesQuery = activitiesQuery.filter('type', 'eq', selectedActivityType);
+          if (attendanceError) {
+            console.error(`Error loading attendance for team ${team.id}:`, attendanceError);
+            throw attendanceError;
           }
           
-          const { data: activities, error: activitiesError } = await activitiesQuery;
-          
-          if (activitiesError) {
-            console.error(`Error loading activities for team ${team.id}:`, activitiesError);
-            throw activitiesError;
-          }
-          
-          if (!activities || activities.length === 0) {
-            console.log(`No activities found for team ${team.id} in the selected period`);
+          if (!attendance || attendance.length === 0) {
+            console.log(`No attendance records found for team ${team.id}`);
             
             // Add team with zero stats
             const emptyStats = [{
@@ -472,26 +506,33 @@ export const StatisticsScreen = () => {
             return;
           }
           
-          console.log(`Found ${activities.length} activities for team ${team.id}`);
-          
-          // Get attendance records for these activities
-          const activityIds = activities.map(a => a.id);
-          
-          const { data: attendance, error: attendanceError } = await supabase
-            .from('activity_attendance')
-            .select('activity_id, status')
-            .in('activity_id', activityIds);
+          // Filter attendance records by month, year, and activity type
+          const filteredAttendance = attendance?.filter(record => {
+            if (!record.actual_activity_date) return false;
             
-          if (attendanceError) {
-            console.error(`Error loading attendance for team ${team.id}:`, attendanceError);
-            throw attendanceError;
-          }
+            // Parse the date correctly
+            const activityDate = new Date(record.actual_activity_date);
+            
+            // Debug specific player records
+            if (record.player_name === 'Diana Jipa') {
+              console.log(`Team stats - Diana record date check: ${record.actual_activity_date} -> month: ${activityDate.getMonth()} (selected: ${selectedMonth})`);
+            }
+            
+            const matchesDate = activityDate.getMonth() === selectedMonth && 
+                               activityDate.getFullYear() === selectedYear;
+            const matchesType = selectedActivityType === 'all' || 
+                               record.activity_type === selectedActivityType;
+                               
+            return matchesDate && matchesType;
+          });
+          
+          console.log(`After filtering by date and type: ${filteredAttendance?.length || 0} team attendance records`);
           
           // Calculate statistics
           let presentCount = 0;
           let absentCount = 0;
           
-          attendance?.forEach(record => {
+          filteredAttendance?.forEach(record => {
             if (record.status === 'present') {
               presentCount++;
             } else if (record.status === 'absent') {
