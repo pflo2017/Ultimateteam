@@ -10,6 +10,17 @@ module.exports = (() => {
     ...transformer,
     babelTransformerPath: require.resolve('react-native-svg-transformer'),
   };
+  
+  // Function to safely require a module with fallback
+  const safeRequire = (moduleName, fallbackPath) => {
+    try {
+      return require.resolve(moduleName);
+    } catch (e) {
+      console.warn(`Could not resolve ${moduleName}, using fallback`);
+      return fallbackPath;
+    }
+  };
+  
   config.resolver = {
     ...resolver,
     assetExts: resolver.assetExts.filter((ext) => ext !== 'svg'),
@@ -25,7 +36,7 @@ module.exports = (() => {
       crypto: require.resolve('react-native-crypto'),
       buffer: require.resolve('buffer/'),
       util: require.resolve('util/'),
-      net: require.resolve('react-native-tcp-socket'),
+      net: safeRequire('react-native-tcp-socket', path.resolve(__dirname, 'empty-module.js')),
       tls: path.resolve(__dirname, 'empty-module.js'),
       ws: false,
       assert: require.resolve('assert'),
