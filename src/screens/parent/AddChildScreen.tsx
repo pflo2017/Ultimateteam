@@ -99,7 +99,26 @@ export const AddChildScreen = () => {
 
       if (!team) throw new Error('Team not found');
 
-      // Insert into parent_children
+      // First create the player record using the insert_player_for_child function
+      const { data: playerId, error: playerError } = await supabase.rpc('insert_player_for_child', {
+        p_name: name.trim(),
+        p_team_id: team.id,
+        p_admin_id: team.admin_id,
+        p_club_id: team.club_id,
+        p_parent_id: parent.id,
+        p_is_new_trial: false
+      });
+
+      if (playerError) {
+        console.error('Error adding player:', playerError);
+        throw new Error('Failed to create player record');
+      }
+
+      if (!playerId) {
+        throw new Error('Player ID not returned from insert_player_for_child function');
+      }
+
+      // Then insert into parent_children with the player_id
       const { error: childError } = await supabase
         .from('parent_children')
         .insert({
@@ -110,23 +129,12 @@ export const AddChildScreen = () => {
           medical_visa_status: 'pending',
           medical_visa_issue_date: null,
           is_active: true,
+          player_id: playerId
         });
 
-      if (childError) throw childError;
-
-      // Insert into players using a Supabase function
-      const { error: playerError } = await supabase.rpc('insert_player_for_child', {
-        p_name: name.trim(),
-        p_team_id: team.id,
-        p_admin_id: team.admin_id,
-        p_club_id: team.club_id,
-        p_parent_id: parent.id,
-        p_is_new_trial: false
-      });
-
-      if (playerError) {
-        Alert.alert('Warning', 'Child added, but failed to add player to admin dashboard. Please contact support.');
-        console.error('Error adding player:', playerError);
+      if (childError) {
+        console.error('Error adding child:', childError);
+        throw childError;
       }
 
       Alert.alert('Success', 'Child added successfully', [

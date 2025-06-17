@@ -1,11 +1,7 @@
--- Add player_id column to parent_children table
-ALTER TABLE public.parent_children
-ADD COLUMN player_id UUID REFERENCES public.players(id) ON DELETE CASCADE;
+-- Drop the existing function
+DROP FUNCTION IF EXISTS public.insert_player_for_child(text, uuid, uuid, uuid, uuid, boolean);
 
--- Create index on player_id
-CREATE INDEX IF NOT EXISTS parent_children_player_id_idx ON public.parent_children(player_id);
-
--- Update the insert_player_for_child function to be more flexible
+-- Recreate the function to properly return UUID
 CREATE OR REPLACE FUNCTION public.insert_player_for_child(
     p_name text,
     p_team_id uuid,
@@ -40,7 +36,8 @@ BEGIN
         club_id, 
         parent_id,
         birth_date,
-        is_active
+        is_active,
+        player_status
     )
     VALUES (
         p_name, 
@@ -48,8 +45,9 @@ BEGIN
         p_admin_id, 
         p_club_id, 
         p_parent_id,
-        v_birth_date,
-        true
+        COALESCE(v_birth_date, NOW()),
+        true,
+        CASE WHEN p_is_new_trial THEN 'on_trial' ELSE NULL END
     )
     RETURNING id INTO v_player_id;
     
@@ -66,4 +64,4 @@ END;
 $$;
 
 -- Grant execute permission on the function
-GRANT EXECUTE ON FUNCTION public.insert_player_for_child(text, uuid, uuid, uuid, uuid, boolean) TO anon;
+GRANT EXECUTE ON FUNCTION public.insert_player_for_child(text, uuid, uuid, uuid, uuid, boolean) TO anon; 

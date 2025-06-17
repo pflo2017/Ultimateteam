@@ -124,7 +124,11 @@ const Login: React.FC = () => {
           />
           
           <Group position="apart" mt="lg">
-            <Anchor component="button" size="sm">
+            <Anchor 
+              component="button" 
+              size="sm"
+              onClick={() => navigate('/reset-admin-password')}
+            >
               Forgot password?
             </Anchor>
           </Group>

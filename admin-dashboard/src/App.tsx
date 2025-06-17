@@ -8,10 +8,14 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import ClubsList from './pages/ClubsList';
 import ClubDetail from './pages/ClubDetail';
+import UsersList from './pages/UsersList';
+import CoachesList from './pages/CoachesList';
+import PlayersPage from './pages/PlayersPage';
+import AdminPasswordReset from './pages/AdminPasswordReset';
+import ResetPasswordConfirmation from './pages/ResetPasswordConfirmation';
 import SuspendedClubBanner from './components/SuspendedClubBanner';
 
 // Placeholder for future components
-const UsersList = () => <div>Users List</div>;
 const ScheduleManagement = () => <div>Schedule Management</div>;
 const Analytics = () => <div>Analytics</div>;
 const Billing = () => <div>Billing</div>;
@@ -211,6 +215,10 @@ const App: React.FC = () => {
           <Routes>
             <Route path="/login" element={<Login />} />
             
+            {/* Public routes */}
+            <Route path="/reset-admin-password" element={<AdminPasswordReset />} />
+            <Route path="/reset-password-confirmation" element={<ResetPasswordConfirmation />} />
+            
             <Route 
               path="/" 
               element={
@@ -250,6 +258,28 @@ const App: React.FC = () => {
                 <ProtectedRoute>
                   <DashboardLayout colorScheme={colorScheme} toggleColorScheme={toggleColorScheme}>
                     <UsersList />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            
+            <Route 
+              path="/coaches" 
+              element={
+                <ProtectedRoute>
+                  <DashboardLayout colorScheme={colorScheme} toggleColorScheme={toggleColorScheme}>
+                    <CoachesList />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            
+            <Route 
+              path="/players" 
+              element={
+                <ProtectedRoute>
+                  <DashboardLayout colorScheme={colorScheme} toggleColorScheme={toggleColorScheme}>
+                    <PlayersPage />
                   </DashboardLayout>
                 </ProtectedRoute>
               } 

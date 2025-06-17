@@ -1,11 +1,4 @@
--- Add player_id column to parent_children table
-ALTER TABLE public.parent_children
-ADD COLUMN player_id UUID REFERENCES public.players(id) ON DELETE CASCADE;
-
--- Create index on player_id
-CREATE INDEX IF NOT EXISTS parent_children_player_id_idx ON public.parent_children(player_id);
-
--- Update the insert_player_for_child function to be more flexible
+-- Update the insert_player_for_child function to return UUID
 CREATE OR REPLACE FUNCTION public.insert_player_for_child(
     p_name text,
     p_team_id uuid,
@@ -66,4 +59,4 @@ END;
 $$;
 
 -- Grant execute permission on the function
-GRANT EXECUTE ON FUNCTION public.insert_player_for_child(text, uuid, uuid, uuid, uuid, boolean) TO anon;
+GRANT EXECUTE ON FUNCTION public.insert_player_for_child(text, uuid, uuid, uuid, uuid, boolean) TO anon; 
