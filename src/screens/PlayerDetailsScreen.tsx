@@ -360,7 +360,7 @@ export const PlayerDetailsScreen = () => {
                   .from('parent_children')
                   .delete()
                   .eq('player_id', playerId);
-                  
+                
                 if (childDeleteError) {
                   console.error('Error deleting parent_children record:', childDeleteError);
                   // Continue even if this fails

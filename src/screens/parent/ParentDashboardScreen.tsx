@@ -144,85 +144,85 @@ export const ParentDashboardScreen = () => {
             <Text style={styles.loadingText}>Loading your dashboard...</Text>
           </View>
         ) : (
-          <View style={styles.dashboardContent}>
-            <Text style={styles.sectionTitle}>Your Dashboard</Text>
-            
-            <TouchableOpacity
-              onPress={() => navigation.navigate('Events')}
-              activeOpacity={0.7}
-            >
-              <Card style={styles.dashboardCard}>
-                <Card.Content>
-                  <View style={styles.dashboardCardContent}>
-                    <MaterialCommunityIcons name="calendar-month" size={40} color={COLORS.primary} />
-                    <View style={styles.cardTextContainer}>
-                      <Text style={styles.cardTitle}>Upcoming Events</Text>
-                      <Text style={styles.cardDescription}>
-                        View your child's upcoming matches and training sessions
-                      </Text>
-                    </View>
+        <View style={styles.dashboardContent}>
+          <Text style={styles.sectionTitle}>Your Dashboard</Text>
+          
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Events')}
+            activeOpacity={0.7}
+          >
+            <Card style={styles.dashboardCard}>
+              <Card.Content>
+                <View style={styles.dashboardCardContent}>
+                  <MaterialCommunityIcons name="calendar-month" size={40} color={COLORS.primary} />
+                  <View style={styles.cardTextContainer}>
+                    <Text style={styles.cardTitle}>Upcoming Events</Text>
+                    <Text style={styles.cardDescription}>
+                      View your child's upcoming matches and training sessions
+                    </Text>
                   </View>
-                </Card.Content>
-              </Card>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              onPress={() => navigation.navigate('News')}
-              activeOpacity={0.7}
-            >
-              <Card style={styles.dashboardCard}>
-                <Card.Content>
-                  <View style={styles.dashboardCardContent}>
-                    <MaterialCommunityIcons name="clipboard-text" size={40} color={COLORS.primary} />
-                    <View style={styles.cardTextContainer}>
-                      <Text style={styles.cardTitle}>Team News</Text>
-                      <Text style={styles.cardDescription}>
-                        Stay updated with the latest team announcements and news
-                      </Text>
-                    </View>
+                </View>
+              </Card.Content>
+            </Card>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            onPress={() => navigation.navigate('News')}
+            activeOpacity={0.7}
+          >
+            <Card style={styles.dashboardCard}>
+              <Card.Content>
+                <View style={styles.dashboardCardContent}>
+                  <MaterialCommunityIcons name="clipboard-text" size={40} color={COLORS.primary} />
+                  <View style={styles.cardTextContainer}>
+                    <Text style={styles.cardTitle}>Team News</Text>
+                    <Text style={styles.cardDescription}>
+                      Stay updated with the latest team announcements and news
+                    </Text>
                   </View>
-                </Card.Content>
-              </Card>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              onPress={() => navigation.navigate('Manage')}
-              activeOpacity={0.7}
-            >
-              <Card style={styles.dashboardCard}>
-                <Card.Content>
-                  <View style={styles.dashboardCardContent}>
-                    <MaterialCommunityIcons name="account-group" size={40} color={COLORS.primary} />
-                    <View style={styles.cardTextContainer}>
-                      <Text style={styles.cardTitle}>My Children</Text>
-                      <Text style={styles.cardDescription}>
-                        Manage your children's information and registrations
-                      </Text>
-                    </View>
+                </View>
+              </Card.Content>
+            </Card>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Manage')}
+            activeOpacity={0.7}
+          >
+            <Card style={styles.dashboardCard}>
+              <Card.Content>
+                <View style={styles.dashboardCardContent}>
+                  <MaterialCommunityIcons name="account-group" size={40} color={COLORS.primary} />
+                  <View style={styles.cardTextContainer}>
+                    <Text style={styles.cardTitle}>My Children</Text>
+                    <Text style={styles.cardDescription}>
+                      Manage your children's information and registrations
+                    </Text>
                   </View>
-                </Card.Content>
-              </Card>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              onPress={() => navigation.navigate('Payments')}
-              activeOpacity={0.7}
-            >
-              <Card style={styles.dashboardCard}>
-                <Card.Content>
-                  <View style={styles.dashboardCardContent}>
-                    <MaterialCommunityIcons name="cash-multiple" size={40} color={COLORS.primary} />
-                    <View style={styles.cardTextContainer}>
-                      <Text style={styles.cardTitle}>Payments</Text>
-                      <Text style={styles.cardDescription}>
-                        View payment history and status for your children
-                      </Text>
-                    </View>
+                </View>
+              </Card.Content>
+            </Card>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Payments')}
+            activeOpacity={0.7}
+          >
+            <Card style={styles.dashboardCard}>
+              <Card.Content>
+                <View style={styles.dashboardCardContent}>
+                  <MaterialCommunityIcons name="cash-multiple" size={40} color={COLORS.primary} />
+                  <View style={styles.cardTextContainer}>
+                    <Text style={styles.cardTitle}>Payments</Text>
+                    <Text style={styles.cardDescription}>
+                      View payment history and status for your children
+                    </Text>
                   </View>
-                </Card.Content>
-              </Card>
-            </TouchableOpacity>
-          </View>
+                </View>
+              </Card.Content>
+            </Card>
+          </TouchableOpacity>
+        </View>
         )}
       </ScrollView>
     </View>

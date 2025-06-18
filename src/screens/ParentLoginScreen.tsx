@@ -4,7 +4,7 @@ import { Text, TextInput, ActivityIndicator } from 'react-native-paper';
 import { COLORS, SPACING, FONT_SIZES, SHADOWS } from '../constants/theme';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, CommonActions } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import type { RootStackParamList } from '../types/navigation';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -18,6 +18,16 @@ export const ParentLoginScreen = () => {
   const [error, setError] = useState('');
   const navigation = useNavigation<ParentLoginScreenNavigationProp>();
   const phoneInputRef = React.useRef<PhoneInput>(null);
+
+  // Handle back button press with improved navigation
+  const handleBackPress = () => {
+    // Navigate back to the Home screen
+    navigation.dispatch(
+      CommonActions.navigate({
+        name: 'Home'
+      })
+    );
+  };
 
   const handleContinue = async () => {
     // Remove spaces from phone number before sending to API
@@ -53,8 +63,8 @@ export const ParentLoginScreen = () => {
             phoneNumber: cleanedPhoneNumber
           });
         } else {
-          throw queryError;
-        }
+        throw queryError;
+      }
       } else if (existingParent) {
         console.log('Parent found, navigating to password login');
         // Parent exists, navigate to password login
@@ -87,7 +97,7 @@ export const ParentLoginScreen = () => {
     >
       <Pressable 
         style={styles.backButton} 
-        onPress={() => navigation.goBack()}
+        onPress={handleBackPress}
       >
         <MaterialCommunityIcons 
           name="arrow-left" 

@@ -4,7 +4,7 @@ import { Text, TextInput, ActivityIndicator } from 'react-native-paper';
 import { COLORS, SPACING, FONT_SIZES, SHADOWS } from '../constants/theme';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp, CommonActions } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import type { RootStackParamList } from '../types/navigation';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -28,6 +28,11 @@ export const ParentPasswordLoginScreen = () => {
   const navigation = useNavigation<ParentPasswordLoginScreenNavigationProp>();
   const route = useRoute<ParentPasswordLoginScreenRouteProp>();
   const { phoneNumber } = route.params;
+
+  // Handle back button press with improved navigation
+  const handleBackPress = () => {
+    navigation.navigate('ParentLogin');
+  };
 
   const handleLogin = async () => {
     console.log('DEBUG: handleLogin called');
@@ -172,7 +177,7 @@ export const ParentPasswordLoginScreen = () => {
     >
       <Pressable 
         style={styles.backButton} 
-        onPress={() => navigation.goBack()}
+        onPress={handleBackPress}
       >
         <MaterialCommunityIcons 
           name="arrow-left" 

@@ -160,12 +160,6 @@ export const ParentRegistrationScreen = () => {
           // We'll still show success but log the error
         }
         
-        // IMPORTANT: Instead of storing parent data and redirecting to dashboard,
-        // we show a success message and redirect to login screen
-        
-        // Show success message
-        console.log('Showing success alert');
-        
         // First set loading to false to ensure UI is responsive
         setIsLoading(false);
         
@@ -178,11 +172,12 @@ export const ParentRegistrationScreen = () => {
               text: 'OK',
               onPress: () => {
                 console.log('Alert OK pressed, navigating to ParentLogin');
-                // Navigate to the login screen immediately without delay
-                navigation.reset({
-                  index: 0,
-                  routes: [{ name: 'ParentLogin' }],
-                });
+                // Use navigate instead of reset to maintain navigation history
+                navigation.navigate('Home');
+                // Add a small delay before navigating to ParentLogin
+                setTimeout(() => {
+                  navigation.navigate('ParentLogin');
+                }, 100);
               }
             }
           ],
