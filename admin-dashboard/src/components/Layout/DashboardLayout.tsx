@@ -55,6 +55,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
     { label: 'All Users', icon: <IconUsers size={20} />, path: '/users' },
     { label: 'Coaches', icon: <IconUsers size={20} />, path: '/coaches' },
     { label: 'Players', icon: <IconUsers size={20} />, path: '/players' },
+    { label: 'Parents', icon: <IconUsers size={20} />, path: '/parents' },
     { label: 'Schedule', icon: <IconCalendarEvent size={20} />, path: '/schedule' },
     { label: 'Analytics', icon: <IconReportAnalytics size={20} />, path: '/analytics' },
     { label: 'Billing', icon: <IconReportAnalytics size={20} />, path: '/billing' },

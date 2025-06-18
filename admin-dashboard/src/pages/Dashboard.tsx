@@ -16,10 +16,8 @@ import {
 import { 
   IconUsers, 
   IconBuildingCommunity, 
-  IconCalendarEvent, 
   IconChartBar, 
-  IconUserCheck,
-  IconAlertTriangle
+  IconUserCheck
 } from '@tabler/icons-react';
 import { supabase } from '../lib/supabase';
 
@@ -42,12 +40,26 @@ interface RecentActivity {
   user: string;
 }
 
+interface ActivityData {
+  id: string;
+  club_name: string | null;
+  action: string;
+  created_at: string;
+  user_name: string;
+}
+
 interface TopClub {
   id: string;
   name: string;
   player_count: number;
   team_count: number;
   activity_level: 'high' | 'medium' | 'low';
+}
+
+interface ClubWithPlayerCount {
+  id: string;
+  name: string;
+  player_count: number;
 }
 
 const Dashboard: React.FC = () => {
@@ -137,21 +149,55 @@ const Dashboard: React.FC = () => {
         attendanceRate: 78 // Mock data for now
       });
       
-      // Mock recent activity
-      setRecentActivity([
-        { id: '1', club_name: 'FC Barcelona Academy', action: 'New player registered', date: '2023-06-14', user: 'Carlos Rodriguez' },
-        { id: '2', club_name: 'Liverpool Youth', action: 'New team created', date: '2023-06-13', user: 'James Wilson' },
-        { id: '3', club_name: 'Ajax Academy', action: 'Club suspended', date: '2023-06-12', user: 'Master Admin' },
-        { id: '4', club_name: 'FC Barcelona Academy', action: 'New coach added', date: '2023-06-11', user: 'Carlos Rodriguez' },
-        { id: '5', club_name: 'Liverpool Youth', action: 'Payment received', date: '2023-06-10', user: 'System' }
-      ]);
+      // Fetch recent activities
+      try {
+        // Get recent activities using the get_recent_activities function
+        const { data: activitiesData, error: activitiesError } = await supabase
+          .rpc('get_recent_activities');
+          
+        if (activitiesError) throw activitiesError;
+        
+        if (activitiesData && activitiesData.length > 0) {
+          // Transform data to match our interface
+          const formattedActivities = activitiesData.map((activity: ActivityData) => ({
+            id: activity.id,
+            club_name: activity.club_name || 'System',
+            action: activity.action,
+            date: new Date(activity.created_at).toISOString().split('T')[0],
+            user: activity.user_name
+          }));
+          
+          setRecentActivity(formattedActivities);
+        } else {
+          // If no activities found, use empty array
+          setRecentActivity([]);
+        }
+      } catch (activitiesError) {
+        console.error('Error fetching recent activities:', activitiesError);
+        // Use empty array as fallback
+        setRecentActivity([]);
+      }
       
-      // Mock top clubs
-      setTopClubs([
-        { id: '1', name: 'FC Barcelona Academy', player_count: 120, team_count: 8, activity_level: 'high' },
-        { id: '2', name: 'Liverpool Youth', player_count: 85, team_count: 6, activity_level: 'medium' },
-        { id: '3', name: 'Ajax Academy', player_count: 65, team_count: 4, activity_level: 'low' }
-      ]);
+      // Fetch top clubs data
+      try {
+        // Get top clubs data using the get_top_clubs function
+        const { data: topClubsData, error: topClubsError } = await supabase
+          .rpc('get_top_clubs')
+          .limit(5);
+          
+        if (topClubsError) throw topClubsError;
+        
+        if (topClubsData && topClubsData.length > 0) {
+          setTopClubs(topClubsData);
+        } else {
+          // If no clubs found, use empty array
+          setTopClubs([]);
+        }
+      } catch (clubsDataError) {
+        console.error('Error fetching top clubs data:', clubsDataError);
+        // Use empty array as fallback
+        setTopClubs([]);
+      }
       
     } catch (error) {
       console.error('Error fetching dashboard data:', error);

@@ -282,10 +282,10 @@ export const deleteActivity = async (id: string): Promise<{ error: Error | null 
           // Delete each instance individually
           for (const instance of recurringInstances) {
             const { error: deleteError } = await supabase
-              .from('activities')
-              .delete()
+        .from('activities')
+        .delete()
               .eq('id', instance.id);
-            
+      
             if (deleteError) {
               console.error(`Error deleting recurring instance ${instance.id}:`, deleteError);
             } else {

@@ -11,6 +11,7 @@ import ClubDetail from './pages/ClubDetail';
 import UsersList from './pages/UsersList';
 import CoachesList from './pages/CoachesList';
 import PlayersPage from './pages/PlayersPage';
+import Parents from './pages/Parents';
 import AdminPasswordReset from './pages/AdminPasswordReset';
 import ResetPasswordConfirmation from './pages/ResetPasswordConfirmation';
 import SuspendedClubBanner from './components/SuspendedClubBanner';
@@ -280,6 +281,17 @@ const App: React.FC = () => {
                 <ProtectedRoute>
                   <DashboardLayout colorScheme={colorScheme} toggleColorScheme={toggleColorScheme}>
                     <PlayersPage />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            
+            <Route 
+              path="/parents" 
+              element={
+                <ProtectedRoute>
+                  <DashboardLayout colorScheme={colorScheme} toggleColorScheme={toggleColorScheme}>
+                    <Parents />
                   </DashboardLayout>
                 </ProtectedRoute>
               } 
