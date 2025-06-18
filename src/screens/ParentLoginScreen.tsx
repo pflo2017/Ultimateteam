@@ -22,6 +22,8 @@ export const ParentLoginScreen = () => {
   const handleContinue = async () => {
     // Remove spaces from phone number before sending to API
     const cleanedPhoneNumber = phoneNumber.replace(/\s/g, '');
+    
+    console.log('Checking phone number:', cleanedPhoneNumber);
 
     if (!isValidPhoneNumber()) {
       setError('Please enter a valid phone number');
@@ -32,21 +34,33 @@ export const ParentLoginScreen = () => {
     setIsLoading(true);
 
     try {
+      console.log('Checking if phone number exists in parents table...');
       // Check if the phone number exists in the parents table
       const { data: existingParent, error: queryError } = await supabase
         .from('parents')
-        .select('id')
+        .select('id, name')
         .eq('phone_number', cleanedPhoneNumber)
         .single();
 
-      if (queryError && queryError.code !== 'PGRST116') { // PGRST116 is "not found" error
-        throw queryError;
-      }
+      console.log('Query response:', existingParent ? `Found parent: ${existingParent.name}` : 'No parent found', 
+                 queryError ? `Error: ${queryError.message}` : 'No error');
 
-      if (existingParent) {
+      if (queryError) {
+        if (queryError.code === 'PGRST116') { // PGRST116 is "not found" error
+          console.log('Parent not found, redirecting to registration');
+          // New parent, start registration flow
+          navigation.navigate('ParentRegistration', { 
+            phoneNumber: cleanedPhoneNumber
+          });
+        } else {
+          throw queryError;
+        }
+      } else if (existingParent) {
+        console.log('Parent found, navigating to password login');
         // Parent exists, navigate to password login
         navigation.navigate('ParentPasswordLogin', { phoneNumber: cleanedPhoneNumber });
       } else {
+        console.log('No parent found but no error, redirecting to registration');
         // New parent, start registration flow
         navigation.navigate('ParentRegistration', { 
           phoneNumber: cleanedPhoneNumber

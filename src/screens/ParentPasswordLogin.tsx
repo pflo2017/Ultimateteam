@@ -129,6 +129,27 @@ export const ParentPasswordLoginScreen = () => {
       await AsyncStorage.removeItem('coach_data');
       await AsyncStorage.setItem('parent_data', JSON.stringify(parent));
       
+      // If the parent doesn't have a user_id, update it with the current auth user's ID
+      if (!parent.user_id && authData.user?.id) {
+        try {
+          const { error: updateError } = await supabase
+            .from('parents')
+            .update({ user_id: authData.user.id })
+            .eq('id', parent.id);
+            
+          if (updateError) {
+            console.error('Error updating parent user_id:', updateError);
+          } else {
+            console.log('Updated parent record with auth user ID');
+            // Update the local parent data with the user_id
+            parent.user_id = authData.user.id;
+            await AsyncStorage.setItem('parent_data', JSON.stringify(parent));
+          }
+        } catch (err) {
+          console.error('Error updating parent user_id:', err);
+        }
+      }
+      
       if (global.reloadRole) {
         global.reloadRole();
       }
@@ -190,6 +211,13 @@ export const ParentPasswordLoginScreen = () => {
             secureTextEntry={!showPassword}
             error={!!error}
             disabled={isLoading}
+            textContentType="oneTimeCode"
+            autoComplete="off"
+            autoCapitalize="none"
+            autoCorrect={false}
+            spellCheck={false}
+            blurOnSubmit={true}
+            keyboardType="visible-password"
             right={
               <TextInput.Icon 
                 icon={showPassword ? "eye-off" : "eye"} 

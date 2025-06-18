@@ -354,55 +354,54 @@ export const PlayerDetailsScreen = () => {
               setIsDeleting(true);
               console.log("Starting deletion process for player ID:", playerId);
               
-              // Check if player exists and is active
-              const { data: checkData, error: checkError } = await supabase
-                .from('players')
-                .select('is_active')
-                .eq('id', playerId)
-                .single();
-                
-              if (checkError) {
-                console.error('Error checking player:', checkError);
-                throw new Error('Could not find player data');
-              }
-              
-              if (!checkData.is_active) {
-                console.log('Player is already inactive');
-                // Continue with notification and navigation
-                triggerEvent('player_deleted', playerId);
-                Alert.alert(
-                  "Success", 
-                  "Player deleted successfully",
-                  [{ text: "OK", onPress: () => navigation.goBack() }]
-                );
-                return;
-              }
-              
-              // First, update the player to set is_active to false (soft delete)
-              const { error: updateError } = await supabase
-                .from('players')
-                .update({ is_active: false })
-                .eq('id', playerId)
-                .eq('is_active', true); // Add this condition to ensure we're updating an active player
-                
-              if (updateError) {
-                console.error('Error updating player:', updateError);
-                throw new Error('Failed to delete player');
-              }
-              
-              // If the player has a parent_id, also update the corresponding parent_children record
+              // First, delete any parent_children records if they exist
               if (player?.parent_id) {
-                const { error: childUpdateError } = await supabase
+                const { error: childDeleteError } = await supabase
                   .from('parent_children')
-                  .update({ is_active: false })
-                  .eq('parent_id', player.parent_id)
-                  .eq('full_name', player.name)
-                  .eq('is_active', true); // Add this condition
+                  .delete()
+                  .eq('player_id', playerId);
                   
-                if (childUpdateError) {
-                  console.error('Error updating parent_children:', childUpdateError);
-                  // Continue even if this update fails
+                if (childDeleteError) {
+                  console.error('Error deleting parent_children record:', childDeleteError);
+                  // Continue even if this fails
                 }
+              }
+              
+              // Check for attendance records and delete them
+              try {
+                const { data: attendanceData, error: attendanceCheckError } = await supabase
+                  .from('attendance')
+                  .select('id')
+                  .eq('player_id', playerId);
+                
+                if (!attendanceCheckError && attendanceData && attendanceData.length > 0) {
+                  console.log(`Found ${attendanceData.length} attendance records to delete`);
+                  
+                  const { error: attendanceDeleteError } = await supabase
+                    .from('attendance')
+                    .delete()
+                    .eq('player_id', playerId);
+                  
+                  if (attendanceDeleteError) {
+                    console.error('Error deleting attendance records:', attendanceDeleteError);
+                  } else {
+                    console.log('Successfully deleted attendance records');
+                  }
+                }
+              } catch (error) {
+                console.error('Error checking attendance records:', error);
+                // Continue even if this fails
+              }
+              
+              // Now delete the player record completely
+              const { error: deleteError } = await supabase
+                .from('players')
+                .delete()
+                .eq('id', playerId);
+                
+              if (deleteError) {
+                console.error('Error deleting player:', deleteError);
+                throw new Error('Failed to delete player');
               }
               
               // Trigger event to notify other screens
