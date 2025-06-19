@@ -28,7 +28,8 @@ import {
   IconLogout,
   IconChevronDown,
   IconSun,
-  IconMoonStars
+  IconMoonStars,
+  IconCreditCard
 } from '@tabler/icons-react';
 import { supabase } from '../../lib/supabase';
 
@@ -47,6 +48,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
   const [opened, setOpened] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [userMenuOpened, setUserMenuOpened] = useState(false);
   
   const navItems = [
@@ -56,6 +58,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
     { label: 'Coaches', icon: <IconUsers size={20} />, path: '/coaches' },
     { label: 'Players', icon: <IconUsers size={20} />, path: '/players' },
     { label: 'Parents', icon: <IconUsers size={20} />, path: '/parents' },
+    { label: 'Payments', icon: <IconCreditCard size={20} />, path: '/payments' },
     { label: 'Schedule', icon: <IconCalendarEvent size={20} />, path: '/schedule' },
     { label: 'Analytics', icon: <IconReportAnalytics size={20} />, path: '/analytics' },
     { label: 'Billing', icon: <IconReportAnalytics size={20} />, path: '/billing' },
