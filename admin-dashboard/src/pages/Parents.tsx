@@ -14,10 +14,9 @@ import {
   Card,
   Tabs,
   Box,
-  Alert,
-  Stack
+  CloseButton
 } from '@mantine/core';
-import { IconSearch, IconEye, IconPhone, IconMail, IconUserCheck, IconAlertCircle } from '@tabler/icons-react';
+import { IconSearch, IconEye, IconPhone, IconMail, IconUserCheck } from '@tabler/icons-react';
 import { supabase } from '../lib/supabase';
 
 interface Parent {
@@ -32,19 +31,21 @@ interface Parent {
   updated_at: string;
   team_id: string | null;
   children_count: number;
-  children: Player[];
+  children: Child[];
 }
 
-interface Player {
+interface Child {
   id: string;
   full_name: string;
+  team_id: string | null;
   team_name: string | null;
   club_name: string | null;
 }
 
-// The ID of the most tested parent
-const MOST_TESTED_PARENT_USER_ID = '0d143f30-0f6b-47bb-ade0-e64fbecadf60';
-const MOST_TESTED_PARENT_ID = 'f6aac5dd-35de-4c6a-86eb-810e913ae02a';
+interface TeamData {
+  name: string;
+  clubs: { name: string }[] | null;
+}
 
 const Parents: React.FC = () => {
   const [parents, setParents] = useState<Parent[]>([]);
@@ -53,7 +54,6 @@ const Parents: React.FC = () => {
   const [activePage, setActivePage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [selectedParent, setSelectedParent] = useState<Parent | null>(null);
-  const [mostTestedParent, setMostTestedParent] = useState<Parent | null>(null);
   const [totalCount, setTotalCount] = useState(0);
   const itemsPerPage = 10;
 
@@ -94,46 +94,17 @@ const Parents: React.FC = () => {
       if (parentsError) throw parentsError;
       
       if (parentsData) {
-        // For each parent, get their children
+        // Create a base array of parents with empty children arrays
+        const parentsWithEmptyChildren = parentsData.map(parent => ({
+          ...parent,
+          children_count: 0,
+          children: []
+        }));
+        
+        // Fetch children for each parent
         const parentsWithChildren = await Promise.all(
-          parentsData.map(async (parent) => {
-            // Get children for this parent
-            const { data: childrenData, error: childrenError } = await supabase
-              .from('parent_children')
-              .select(`
-                player_id,
-                players (
-                  id,
-                  full_name,
-                  team_id,
-                  teams (
-                    name,
-                    club_id,
-                    clubs (
-                      name
-                    )
-                  )
-                )
-              `)
-              .eq('parent_id', parent.id);
-            
-            if (childrenError) {
-              console.error('Error fetching children:', childrenError);
-              return {
-                ...parent,
-                children_count: 0,
-                children: []
-              };
-            }
-            
-            // Format children data
-            const children = childrenData.map((child: any) => ({
-              id: child.player_id,
-              full_name: child.players?.full_name || 'Unknown',
-              team_name: child.players?.teams?.name || null,
-              club_name: child.players?.teams?.clubs?.name || null
-            }));
-            
+          parentsWithEmptyChildren.map(async (parent) => {
+            const children = await fetchChildrenForParent(parent.id);
             return {
               ...parent,
               children_count: children.length,
@@ -144,52 +115,74 @@ const Parents: React.FC = () => {
         
         setParents(parentsWithChildren);
       }
-      
-      // Separately fetch the most tested parent
-      const { data: testedParentData, error: testedParentError } = await supabase
-        .from('parents')
-        .select('*')
-        .eq('id', MOST_TESTED_PARENT_ID)
-        .single();
-      
-      if (!testedParentError && testedParentData) {
-        // Get children for this parent
-        const { data: childrenData } = await supabase
-          .from('parent_children')
-          .select(`
-            player_id,
-            players (
-              id,
-              full_name,
-              team_id,
-              teams (
-                name,
-                club_id,
-                clubs (
-                  name
-                )
-              )
-            )
-          `)
-          .eq('parent_id', testedParentData.id);
-        
-        const children = (childrenData || []).map((child: any) => ({
-          id: child.player_id,
-          full_name: child.players?.full_name || 'Unknown',
-          team_name: child.players?.teams?.name || null,
-          club_name: child.players?.teams?.clubs?.name || null
-        }));
-        
-        setMostTestedParent({
-          ...testedParentData,
-          children_count: children.length,
-          children
-        });
-      }
     } catch (error) {
       console.error('Error fetching parents:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchChildrenForParent = async (parentId: string): Promise<Child[]> => {
+    try {
+      // Fetch parent_children records for this parent
+      const { data: parentChildren, error: pcError } = await supabase
+        .from('parent_children')
+        .select('id, full_name, team_id')
+        .eq('parent_id', parentId)
+        .eq('is_active', true);
+
+      if (pcError) throw pcError;
+      
+      if (!parentChildren || parentChildren.length === 0) {
+        return [];
+      }
+      
+      // For each child, try to get team information
+      const childrenWithTeams = await Promise.all(
+        parentChildren.map(async (child) => {
+          let teamName = null;
+          let clubName = null;
+          
+          if (child.team_id) {
+            // Get team info first
+            const { data: teamData } = await supabase
+              .from('teams')
+              .select('name, club_id')
+              .eq('id', child.team_id)
+              .single();
+              
+            if (teamData) {
+              teamName = teamData.name;
+              
+              // If we have a club_id, fetch the club name
+              if (teamData.club_id) {
+                const { data: clubData } = await supabase
+                  .from('clubs')
+                  .select('name')
+                  .eq('id', teamData.club_id)
+                  .single();
+                  
+                if (clubData) {
+                  clubName = clubData.name;
+                }
+              }
+            }
+          }
+          
+          return {
+            id: child.id,
+            full_name: child.full_name,
+            team_id: child.team_id,
+            team_name: teamName,
+            club_name: clubName
+          };
+        })
+      );
+      
+      return childrenWithTeams;
+    } catch (error) {
+      console.error('Error fetching children for parent:', error);
+      return [];
     }
   };
 
@@ -202,12 +195,22 @@ const Parents: React.FC = () => {
     setActivePage(1); // Reset to first page on new search
   };
 
-  const handleParentSelect = (parent: Parent) => {
-    setSelectedParent(parent);
+  const handleParentSelect = async (parent: Parent) => {
+    // If we're selecting a parent, make sure we have the latest children data
+    if (parent) {
+      const children = await fetchChildrenForParent(parent.id);
+      setSelectedParent({
+        ...parent,
+        children_count: children.length,
+        children
+      });
+    } else {
+      setSelectedParent(null);
+    }
   };
 
-  const isTestParent = (parent: Parent) => {
-    return parent.user_id === MOST_TESTED_PARENT_USER_ID || parent.id === MOST_TESTED_PARENT_ID;
+  const handleCloseDetails = () => {
+    setSelectedParent(null);
   };
 
   if (loading && parents.length === 0) {
@@ -221,28 +224,6 @@ const Parents: React.FC = () => {
   return (
     <>
       <Title order={2} mb="md">Parents</Title>
-      
-      {mostTestedParent && (
-        <Alert 
-          icon={<IconAlertCircle size={16} />} 
-          title="Most Tested Parent" 
-          color="blue" 
-          mb="md"
-          withCloseButton={false}
-        >
-          <Group position="apart">
-            <div>
-              <Text weight={500}>{mostTestedParent.name}</Text>
-              <Text size="xs">Phone: {mostTestedParent.phone_number}</Text>
-              <Text size="xs">Email: {mostTestedParent.email}</Text>
-              <Text size="xs">User ID: {mostTestedParent.user_id || 'None'}</Text>
-            </div>
-            <ActionIcon onClick={() => handleParentSelect(mostTestedParent)} color="blue">
-              <IconEye size={16} />
-            </ActionIcon>
-          </Group>
-        </Alert>
-      )}
       
       <Group position="apart" mb="md">
         <Group>
@@ -268,20 +249,19 @@ const Parents: React.FC = () => {
                 <th>Phone</th>
                 <th>Email</th>
                 <th>Status</th>
-                <th>IDs</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {parents.length === 0 ? (
                 <tr>
-                  <td colSpan={6}>
+                  <td colSpan={5}>
                     <Text align="center">No parents found</Text>
                   </td>
                 </tr>
               ) : (
                 parents.map((parent) => (
-                  <tr key={parent.id} style={isTestParent(parent) ? { backgroundColor: '#f0f9ff' } : undefined}>
+                  <tr key={parent.id}>
                     <td>{parent.name}</td>
                     <td>
                       <Group spacing="xs">
@@ -302,16 +282,6 @@ const Parents: React.FC = () => {
                       <Badge color={parent.is_active ? 'green' : 'red'}>
                         {parent.is_active ? 'Active' : 'Inactive'}
                       </Badge>
-                    </td>
-                    <td>
-                      <Stack spacing={4}>
-                        {parent.user_id && (
-                          <Text size="xs" color="dimmed">User: {parent.user_id.substring(0, 8)}...</Text>
-                        )}
-                        {parent.team_id && (
-                          <Text size="xs" color="dimmed">Team: {parent.team_id.substring(0, 8)}...</Text>
-                        )}
-                      </Stack>
                     </td>
                     <td>
                       <ActionIcon onClick={() => handleParentSelect(parent)}>
@@ -341,10 +311,8 @@ const Parents: React.FC = () => {
               <Group position="apart">
                 <Text weight={500}>
                   Parent Details
-                  {isTestParent(selectedParent) && (
-                    <Badge ml="xs" color="blue">Most Tested</Badge>
-                  )}
                 </Text>
+                <CloseButton onClick={handleCloseDetails} />
               </Group>
             </Card.Section>
             
@@ -376,29 +344,6 @@ const Parents: React.FC = () => {
                   {selectedParent.is_active ? 'Active' : 'Inactive'}
                 </Badge>
               </Group>
-              
-              <Group mt="md" position="apart">
-                <Text size="sm" weight={500}>IDs:</Text>
-              </Group>
-              
-              <Group mt="xs" spacing="xs">
-                <Text size="sm">Parent ID:</Text>
-                <Text size="xs" color="dimmed">{selectedParent.id}</Text>
-              </Group>
-              
-              {selectedParent.user_id && (
-                <Group mt="xs" spacing="xs">
-                  <Text size="sm">User ID:</Text>
-                  <Text size="xs" color="dimmed">{selectedParent.user_id}</Text>
-                </Group>
-              )}
-              
-              {selectedParent.team_id && (
-                <Group mt="xs" spacing="xs">
-                  <Text size="sm">Team ID:</Text>
-                  <Text size="xs" color="dimmed">{selectedParent.team_id}</Text>
-                </Group>
-              )}
             </Box>
             
             <Tabs defaultValue="children" mt="md">
@@ -410,7 +355,7 @@ const Parents: React.FC = () => {
               
               <Tabs.Panel value="children" pt="md">
                 {selectedParent.children.length === 0 ? (
-                  <Text color="dimmed">No children registered</Text>
+                  <Text color="dimmed">No children found for this parent.</Text>
                 ) : (
                   <Table>
                     <thead>
@@ -424,8 +369,8 @@ const Parents: React.FC = () => {
                       {selectedParent.children.map((child) => (
                         <tr key={child.id}>
                           <td>{child.full_name}</td>
-                          <td>{child.team_name || 'N/A'}</td>
-                          <td>{child.club_name || 'N/A'}</td>
+                          <td>{child.team_name || 'Not assigned'}</td>
+                          <td>{child.club_name || 'Not assigned'}</td>
                         </tr>
                       ))}
                     </tbody>
