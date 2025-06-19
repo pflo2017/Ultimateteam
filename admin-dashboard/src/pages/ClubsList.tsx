@@ -76,13 +76,15 @@ const ClubsList: React.FC = () => {
         const { count: teamCount } = await supabase
           .from('teams')
           .select('id', { count: 'exact', head: true })
-          .eq('club_id', club.id);
+          .eq('club_id', club.id)
+          .eq('is_active', true);
         
         // Count coaches
         const { count: coachCount } = await supabase
           .from('coaches')
           .select('id', { count: 'exact', head: true })
-          .eq('club_id', club.id);
+          .eq('club_id', club.id)
+          .eq('is_active', true);
         
         // Log the data for debugging
         console.log('Club data:', {

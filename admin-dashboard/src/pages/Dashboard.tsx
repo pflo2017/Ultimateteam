@@ -56,12 +56,6 @@ interface TopClub {
   activity_level: 'high' | 'medium' | 'low';
 }
 
-interface ClubWithPlayerCount {
-  id: string;
-  name: string;
-  player_count: number;
-}
-
 const Dashboard: React.FC = () => {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
@@ -77,13 +71,6 @@ const Dashboard: React.FC = () => {
     try {
       // In a real app, we'd fetch this data from Supabase
       // For now, we'll use mock data
-      
-      // Fetch clubs count
-      const { count: clubsCount, error: clubsError } = await supabase
-        .from('clubs')
-        .select('*', { count: 'exact', head: true });
-      
-      if (clubsError) throw clubsError;
       
       // Fetch active clubs count
       const { count: activeClubsCount, error: activeClubsError } = await supabase
@@ -101,24 +88,27 @@ const Dashboard: React.FC = () => {
       
       if (suspendedClubsError) throw suspendedClubsError;
       
-      // Fetch players count
+      // Fetch active players count
       const { count: playersCount, error: playersError } = await supabase
         .from('players')
-        .select('*', { count: 'exact', head: true });
+        .select('*', { count: 'exact', head: true })
+        .eq('is_active', true);
       
       if (playersError) throw playersError;
       
-      // Fetch teams count
+      // Fetch active teams count
       const { count: teamsCount, error: teamsError } = await supabase
         .from('teams')
-        .select('*', { count: 'exact', head: true });
+        .select('*', { count: 'exact', head: true })
+        .eq('is_active', true);
       
       if (teamsError) throw teamsError;
       
       // Fetch coaches count
       const { count: coachesCount, error: coachesError } = await supabase
         .from('coaches')
-        .select('*', { count: 'exact', head: true });
+        .select('*', { count: 'exact', head: true })
+        .eq('is_active', true);
       
       if (coachesError) throw coachesError;
       
@@ -131,7 +121,8 @@ const Dashboard: React.FC = () => {
       
       const { count: parentCount, error: parentError } = await supabase
         .from('parents')
-        .select('*', { count: 'exact', head: true });
+        .select('*', { count: 'exact', head: true })
+        .eq('is_active', true);
         
       if (parentError) throw parentError;
       
@@ -139,7 +130,7 @@ const Dashboard: React.FC = () => {
       
       // Set stats
       setStats({
-        totalClubs: clubsCount || 0,
+        totalClubs: activeClubsCount || 0, // Only count active clubs in the total
         totalUsers: totalUsers,
         totalPlayers: playersCount || 0,
         totalTeams: teamsCount || 0,
@@ -182,8 +173,7 @@ const Dashboard: React.FC = () => {
       try {
         // Get top clubs data using the get_top_clubs function
         const { data: topClubsData, error: topClubsError } = await supabase
-          .rpc('get_top_clubs')
-          .limit(5);
+          .rpc('get_top_clubs');
           
         if (topClubsError) throw topClubsError;
         

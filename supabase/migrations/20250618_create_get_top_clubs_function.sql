@@ -12,51 +12,58 @@ SECURITY DEFINER
 AS $$
 BEGIN
   RETURN QUERY
-  WITH club_player_counts AS (
+  -- Get all active clubs first
+  WITH active_clubs AS (
     SELECT 
-      c.id AS club_id,
-      c.name AS club_name,
+      c.id,
+      c.name
+    FROM 
+      clubs c
+    WHERE 
+      c.is_suspended = false
+  ),
+  -- Count active players per club using direct club_id (same as dashboard)
+  club_player_counts AS (
+    SELECT 
+      p.club_id,
       COUNT(p.id) AS player_count
     FROM 
-      clubs c
-    LEFT JOIN 
-      teams t ON t.club_id = c.id
-    LEFT JOIN 
-      players p ON p.team_id = t.id
+      players p
     WHERE 
-      c.is_suspended = false
+      p.is_active = true
     GROUP BY 
-      c.id, c.name
+      p.club_id
   ),
+  -- Count active teams per club using direct club_id (same as dashboard)
   club_team_counts AS (
     SELECT 
-      c.id AS club_id,
+      t.club_id,
       COUNT(t.id) AS team_count
     FROM 
-      clubs c
-    LEFT JOIN 
-      teams t ON t.club_id = c.id
+      teams t
     WHERE 
-      c.is_suspended = false
+      t.is_active = true
     GROUP BY 
-      c.id
+      t.club_id
   )
+  -- Join everything together
   SELECT 
-    cpc.club_id AS id,
-    cpc.club_name AS name,
-    cpc.player_count,
+    ac.id,
+    ac.name,
+    COALESCE(cpc.player_count, 0) AS player_count,
     COALESCE(ctc.team_count, 0) AS team_count,
     CASE 
-      WHEN cpc.player_count > 100 THEN 'high'
-      WHEN cpc.player_count > 50 THEN 'medium'
+      WHEN COALESCE(cpc.player_count, 0) > 100 THEN 'high'
+      WHEN COALESCE(cpc.player_count, 0) > 50 THEN 'medium'
       ELSE 'low'
     END AS activity_level
   FROM 
-    club_player_counts cpc
+    active_clubs ac
   LEFT JOIN 
-    club_team_counts ctc ON cpc.club_id = ctc.club_id
+    club_player_counts cpc ON ac.id = cpc.club_id
+  LEFT JOIN 
+    club_team_counts ctc ON ac.id = ctc.club_id
   ORDER BY 
-    cpc.player_count DESC
-  LIMIT 5;
+    player_count DESC;
 END;
 $$;
