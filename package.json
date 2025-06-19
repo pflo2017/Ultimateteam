@@ -89,7 +89,8 @@
     "util": "^0.12.5",
     "vm-browserify": "0.0.4",
     "whatwg-url-without-unicode": "^8.0.0-3",
-    "yup": "^1.6.1"
+    "yup": "^1.6.1",
+    "expo-dev-client": "~5.2.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
