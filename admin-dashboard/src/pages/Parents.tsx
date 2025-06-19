@@ -42,11 +42,6 @@ interface Child {
   club_name: string | null;
 }
 
-interface TeamData {
-  name: string;
-  clubs: { name: string }[] | null;
-}
-
 const Parents: React.FC = () => {
   const [parents, setParents] = useState<Parent[]>([]);
   const [loading, setLoading] = useState(true);
