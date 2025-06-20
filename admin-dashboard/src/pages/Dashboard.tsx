@@ -97,13 +97,23 @@ const Dashboard: React.FC = () => {
       if (playersError) throw playersError;
       
       // Fetch active teams count
-      const { count: teamsCount, error: teamsError } = await supabase
+      // Fetch full team details to debug why count is wrong
+      const { data: teamsData, error: teamsDataError } = await supabase
         .from('teams')
-        .select('*', { count: 'exact', head: true })
-        .eq('is_active', true)
-        .not('club_id', 'is', null);  // Only count teams that have a club assigned
+        .select('id, name, club_id, is_active')
+        .eq('is_active', true);
       
-      if (teamsError) throw teamsError;
+      if (teamsDataError) throw teamsDataError;
+
+      console.log('All active teams:', teamsData);
+      
+      // Filter teams with club_id to get accurate count
+      const validTeams = teamsData?.filter(team => team.club_id !== null) || [];
+      console.log('Valid teams (with club_id):', validTeams);
+      console.log('Valid teams count:', validTeams.length);
+      
+      // Use the filtered count instead of the query count
+      const teamsCount = validTeams.length;
       
       // Fetch coaches count
       const { count: coachesCount, error: coachesError } = await supabase
@@ -134,7 +144,7 @@ const Dashboard: React.FC = () => {
         totalClubs: activeClubsCount || 0, // Only count active clubs in the total
         totalUsers: totalUsers,
         totalPlayers: playersCount || 0,
-        totalTeams: teamsCount || 0,
+        totalTeams: teamsCount,
         totalCoaches: coachesCount || 0,
         activeClubs: activeClubsCount || 0,
         suspendedClubs: suspendedClubsCount || 0,
