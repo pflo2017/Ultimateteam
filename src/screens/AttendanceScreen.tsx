@@ -773,7 +773,7 @@ export const AttendanceScreen = () => {
                 style={[styles.reportCard, idx > 0 && { marginTop: 16 }]}
                 activeOpacity={0.8}
                 onPress={() => navigation.navigate('AttendanceReportDetails', { 
-                  activityId: record.activity.id, // Use the full activity ID
+                  activityId: record.activity.id, // Use the full activity ID including date suffix
                   selectedDate: format(selectedDate, 'yyyy-MM-dd') 
                 })}
               >

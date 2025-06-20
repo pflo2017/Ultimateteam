@@ -24,6 +24,8 @@ interface CoachData {
   club_id: string;
   is_active: boolean;
   phone_number: string;
+  email?: string;
+  user_id?: string;
 }
 
 export const CoachLoginScreen = () => {
@@ -187,6 +189,7 @@ export const CoachLoginScreen = () => {
               club_id: coach.club_id, 
               is_active: coach.is_active, 
               phone_number: coach.phone_number, 
+              email: email || undefined,
               user_id: userId 
             }));
             
@@ -269,7 +272,8 @@ export const CoachLoginScreen = () => {
         name: coach.name, 
         club_id: coach.club_id, 
         is_active: coach.is_active, 
-        phone_number: coach.phone_number, 
+        phone_number: coach.phone_number,
+        email: email || undefined,
         user_id: userId 
       }));
       
@@ -329,13 +333,27 @@ export const CoachLoginScreen = () => {
           }
         }
 
-        // Store coach data in AsyncStorage with the updated user_id
+        // Fetch the latest coach data to get the email field
+        const { data: updatedCoachData, error: fetchError } = await supabase
+          .from('coaches')
+          .select('*')
+          .eq('id', coach.id)
+          .single();
+          
+        if (fetchError) {
+          console.error('Error fetching updated coach data:', fetchError);
+        }
+        
+        const emailToStore = updatedCoachData?.email || data.user?.email || coach.email || undefined;
+        
+        // Store coach data in AsyncStorage with the updated user_id and email
         await AsyncStorage.setItem('coach_data', JSON.stringify({ 
           id: coach.id, 
           name: coach.name, 
           club_id: coach.club_id, 
           is_active: coach.is_active, 
-          phone_number: coach.phone_number, 
+          phone_number: coach.phone_number,
+          email: emailToStore,
           user_id: data.user.id 
         }));
         

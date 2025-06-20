@@ -7,20 +7,8 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../types/navigation';
 import { supabase } from '../lib/supabase';
-import { Activity, getActivitiesByDateRange, getUserClubId } from '../services/activitiesService';
+import { Activity, getActivitiesByDateRange, getUserClubId, generateActivityIdForDate } from '../services/activitiesService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-// Utility function to extract the base UUID from a recurring activity ID
-// NOTE: We're keeping this function for reference, but we'll now use the FULL activity ID
-// to ensure each recurring instance has its own independent attendance data
-const extractBaseActivityId = (id: string): string => {
-  // Check if the ID has a date suffix (format: uuid-date)
-  if (id.includes('-2025') || id.includes('-2024')) {
-    // Extract the base UUID part (first 36 characters which is a standard UUID)
-    return id.substring(0, 36);
-  }
-  return id;
-};
 
 export default function AddAttendanceScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -91,78 +79,92 @@ export default function AddAttendanceScreen() {
     try {
       console.log('[AddAttendanceScreen] Fetching activity details for:', actId);
       
-      // Check if the ID has a date suffix (format: uuid-date)
-      let baseActivityId = actId;
-      let activityDate = null;
-      
-      if (actId.includes('-202')) { // Check for date suffix like -20250613
-        // Extract the base UUID and date parts
-        const parts = actId.split('-');
-        if (parts.length > 4) { // Standard UUID has 5 parts, so anything more has a date suffix
-          const dateSuffix = parts.pop(); // Get the date part
-          baseActivityId = parts.join('-'); // Reconstruct the base UUID
-          activityDate = dateSuffix;
-          console.log('[AddAttendanceScreen] Extracted base activity ID:', baseActivityId);
-          console.log('[AddAttendanceScreen] Extracted date suffix:', activityDate);
-        }
-      }
-      
-      // First try to find the exact activity with the full ID
-      let { data: activityData, error: activityError } = await supabase
+      // Try to find the exact activity with the full ID
+      const { data: activityData, error: activityError } = await supabase
         .from('activities')
         .select('*')
         .eq('id', actId)
         .single();
       
-      // If not found with the full ID, try with the base ID
-      if (activityError && baseActivityId !== actId) {
-        console.log('[AddAttendanceScreen] Activity not found with full ID, trying with base ID:', baseActivityId);
-        
-        // Try to find the base activity
-        const { data: baseActivityData, error: baseActivityError } = await supabase
-          .from('activities')
-          .select('*')
-          .eq('id', baseActivityId)
-          .single();
-        
-        if (!baseActivityError && baseActivityData) {
-          activityData = baseActivityData;
-          activityError = null;
-          
-          // If we found the base activity and have a date suffix, update the ID to match the requested ID
-          if (activityData && activityDate) {
-            activityData.id = actId;
-          }
-        }
-      }
-      
+      // If error fetching the activity, look for base activity if this is a recurring instance
       if (activityError) {
-        console.error('[AddAttendanceScreen] Error fetching activity:', activityError);
+        console.log('[AddAttendanceScreen] Error fetching activity with full ID:', activityError.message);
         
-        // As a last resort, try to find by title pattern if we have a date
-        if (activityDate) {
-          console.log('[AddAttendanceScreen] Trying to find activity by date:', activityDate);
-          const { data: dateActivities, error: dateError } = await supabase
+        // Handle composite IDs (UUID-date format)
+        const compositeIdMatch = actId.match(/^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-(\d{8})$/i);
+        
+        if (compositeIdMatch) {
+          const baseId = compositeIdMatch[1]; // Base UUID
+          console.log('[AddAttendanceScreen] Trying with base ID:', baseId);
+            
+          const { data: baseActivity, error: baseError } = await supabase
             .from('activities')
             .select('*')
-            .ilike('start_time', `%${activityDate.substring(0, 4)}-${activityDate.substring(4, 6)}-${activityDate.substring(6, 8)}%`);
+            .eq('id', baseId)
+            .single();
+              
+          if (!baseError && baseActivity) {
+            console.log('[AddAttendanceScreen] Found base activity:', baseActivity.title);
             
-          if (!dateError && dateActivities && dateActivities.length > 0) {
-            console.log('[AddAttendanceScreen] Found activities by date:', dateActivities.length);
-            activityData = dateActivities[0];
-            activityData.id = actId; // Use the original ID for consistency
-            activityError = null;
+            // Create a recurring instance from the base activity
+            const year = parseInt(compositeIdMatch[2].substring(0, 4));
+            const month = parseInt(compositeIdMatch[2].substring(4, 6)) - 1;
+            const day = parseInt(compositeIdMatch[2].substring(6, 8));
+            const instanceDate = new Date(year, month, day);
+            
+            // Create a new activity instance with the correct date and ID
+            const baseStartDate = new Date(baseActivity.start_time);
+            const newStartDate = new Date(instanceDate);
+            newStartDate.setHours(
+              baseStartDate.getHours(), 
+              baseStartDate.getMinutes(),
+              baseStartDate.getSeconds()
+            );
+            
+            const instanceActivity = {
+              ...baseActivity,
+              id: actId, // Use the full composite ID
+              start_time: newStartDate.toISOString(),
+              parent_activity_id: baseId,
+              is_recurring_instance: true
+            };
+            
+            // If end_time exists, adjust it too
+            if (baseActivity.end_time) {
+              const baseEndDate = new Date(baseActivity.end_time);
+              const duration = baseEndDate.getTime() - baseStartDate.getTime();
+              instanceActivity.end_time = new Date(newStartDate.getTime() + duration).toISOString();
+            }
+            
+            // Set the activity and its team
+            console.log('[AddAttendanceScreen] Created recurring instance:', instanceActivity.title, 'for date:', instanceDate.toISOString().split('T')[0]);
+            setSelectedActivity(instanceActivity);
+            setActivityFetched(true);
+            
+            // Fetch team if needed
+            if (instanceActivity.team_id && !selectedTeam) {
+              const { data: teamData } = await supabase
+                .from('teams')
+                .select('id, name')
+                .eq('id', instanceActivity.team_id)
+                .single();
+              
+              if (teamData) {
+                console.log('[AddAttendanceScreen] Setting team from activity:', teamData);
+                setSelectedTeam(teamData);
+              }
+            }
+            
+            return;
           }
         }
         
-        if (activityError) {
-          return;
-        }
+        console.log('[AddAttendanceScreen] Could not find activity with ID:', actId);
+        return;
       }
       
       if (activityData) {
-        console.log('[AddAttendanceScreen] Found activity:', activityData);
-        // Set the activity directly
+        console.log('[AddAttendanceScreen] Found activity:', activityData.title);
         setSelectedActivity(activityData);
         setActivityFetched(true);
         
@@ -351,31 +353,13 @@ export default function AddAttendanceScreen() {
         title: selectedActivity.title
       });
       
-      // First try with the exact ID
-      let { data, error } = await supabase
+      // Always use the exact ID - don't fall back to base ID
+      const { data, error } = await supabase
         .from('activity_attendance')
         .select('*')
         .eq('activity_id', activityIdToUse);
-        
-      // If no records found and we have a composite ID, try with the base ID
-      if ((!data || data.length === 0) && activityIdToUse.includes('-202')) {
-        const parts = activityIdToUse.split('-');
-        if (parts.length > 4) {
-          const baseId = parts.slice(0, 5).join('-'); // Take first 5 parts which form the UUID
-          console.log('[AddAttendanceScreen] No records found with full ID, trying base ID:', baseId);
-          
-          const { data: baseData, error: baseError } = await supabase
-            .from('activity_attendance')
-            .select('*')
-            .eq('activity_id', baseId);
-            
-          if (!baseError && baseData && baseData.length > 0) {
-            console.log('[AddAttendanceScreen] Found attendance records with base ID:', baseData.length);
-            data = baseData;
-            error = null;
-          }
-        }
-      }
+      
+      // DO NOT try with the base ID anymore - each instance should have its own attendance
         
       if (!error && data) {
         console.log('[AddAttendanceScreen] Found attendance records:', data.length);
@@ -384,6 +368,10 @@ export default function AddAttendanceScreen() {
           return acc;
         }, {});
         setAttendance(attendanceMap);
+      } else {
+        // Clear any existing attendance data for this new activity
+        setAttendance({});
+        console.log('[AddAttendanceScreen] No attendance records found for this activity instance - starting fresh');
       }
     } catch (e) { 
       console.error('[AddAttendanceScreen] Error in loadAttendance:', e); 

@@ -12,18 +12,6 @@ import { Activity, getActivityById } from '../services/activitiesService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CommonActions } from '@react-navigation/native';
 
-// Utility function to extract the base UUID from a recurring activity ID
-// NOTE: We're keeping this function for reference, but we'll now use the FULL activity ID
-// to ensure each recurring instance has its own independent attendance data
-const extractBaseActivityId = (id: string): string => {
-  // Check if the ID has a date suffix (format: uuid-date)
-  if (id.includes('-2025') || id.includes('-2024')) {
-    // Extract the base UUID part (first 36 characters which is a standard UUID)
-    return id.substring(0, 36);
-  }
-  return id;
-};
-
 // Helper function to capitalize first letter
 const capitalize = (str: string | null | undefined) => {
   if (!str) return '';
@@ -116,7 +104,8 @@ export const AttendanceReportDetailsScreen = () => {
       setIsLoading(true);
       setError(null);
       try {
-        // Fetch attendance records using the new view
+        // Fetch attendance records using the FULL activity ID
+        console.log(`[AttendanceReportDetailsScreen] Fetching attendance records for activity ID: ${activityId}`);
         const { data: attendanceData, error: attendanceError } = await supabase
           .from('attendance_with_correct_dates')
           .select('*')
@@ -125,7 +114,7 @@ export const AttendanceReportDetailsScreen = () => {
         if (attendanceError) throw attendanceError;
         
         // Fetch activity details - use the full activity ID
-        console.log(`Getting activity details for ID: ${activityId}`);
+        console.log(`[AttendanceReportDetailsScreen] Getting activity details for ID: ${activityId}`);
         const { data: activityData, error: activityError } = await getActivityById(activityId);
         
         if (activityError) throw activityError;

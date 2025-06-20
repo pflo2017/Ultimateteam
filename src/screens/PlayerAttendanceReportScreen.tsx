@@ -5,6 +5,7 @@ import { COLORS, SPACING } from '../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 import { useRoute, useNavigation } from '@react-navigation/native';
+import { fetchPlayerAttendanceStats } from '../services/attendanceService';
 
 // Define proper types for better type safety
 interface ActivityType {
@@ -107,16 +108,22 @@ const PlayerAttendanceReportScreen = () => {
       try {
         console.log('Fetching attendance for playerId:', playerId);
         
-        // Use the new view instead of the raw table
-        const { data: attendanceData, error: attendanceError } = await supabase
-          .from('attendance_with_correct_dates')
-          .select('*')
-          .eq('player_id', playerId);
-          
-        if (attendanceError) {
-          console.error('Supabase error:', attendanceError);
-          throw new Error(`Failed to fetch attendance: ${attendanceError.message}`);
-        }
+        // Calculate date range for the selected month
+        const startDate = new Date(selectedYear, selectedMonth, 1);
+        const endDate = new Date(selectedYear, selectedMonth + 1, 0); // Last day of month
+        
+        // Format dates for the query
+        const startDateStr = startDate.toISOString();
+        const endDateStr = endDate.toISOString();
+        
+        // Use the new attendance service function that handles composite IDs correctly
+        const attendanceData = await fetchPlayerAttendanceStats(
+          playerId,
+          undefined, // No team filter needed here
+          startDateStr,
+          endDateStr,
+          selectedActivityType === 'all' ? undefined : selectedActivityType
+        );
         
         if (!attendanceData || attendanceData.length === 0) {
           console.log('No attendance records found for player:', playerId);
@@ -130,7 +137,7 @@ const PlayerAttendanceReportScreen = () => {
         console.log('DEBUG - PlayerAttendanceReportScreen - All attendance records:', JSON.stringify(attendanceData, null, 2));
         
         // Process the records with the actual_activity_date from our view
-        const processedRecords = attendanceData.map(record => {
+        const processedRecords = attendanceData.map((record: any) => {
           const actDate = new Date(record.actual_activity_date);
           const dateStr = `${actDate.getFullYear()}${(actDate.getMonth() + 1).toString().padStart(2, '0')}${actDate.getDate().toString().padStart(2, '0')}`;
           
@@ -146,16 +153,18 @@ const PlayerAttendanceReportScreen = () => {
         });
         
         // Sort by actual_activity_date descending
-        processedRecords.sort((a, b) => {
-          const dateA = new Date(a.actual_activity_date);
-          const dateB = new Date(b.actual_activity_date);
+        processedRecords.sort((a: AttendanceRecord, b: AttendanceRecord) => {
+          const dateA = new Date(a.actual_activity_date || '');
+          const dateB = new Date(b.actual_activity_date || '');
           return dateB.getTime() - dateA.getTime();
         });
         
         setAttendanceRecords(processedRecords);
         
         // Filter by selected month, year, and activity type
-        const filtered = processedRecords.filter((rec) => {
+        const filtered = processedRecords.filter((rec: AttendanceRecord) => {
+          if (!rec.actual_activity_date) return false;
+          
           const date = new Date(rec.actual_activity_date);
           
           const matchesMonth = date.getMonth() === selectedMonth && date.getFullYear() === selectedYear;
@@ -172,7 +181,7 @@ const PlayerAttendanceReportScreen = () => {
         let present = 0, absent = 0;
         const byType: Record<string, { present: number, absent: number }> = {};
         
-        filtered.forEach((rec) => {
+        filtered.forEach((rec: AttendanceRecord) => {
           const type = rec.activity_type || 'other';
           
           if (!byType[type]) {

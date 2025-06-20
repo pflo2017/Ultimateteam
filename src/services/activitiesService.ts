@@ -371,85 +371,129 @@ export const getTeamActivities = async (teamId: string): Promise<ActivitiesRespo
  * Generate recurring activity instances based on repeat pattern
  */
 const generateRecurringInstances = (activity: Activity, startDate: string, endDate: string): Activity[] => {
-  if (!activity.is_repeating || !activity.repeat_type || !activity.repeat_until || !activity.id) {
+  if (!activity.is_repeating || !activity.repeat_type || !activity.repeat_until) {
     return [];
   }
-
+  
+  // Handle different repeat types
   const instances: Activity[] = [];
-  const start = parseISO(startDate);
-  const end = parseISO(endDate);
-  const repeatUntil = parseISO(activity.repeat_until);
-  const activityStart = parseISO(activity.start_time);
+  const baseActivity = { ...activity };
+  const start = new Date(activity.start_time);
+  const activityDate = new Date(start);
+  const repeatUntil = new Date(activity.repeat_until);
+  const rangeStart = new Date(startDate);
+  const rangeEnd = new Date(endDate);
   
-  // Don't process if the original activity is outside our range
-  if (isAfter(activityStart, end) || isAfter(start, repeatUntil)) {
-    return [];
-  }
-
-  let currentDate = activityStart;
+  let current: Date;
   
-  while (isBefore(currentDate, repeatUntil) || isSameDay(currentDate, repeatUntil)) {
-    // Skip the original instance as it's already in the data
-    if (!isSameDay(currentDate, activityStart)) {
-      // For weekly recurrence, check if this day of week is included
-      if (activity.repeat_type === 'weekly' && activity.repeat_days) {
-        const dayOfWeek = getDay(currentDate);
-        if (!activity.repeat_days.includes(dayOfWeek)) {
-          // Skip this date if it's not in the repeat days
-          currentDate = addDays(currentDate, 1);
-          continue;
+  // Handle different repeat types
+  switch (activity.repeat_type) {
+    case 'daily':
+      current = new Date(activityDate);
+      while (current <= repeatUntil && current <= rangeEnd) {
+        if (current >= rangeStart) {
+          const instance = createRecurringInstance(baseActivity, current);
+          instances.push(instance);
         }
+        current = addDays(current, 1);
       }
+      break;
       
-      // Only include dates that fall within our query range
-      if ((isBefore(currentDate, end) || isSameDay(currentDate, end)) && 
-          (isAfter(currentDate, start) || isSameDay(currentDate, start))) {
-        
-        // Calculate the time difference to maintain same time of day
-        const timeDiff = currentDate.getTime() - activityStart.getTime();
-        
-        // Create a unique, predictable ID for the recurring instance
-        const formattedDate = format(currentDate, 'yyyyMMdd');
-        const instanceId = `${activity.id}-${formattedDate}`;
-        
-        const instance: Activity = {
-          ...activity,
-          id: instanceId,
-          start_time: new Date(parseISO(activity.start_time).getTime() + timeDiff).toISOString(),
-          parent_activity_id: activity.id,
-          is_recurring_instance: true
-        };
-        
-        // If end_time exists, adjust it too
-        if (activity.end_time) {
-          instance.end_time = new Date(parseISO(activity.end_time).getTime() + timeDiff).toISOString();
+    case 'weekly':
+      if (!activity.repeat_days || activity.repeat_days.length === 0) {
+        // Default to the day of the week of the original activity
+        const dayOfWeek = getDay(activityDate);
+        current = new Date(activityDate);
+        while (current <= repeatUntil && current <= rangeEnd) {
+          if (current >= rangeStart) {
+            const instance = createRecurringInstance(baseActivity, current);
+            instances.push(instance);
+          }
+          current = addWeeks(current, 1);
         }
+      } else {
+        // For each specified day of the week, generate instances
+        const activityDayOfWeek = getDay(activityDate);
+        const activityTime = activityDate.getTime() - new Date(
+          activityDate.getFullYear(),
+          activityDate.getMonth(),
+          activityDate.getDate()
+        ).getTime();
         
-        instances.push(instance);
+        activity.repeat_days.forEach(day => {
+          // Get the first occurrence of this day of the week
+          let dayDiff = day - activityDayOfWeek;
+          if (dayDiff < 0) dayDiff += 7; // Wrap around to the next week
+          
+          const firstOccurrence = new Date(activityDate);
+          firstOccurrence.setDate(activityDate.getDate() + dayDiff);
+          
+          // Set the time component from the original activity
+          firstOccurrence.setTime(
+            new Date(
+              firstOccurrence.getFullYear(),
+              firstOccurrence.getMonth(),
+              firstOccurrence.getDate()
+            ).getTime() + activityTime
+          );
+          
+          // Generate weekly instances for this day
+          current = new Date(firstOccurrence);
+          while (current <= repeatUntil && current <= rangeEnd) {
+            if (current >= rangeStart) {
+              const instance = createRecurringInstance(baseActivity, current);
+              instances.push(instance);
+            }
+            current = addWeeks(current, 1);
+          }
+        });
       }
-    }
-    
-    // Advance to next occurrence based on repeat type
-    switch (activity.repeat_type) {
-      case 'daily':
-        currentDate = addDays(currentDate, 1);
-        break;
-      case 'weekly':
-        if (activity.repeat_days) {
-          currentDate = addDays(currentDate, 1);
-        } else {
-          currentDate = addWeeks(currentDate, 1);
+      break;
+      
+    case 'monthly':
+      current = new Date(activityDate);
+      while (current <= repeatUntil && current <= rangeEnd) {
+        if (current >= rangeStart) {
+          const instance = createRecurringInstance(baseActivity, current);
+          instances.push(instance);
         }
-        break;
-      case 'monthly':
-        currentDate = addMonths(currentDate, 1);
-        break;
-      default:
-        currentDate = addDays(currentDate, 1);
-    }
+        current = addMonths(current, 1);
+      }
+      break;
   }
   
   return instances;
+};
+
+const createRecurringInstance = (baseActivity: Activity, date: Date): Activity => {
+  // Create a copy of the base activity
+  const instance: Activity = { ...baseActivity };
+  
+  // Set the start time for this instance
+  const originalStart = new Date(baseActivity.start_time);
+  const newStart = new Date(date);
+  newStart.setHours(
+    originalStart.getHours(),
+    originalStart.getMinutes(),
+    originalStart.getSeconds(),
+    originalStart.getMilliseconds()
+  );
+  instance.start_time = newStart.toISOString();
+  
+  // Adjust end time if present
+  if (baseActivity.end_time) {
+    const originalEnd = new Date(baseActivity.end_time);
+    const duration = originalEnd.getTime() - originalStart.getTime();
+    const newEnd = new Date(newStart.getTime() + duration);
+    instance.end_time = newEnd.toISOString();
+  }
+  
+  // Generate unique ID for this instance
+  instance.id = generateActivityIdForDate(baseActivity.id, date);
+  instance.parent_activity_id = baseActivity.id;
+  instance.is_recurring_instance = true;
+  
+  return instance;
 };
 
 /**
@@ -758,4 +802,21 @@ export const updateGameScore = async (activityId: string, homeScore: number, awa
     console.error('Error updating game score:', error);
     return { error: error as Error };
   }
+};
+
+/**
+ * Generate a unique activity ID for a recurring activity instance on a specific date
+ * This ensures each recurring instance has its own unique ID by appending the date
+ */
+export const generateActivityIdForDate = (baseActivityId: string, date: Date): string => {
+  // Ensure we're using just the base ID (standard UUID)
+  const baseId = baseActivityId.includes('-202') 
+    ? baseActivityId.substring(0, 36)  // Extract base UUID if it already has a date suffix
+    : baseActivityId;
+  
+  // Format date as YYYYMMDD
+  const dateStr = format(date, 'yyyyMMdd');
+  
+  // Return the combined ID
+  return `${baseId}-${dateStr}`;
 }; 
