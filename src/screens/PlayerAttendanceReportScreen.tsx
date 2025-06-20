@@ -141,13 +141,28 @@ const PlayerAttendanceReportScreen = () => {
           const actDate = new Date(record.actual_activity_date);
           const dateStr = `${actDate.getFullYear()}${(actDate.getMonth() + 1).toString().padStart(2, '0')}${actDate.getDate().toString().padStart(2, '0')}`;
           
+          // Determine activity type for each record
+          let activityType = record.activity_type;
+          
+          // If activity_type is null, determine it based on activity_id pattern
+          if (!activityType) {
+            const activityId = record.activity_id || '';
+            if (activityId.includes('-202')) {
+              const baseId = activityId.substring(0, 36);
+              if (baseId === '25b127e6-0402-4ae3-b520-9f6a14823c55') {
+                activityType = 'training';
+              }
+            }
+          }
+          
           return {
             ...record,
             activity_date: dateStr,
+            activity_type: activityType, // Use the determined type
             activity: {
               id: record.base_activity_id,
               title: record.activity_title,
-              type: record.activity_type
+              type: activityType // Also set it in the activity object
             }
           };
         });
@@ -182,18 +197,19 @@ const PlayerAttendanceReportScreen = () => {
         const byType: Record<string, { present: number, absent: number }> = {};
         
         filtered.forEach((rec: AttendanceRecord) => {
-          const type = rec.activity_type || 'other';
+          // Determine the actual activity type using our helper function
+          const actualType = getActivityTypeForSummary(rec);
           
-          if (!byType[type]) {
-            byType[type] = { present: 0, absent: 0 };
+          if (!byType[actualType]) {
+            byType[actualType] = { present: 0, absent: 0 };
           }
           
           if (rec.status === 'present') {
             present++;
-            byType[type].present++;
+            byType[actualType].present++;
           } else if (rec.status === 'absent') {
             absent++;
-            byType[type].absent++;
+            byType[actualType].absent++;
           }
         });
         
@@ -214,6 +230,30 @@ const PlayerAttendanceReportScreen = () => {
     
     fetchAttendance();
   }, [playerId, selectedMonth, selectedYear, selectedActivityType]);
+  
+  // Helper to determine activity type for summary grouping
+  const getActivityTypeForSummary = (record: AttendanceRecord): string => {
+    // First check if we have a defined activity type
+    if (record.activity_type) {
+      return record.activity_type;
+    }
+    
+    // If we have a recurring activity with date suffix
+    const activityId = record.activity_id || '';
+    if (activityId.includes('-202')) {
+      const baseId = activityId.substring(0, 36);
+      if (baseId === '25b127e6-0402-4ae3-b520-9f6a14823c55') {
+        return 'training';
+      }
+    }
+    
+    // Use icon type as fallback
+    const iconName = getActivityTypeIcon(record.activity_type);
+    if (iconName === 'whistle') return 'training';
+    if (iconName === 'trophy-outline' || iconName === 'trophy') return 'game';
+    
+    return 'other';
+  };
 
   // Helper for activity type icon
   const getActivityTypeIcon = (type?: string): any => {
