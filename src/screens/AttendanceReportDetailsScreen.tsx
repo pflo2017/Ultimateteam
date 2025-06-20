@@ -108,7 +108,7 @@ export const AttendanceReportDetailsScreen = () => {
         console.log(`[AttendanceReportDetailsScreen] Fetching attendance records for activity ID: ${activityId}`);
         const { data: attendanceData, error: attendanceError } = await supabase
           .from('attendance_with_correct_dates')
-          .select('*, activity:activities(title, type)')
+          .select('*')
           .eq('activity_id', activityId);
         
         if (attendanceError) throw attendanceError;

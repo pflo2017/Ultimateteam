@@ -138,40 +138,102 @@ export const fetchTeamAttendanceStats = async (
     // Get player IDs
     const playerIds = players.map(p => p.id);
     
-    // Use the attendance_with_correct_dates view that handles composite IDs
-    let query = supabase
-      .from('attendance_with_correct_dates')
-      .select(`
-        player_id,
-        player_name,
-        status,
-        activity_id,
-        activity_title,
-        activity_type,
-        actual_activity_date
-      `)
-      .in('player_id', playerIds); // Filter by player IDs instead of team_id
+    // First get all activities for this team
+    const { data: activities, error: activitiesError } = await supabase
+      .from('activities')
+      .select('id, title, type, start_time')
+      .eq('team_id', teamId)
+      .order('start_time', { ascending: false });
     
+    if (activitiesError) {
+      console.error('Error loading activities for team', teamId, ':', activitiesError);
+      throw activitiesError;
+    }
+    
+    // Filter activities by type if needed
+    let filteredActivities = activities || [];
     if (activityType && activityType !== 'all') {
-      query = query.eq('activity_type', activityType);
+      filteredActivities = filteredActivities.filter(act => act.type === activityType);
     }
     
-    if (startDate) {
-      query = query.gte('actual_activity_date', startDate);
+    // Filter by date range
+    if (startDate || endDate) {
+      filteredActivities = filteredActivities.filter(act => {
+        const actDate = new Date(act.start_time);
+        let isInRange = true;
+        
+        if (startDate) {
+          const startDateObj = new Date(startDate);
+          isInRange = isInRange && actDate >= startDateObj;
+        }
+        
+        if (endDate) {
+          const endDateObj = new Date(endDate);
+          isInRange = isInRange && actDate <= endDateObj;
+        }
+        
+        return isInRange;
+      });
     }
     
-    if (endDate) {
-      query = query.lte('actual_activity_date', endDate);
+    if (filteredActivities.length === 0) {
+      return [];
     }
     
-    const { data, error } = await query;
+    // Get all activity IDs (including base IDs)
+    const activityIds = filteredActivities.map(a => a.id);
     
-    if (error) {
-      console.error('Error loading attendance for team', teamId, ':', error);
-      throw error;
+    // Now get attendance records for these players and activities
+    const { data: attendanceData, error: attendanceError } = await supabase
+      .from('activity_attendance')
+      .select('player_id, status, activity_id')
+      .in('player_id', playerIds);
+    
+    if (attendanceError) {
+      console.error('Error loading attendance records:', attendanceError);
+      throw attendanceError;
     }
     
-    return data || [];
+    // Create a map of activity data for easy lookup
+    const activityMap = new Map();
+    filteredActivities.forEach(act => {
+      activityMap.set(act.id, {
+        id: act.id,
+        title: act.title,
+        type: act.type,
+        start_time: act.start_time
+      });
+    });
+    
+    // Filter attendance records to only include those for our filtered activities
+    // This includes handling composite IDs (with date suffixes)
+    const relevantAttendance = (attendanceData || []).filter(record => {
+      // Extract base ID if it's a composite ID
+      const baseId = record.activity_id.includes('-202') 
+        ? record.activity_id.substring(0, 36)
+        : record.activity_id;
+      
+      return activityIds.includes(baseId);
+    });
+    
+    // Enrich attendance data with activity information
+    const enrichedAttendance = relevantAttendance.map(record => {
+      // Extract base ID if it's a composite ID
+      const baseId = record.activity_id.includes('-202') 
+        ? record.activity_id.substring(0, 36)
+        : record.activity_id;
+      
+      const activityInfo = activityMap.get(baseId);
+      
+      return {
+        ...record,
+        activity_title: activityInfo?.title || 'Unknown Activity',
+        activity_type: activityInfo?.type || 'other',
+        actual_activity_date: activityInfo?.start_time || new Date().toISOString()
+      };
+    });
+    
+    return enrichedAttendance;
   } catch (error) {
     console.error('Error in fetchTeamAttendanceStats:', error);
     throw error;
