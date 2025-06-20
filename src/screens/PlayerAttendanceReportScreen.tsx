@@ -420,7 +420,7 @@ const PlayerAttendanceReportScreen = () => {
                         <MaterialCommunityIcons 
                           name={getActivityTypeIcon(rec.activity_type)} 
                           size={18} 
-                          color={COLORS.primary} 
+                          color={rec.activity_type?.toLowerCase() === 'game' || getActivityTypeForSummary(rec) === 'game' ? '#E67E22' : COLORS.primary} 
                           style={{ marginRight: 6 }} 
                         />
                         <Text style={styles.activityTitle}>{getActivityTitle(rec)}</Text>
