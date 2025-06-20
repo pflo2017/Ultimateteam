@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Modal } from 'react-native';
 import { Text, TextInput, ActivityIndicator, Button } from 'react-native-paper';
 import { COLORS, SPACING } from '../constants/theme';
@@ -9,6 +9,9 @@ import type { RootStackParamList } from '../types/navigation';
 import { supabase } from '../lib/supabase';
 import { Activity, getActivitiesByDateRange, getUserClubId, generateActivityIdForDate } from '../services/activitiesService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+
+// Remove placeholder data - we're not using it anymore
 
 export default function AddAttendanceScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -21,6 +24,7 @@ export default function AddAttendanceScreen() {
   const [isLoadingActivities, setIsLoadingActivities] = useState(false);
   const [players, setPlayers] = useState<any[]>([]);
   const [isLoadingPlayers, setIsLoadingPlayers] = useState(false);
+  const playersRef = useRef<any[]>([]); // Add ref to store players during loading
   const [searchQuery, setSearchQuery] = useState('');
   const [attendance, setAttendance] = useState<{ [playerId: string]: 'present' | 'absent' | null }>({});
   const [isSaving, setIsSaving] = useState(false);
@@ -241,12 +245,34 @@ export default function AddAttendanceScreen() {
     }
   };
   const loadPlayers = async (teamId: string) => {
+    // Clear players first to prevent any UI flashing
+    setPlayers([]);
     setIsLoadingPlayers(true);
+    
     try {
-      const { data, error } = await supabase.from('players').select('id, name, team_id').eq('team_id', teamId).eq('is_active', true).order('name');
-      if (!error && data) setPlayers(data);
-    } catch (e) { console.error(e); }
-    setIsLoadingPlayers(false);
+      const { data, error } = await supabase
+        .from('players')
+        .select('id, name, team_id')
+        .eq('team_id', teamId)
+        .eq('is_active', true)
+        .order('name');
+      
+      if (!error && data) {
+        // Store data in ref first to avoid race conditions
+        playersRef.current = data || [];
+      } else {
+        playersRef.current = [];
+      }
+    } catch (e) { 
+      console.error(e);
+      playersRef.current = [];
+    }
+    
+    // Update state only once at the end
+    setTimeout(() => {
+      setPlayers(playersRef.current);
+      setIsLoadingPlayers(false);
+    }, 300); // Small delay to ensure clean transition
   };
   const loadActivitiesForTeam = async (teamId: string) => {
     setIsLoadingActivities(true);
@@ -438,7 +464,9 @@ export default function AddAttendanceScreen() {
     }
     setIsSaving(false);
   };
-  const filteredPlayers = players.filter(player => player.name.toLowerCase().includes(searchQuery.toLowerCase()));
+  const filteredPlayers = players.filter(player => 
+    player.name?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -571,42 +599,79 @@ export default function AddAttendanceScreen() {
             dense
           />
         </View>
-        {/* Player List */}
-        {isLoadingPlayers ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={COLORS.primary} />
-            <Text style={styles.loadingText}>Loading players...</Text>
-          </View>
-        ) : filteredPlayers.length > 0 ? (
-          <View style={styles.playersContainer}>
-            {filteredPlayers.map(item => (
-              <View key={item.id} style={styles.playerRow}>
-                <View style={styles.playerInfo}>
-                  <Text style={styles.playerName} numberOfLines={1} ellipsizeMode="tail">{item.name}</Text>
-                </View>
-                <View style={styles.attendanceRadioContainer}>
-                  <View style={styles.radioGroup}>
-                    <TouchableOpacity style={[styles.radioButton, attendance[item.id] === 'present' && styles.presentRadio, attendance[item.id] === 'present' && styles.radioButtonSelected]} onPress={() => toggleAttendance(item.id, 'present')}>
-                      {attendance[item.id] === 'present' && (<View style={[styles.radioInner, { backgroundColor: COLORS.primary }]} />)}
-                    </TouchableOpacity>
-                    <Text style={styles.radioLabel}>Present</Text>
+        {/* Player List - Completely revamped to avoid flashing */}
+        <View style={styles.playersContainer}>
+          {isLoadingPlayers ? (
+            // Clean loading state with skeletons
+            <>
+              {[1, 2, 3, 4, 5].map((item) => (
+                <View key={`skeleton-${item}`} style={styles.playerRow}>
+                  <View style={styles.playerInfo}>
+                    <View style={styles.skeletonName} />
                   </View>
-                  <View style={styles.radioGroup}>
-                    <TouchableOpacity style={[styles.radioButton, attendance[item.id] === 'absent' && styles.absentRadio, attendance[item.id] === 'absent' && styles.radioButtonSelected]} onPress={() => toggleAttendance(item.id, 'absent')}>
-                      {attendance[item.id] === 'absent' && (<View style={[styles.radioInner, { backgroundColor: COLORS.error }]} />)}
-                    </TouchableOpacity>
-                    <Text style={styles.radioLabel}>Absent</Text>
+                  <View style={styles.attendanceRadioContainer}>
+                    <View style={styles.skeletonRadio} />
                   </View>
                 </View>
-              </View>
-            ))}
-          </View>
-        ) : (
-          <View style={styles.emptyContainer}>
-            <MaterialCommunityIcons name="account-question" size={50} color={COLORS.grey[400]} />
-            <Text style={styles.emptyText}>{selectedTeam ? 'No players found for this team' : 'Select a team to view players'}</Text>
-          </View>
-        )}
+              ))}
+            </>
+          ) : filteredPlayers.length > 0 ? (
+            // Actual players data - rendered only when fully loaded
+            <>
+              {filteredPlayers.map(item => (
+                <Animated.View 
+                  key={item.id} 
+                  style={styles.playerRow}
+                  entering={FadeIn.duration(400).delay(100)}
+                >
+                  <View style={styles.playerInfo}>
+                    <Text style={styles.playerName} numberOfLines={1} ellipsizeMode="tail">
+                      {item.name}
+                    </Text>
+                  </View>
+                  <View style={styles.attendanceRadioContainer}>
+                    <View style={styles.radioGroup}>
+                      <TouchableOpacity 
+                        style={[
+                          styles.radioButton, 
+                          attendance[item.id] === 'present' && styles.presentRadio, 
+                          attendance[item.id] === 'present' && styles.radioButtonSelected
+                        ]} 
+                        onPress={() => toggleAttendance(item.id, 'present')}
+                      >
+                        {attendance[item.id] === 'present' && (
+                          <View style={[styles.radioInner, { backgroundColor: COLORS.primary }]} />
+                        )}
+                      </TouchableOpacity>
+                      <Text style={styles.radioLabel}>Present</Text>
+                    </View>
+                    <View style={styles.radioGroup}>
+                      <TouchableOpacity 
+                        style={[
+                          styles.radioButton, 
+                          attendance[item.id] === 'absent' && styles.absentRadio, 
+                          attendance[item.id] === 'absent' && styles.radioButtonSelected
+                        ]} 
+                        onPress={() => toggleAttendance(item.id, 'absent')}
+                      >
+                        {attendance[item.id] === 'absent' && (
+                          <View style={[styles.radioInner, { backgroundColor: COLORS.error }]} />
+                        )}
+                      </TouchableOpacity>
+                      <Text style={styles.radioLabel}>Absent</Text>
+                    </View>
+                  </View>
+                </Animated.View>
+              ))}
+            </>
+          ) : (
+            // Empty state
+            <View style={styles.emptyContainer}>
+              <MaterialCommunityIcons name="account-question" size={50} color={COLORS.grey[400]} />
+              <Text style={styles.emptyText}>{selectedTeam ? 'No players found for this team' : 'Select a team to view players'}</Text>
+            </View>
+          )}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -832,5 +897,17 @@ const styles = StyleSheet.create({
     marginTop: SPACING.md,
     color: COLORS.grey[600],
     fontSize: 16,
+  },
+  skeletonName: {
+    height: 16,
+    width: '80%',
+    backgroundColor: COLORS.grey[100],
+    borderRadius: 4,
+  },
+  skeletonRadio: {
+    height: 18,
+    width: 100,
+    backgroundColor: COLORS.grey[100],
+    borderRadius: 4,
   },
 }); 
