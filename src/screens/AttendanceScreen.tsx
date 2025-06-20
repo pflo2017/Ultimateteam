@@ -53,6 +53,12 @@ const extractBaseActivityId = (id: string): string => {
   return id;
 };
 
+// Add WeekRange type definition
+interface WeekRange {
+  start: string;
+  end: string;
+}
+
 export const AttendanceScreen = () => {
   // Date and week state
   const [currentWeek, setCurrentWeek] = useState<Date>(new Date());
@@ -152,10 +158,14 @@ export const AttendanceScreen = () => {
 
   // Load activities for date range and type
   useEffect(() => {
-    console.log('[AttendanceScreen] useEffect triggered for loadActivities');
-    loadActivities();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDate, selectedType, currentWeek, selectedTeam]);
+    if (selectedTeam) {
+      const weekStart = startOfWeek(currentWeek, { weekStartsOn: 1 }).toISOString();
+      const weekEnd = endOfWeek(currentWeek, { weekStartsOn: 1 }).toISOString();
+      const weekRange: WeekRange = { start: weekStart, end: weekEnd };
+      
+      loadActivities(weekRange, selectedTeam.id, selectedType);
+    }
+  }, [selectedTeam, selectedType, currentWeek, selectedDate]);
 
   // Add useEffect to fetch attendance records when dependencies change
   useEffect(() => {
@@ -396,59 +406,99 @@ export const AttendanceScreen = () => {
   };
 
   // Load activities for the current week
-  const loadActivities = async () => {
+  const loadActivities = async (week: WeekRange, teamId?: string, type?: string) => {
     try {
       setIsLoadingActivities(true);
+      console.log('[AttendanceScreen] Fetching activities for week:', { start: week.start, end: week.end, teamId, type });
       
-      const weekStart = startOfWeek(currentWeek, { weekStartsOn: 1 });
-      const weekEnd = endOfWeek(currentWeek, { weekStartsOn: 1 });
-      
-      console.log('[AttendanceScreen] Loading activities from', format(weekStart, 'yyyy-MM-dd'), 'to', format(weekEnd, 'yyyy-MM-dd'));
-      console.log('[AttendanceScreen] Selected date:', format(selectedDate, 'yyyy-MM-dd'));
-      console.log('[AttendanceScreen] Selected type:', selectedType);
-      console.log('[AttendanceScreen] Selected team:', selectedTeam?.id);
-      
-      // Always pass the selected team ID if available
-      const { data, error } = await getActivitiesByDateRange(
-        weekStart.toISOString(), 
-        weekEnd.toISOString(),
-        selectedTeam?.id // Pass the selected team ID
-      );
-      
-      if (error) throw error;
-      
-      console.log('[AttendanceScreen] Activities found:', data?.length || 0);
-      
-      // Filter activities by type if needed
-      const typeFilteredActivities = selectedType === 'all' 
-        ? (data || [])
-        : (data || []).filter(activity => activity.type === selectedType);
-      
-      console.log('[AttendanceScreen] Activities after type filtering:', typeFilteredActivities.length);
-      setActivities(typeFilteredActivities);
-      
-      // Set filtered activities based on selected date
-      if (selectedDate) {
-        const selectedDateStr = format(selectedDate, 'yyyy-MM-dd');
-        const activitiesForDate = typeFilteredActivities.filter(activity => {
-          const activityDateStr = activity.start_time.split('T')[0];
-          return activityDateStr === selectedDateStr;
-        });
+      // Get coach's team IDs if user is a coach and no specific team is selected
+      let coachTeamIds: string[] = [];
+      if (userRole === 'coach' && !teamId) {
+        const coachDataRaw = await AsyncStorage.getItem('coach_data');
+        const coachData = coachDataRaw ? JSON.parse(coachDataRaw) : null;
+        const coachId = coachData?.id;
         
-        console.log('[AttendanceScreen] Activities for selected date:', activitiesForDate.length);
-        // Update the filtered activities for the current date
-        setActivities(activitiesForDate);
-        
-        // If there are filtered activities, update the selectedActivity
-        // but DON'T call fetchAttendanceRecords here as it will be called by the useEffect
-        if (activitiesForDate.length > 0 && !selectedActivity) {
-          setSelectedActivity(activitiesForDate[0]);
-        } else if (activitiesForDate.length === 0) {
-          setSelectedActivity(null);
+        if (coachId) {
+          const { data, error } = await supabase
+            .rpc('get_coach_teams', { p_coach_id: coachId });
+            
+          if (!error && data) {
+            coachTeamIds = data.map((team: any) => team.team_id);
+            console.log('[AttendanceScreen] Coach teams:', coachTeamIds);
+          }
         }
       }
+      
+      // Get club ID for proper data isolation
+      const clubId = await getUserClubId();
+      if (!clubId) {
+        console.error('[AttendanceScreen] No club ID found');
+        setActivities([]);
+        setIsLoadingActivities(false);
+        return;
+      }
+      
+      // Fetch activities with proper filtering
+      let query = supabase
+        .from('activities')
+        .select('*')
+        .eq('club_id', clubId)
+        .gte('start_time', week.start)
+        .lte('start_time', week.end)
+        .order('start_time', { ascending: true });
+      
+      // Add team filter if specified
+      if (teamId) {
+        query = query.eq('team_id', teamId);
+      } 
+      // Filter by coach's teams if user is a coach and no specific team is selected
+      else if (userRole === 'coach' && coachTeamIds.length > 0) {
+        query = query.in('team_id', coachTeamIds);
+      }
+      
+      // Add type filter if specified
+      if (type && type !== 'all') {
+        query = query.eq('type', type);
+      }
+      
+      const { data, error } = await query;
+      
+      if (error) {
+        console.error('[AttendanceScreen] Error fetching activities:', error);
+        setActivities([]);
+      } else {
+        console.log('[AttendanceScreen] Activities found:', data?.length || 0);
+        
+        // Apply type filter if needed (as a backup to the query filter)
+        let filteredActivities = data || [];
+        if (type && type !== 'all') {
+          filteredActivities = filteredActivities.filter(activity => activity.type === type);
+        }
+        console.log('[AttendanceScreen] Activities after type filtering:', filteredActivities.length);
+        
+        // Filter for selected date
+        const selectedDateActivities = filteredActivities.filter(activity => {
+          const activityDate = activity.start_time.split('T')[0];
+          const matches = activityDate === selectedDate;
+          console.log('[AttendanceScreen] Activity date check:', { 
+            activityId: activity.id, 
+            activityDate, 
+            selectedDate, 
+            matches 
+          });
+          return matches;
+        });
+        
+        console.log('[AttendanceScreen] Activities for selected date:', selectedDateActivities.length);
+        console.log('[AttendanceScreen] Raw activities found:', filteredActivities);
+        console.log('[AttendanceScreen] After type filter:', filteredActivities);
+        console.log('[AttendanceScreen] Filtering for date:', selectedDate);
+        
+        setActivities(selectedDateActivities);
+      }
     } catch (error) {
-      console.error('[AttendanceScreen] Error loading activities:', error);
+      console.error('[AttendanceScreen] Error in loadActivities:', error);
+      setActivities([]);
     } finally {
       setIsLoadingActivities(false);
     }

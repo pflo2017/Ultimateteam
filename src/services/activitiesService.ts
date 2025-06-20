@@ -585,6 +585,44 @@ export const getActivitiesByDateRange = async (startDate: string, endDate: strin
       throw new Error('User not associated with a club');
     }
 
+    // Check if user is a coach and get their teams
+    let isCoach = false;
+    let coachTeamIds: string[] = [];
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        // Check if user is a coach
+        const { data: coach, error: coachError } = await supabase
+          .from('coaches')
+          .select('id')
+          .eq('user_id', user.id)
+          .single();
+
+        if (!coachError && coach) {
+          isCoach = true;
+          console.log('[activitiesService] Coach detected, id:', coach.id);
+          
+          // Get coach's teams from coach_teams junction table
+          const { data: coachTeams, error: teamsError } = await supabase
+            .rpc('get_coach_teams', { p_coach_id: coach.id });
+            
+          if (!teamsError && coachTeams && coachTeams.length > 0) {
+            coachTeamIds = coachTeams.map((team: any) => team.team_id);
+            console.log('[activitiesService] Coach teams:', coachTeamIds);
+          } else {
+            console.log('[activitiesService] No teams found for coach or error:', teamsError);
+            // If coach has no teams, return empty array
+            if (isCoach) {
+              console.log('[activitiesService] Coach has no teams, returning empty activities array');
+              return { data: [], error: null };
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.log('[activitiesService] Error checking if user is coach:', e);
+    }
+
     // Get stored activities from the database
     let query = supabase
       .from('activities')
@@ -596,6 +634,10 @@ export const getActivitiesByDateRange = async (startDate: string, endDate: strin
     // Add team filter if teamId is provided
     if (teamId) {
       query = query.eq('team_id', teamId);
+    }
+    // If user is a coach and no specific teamId is provided, filter by coach's teams
+    else if (isCoach && coachTeamIds.length > 0) {
+      query = query.in('team_id', coachTeamIds);
     }
 
     const { data, error } = await query;
