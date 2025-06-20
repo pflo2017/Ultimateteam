@@ -11,7 +11,8 @@ import {
   Table,
   Badge,
   RingProgress,
-  Card
+  Card,
+  Box
 } from '@mantine/core';
 import { 
   IconUsers, 
@@ -20,6 +21,11 @@ import {
   IconUserCheck
 } from '@tabler/icons-react';
 import { supabase } from '../lib/supabase';
+import { Doughnut, Pie } from 'react-chartjs-2';
+import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale } from 'chart.js';
+
+// Register Chart.js components
+ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale);
 
 interface DashboardStats {
   totalClubs: number;
@@ -324,38 +330,78 @@ const Dashboard: React.FC = () => {
             </Group>
           </Card.Section>
           
-          <Group position="center" py="md">
-            <RingProgress
-              size={160}
-              thickness={16}
-              roundCaps
-              sections={[
-                { value: (stats?.activeClubs || 0) / (stats?.totalClubs || 1) * 100, color: 'green' },
-                { value: (stats?.suspendedClubs || 0) / (stats?.totalClubs || 1) * 100, color: 'red' }
-              ]}
-              label={
-                <div style={{ textAlign: 'center' }}>
-                  <Text size="xs" color="dimmed">Active vs Suspended</Text>
-                  <Text weight={700} size="lg">{stats?.totalClubs}</Text>
-                  <Text size="xs" color="dimmed">Total Clubs</Text>
-                </div>
-              }
+          <Group position="center" py="md" style={{ height: 260, position: 'relative' }}>
+            <Doughnut
+              data={{
+                labels: ['Active Clubs', 'Suspended Clubs'],
+                datasets: [
+                  {
+                    label: 'Club Status',
+                    data: [stats?.activeClubs || 0, stats?.suspendedClubs || 0],
+                    backgroundColor: [
+                      'rgba(75, 192, 112, 0.8)',
+                      'rgba(255, 99, 132, 0.8)',
+                    ],
+                    borderColor: [
+                      'rgba(75, 192, 112, 1)',
+                      'rgba(255, 99, 132, 1)',
+                    ],
+                    borderWidth: 1,
+                    hoverOffset: 4,
+                  },
+                ],
+              }}
+              options={{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: {
+                    position: 'bottom',
+                    labels: {
+                      usePointStyle: true,
+                      boxWidth: 10,
+                      padding: 20,
+                    },
+                  },
+                  tooltip: {
+                    callbacks: {
+                      title: (items) => items[0].label,
+                      label: (item) => `${item.formattedValue} clubs (${((item.parsed / (stats?.totalClubs || 1)) * 100).toFixed(1)}%)`,
+                    },
+                  },
+                },
+                cutout: '65%',
+              }}
             />
+            <div style={{ 
+              position: 'absolute', 
+              top: '50%', 
+              left: '50%', 
+              transform: 'translate(-50%, -50%)',
+              textAlign: 'center',
+            }}>
+              <Text weight={700} size="xl">{stats?.totalClubs}</Text>
+              <Text size="xs" color="dimmed">Total Clubs</Text>
+            </div>
           </Group>
           
-          <Group position="apart" px="md">
-            <div>
-              <Group>
-                <div style={{ width: 12, height: 12, backgroundColor: 'green', borderRadius: '50%' }} />
-                <Text size="sm">Active Clubs: {stats?.activeClubs}</Text>
+          <Group position="apart" mt="sm" px="md">
+            <Card withBorder p="xs" radius="md" style={{ background: 'rgba(75, 192, 112, 0.1)', borderColor: 'rgba(75, 192, 112, 0.5)', width: '48%' }}>
+              <Group position="apart">
+                <Text size="sm" weight={600}>Active</Text>
+                <Badge color="green" size="lg" radius="sm" variant="filled">
+                  {stats?.activeClubs}
+                </Badge>
               </Group>
-            </div>
-            <div>
-              <Group>
-                <div style={{ width: 12, height: 12, backgroundColor: 'red', borderRadius: '50%' }} />
-                <Text size="sm">Suspended Clubs: {stats?.suspendedClubs}</Text>
+            </Card>
+            <Card withBorder p="xs" radius="md" style={{ background: 'rgba(255, 99, 132, 0.1)', borderColor: 'rgba(255, 99, 132, 0.5)', width: '48%' }}>
+              <Group position="apart">
+                <Text size="sm" weight={600}>Suspended</Text>
+                <Badge color="red" size="lg" radius="sm" variant="filled">
+                  {stats?.suspendedClubs}
+                </Badge>
               </Group>
-            </div>
+            </Card>
           </Group>
         </Card>
         

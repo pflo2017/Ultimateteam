@@ -231,6 +231,7 @@ const PaymentsPage: React.FC = () => {
   const [yearFilter, setYearFilter] = useState<string | null>("2025");
   const [monthFilter, setMonthFilter] = useState<string | null>("6");
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [teamFilter, setTeamFilter] = useState<string | null>(null);
   const [teams, setTeams] = useState<{value: string, label: string}[]>([]);
   const [summary, setSummary] = useState<PaymentSummary | null>(null);
   const [activePage, setActivePage] = useState(1);
@@ -526,6 +527,11 @@ const PaymentsPage: React.FC = () => {
       filtered = filtered.filter(payment => payment.status === statusFilter);
     }
     
+    // Apply team filter
+    if (teamFilter) {
+      filtered = filtered.filter(payment => payment.team_id === teamFilter);
+    }
+    
     console.log(`Filtered from ${payments.length} to ${filtered.length} payments`);
     
     // Update filtered payments
@@ -545,7 +551,7 @@ const PaymentsPage: React.FC = () => {
   // Apply filters when search term or filters change
   useEffect(() => {
     applyFilters();
-  }, [searchTerm, statusFilter, payments]);
+  }, [searchTerm, statusFilter, teamFilter, payments]);
 
   // Helper to render status badge
   const getStatusBadge = (status: string) => {
@@ -707,10 +713,26 @@ const PaymentsPage: React.FC = () => {
                 value={statusFilter}
                 onChange={(value) => {
                   setStatusFilter(value);
-                  // Apply filters immediately when status changes
-                  setTimeout(() => applyFilters(), 0);
                 }}
                 style={{ width: '150px' }}
+                dropdownPosition="bottom"
+                zIndex={1000}
+              />
+            </Box>
+            
+            <Box>
+              <Text size="sm" mb={5}>Team</Text>
+              <Select
+                placeholder="Filter by team"
+                clearable
+                searchable
+                nothingFound="No teams found"
+                data={teams}
+                value={teamFilter}
+                onChange={(value) => {
+                  setTeamFilter(value);
+                }}
+                style={{ width: '200px' }}
                 dropdownPosition="bottom"
                 zIndex={1000}
               />
