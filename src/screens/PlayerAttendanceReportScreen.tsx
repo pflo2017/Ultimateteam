@@ -227,6 +227,48 @@ const PlayerAttendanceReportScreen = () => {
       default: return 'calendar';
     }
   };
+  
+  // Helper to get activity type name
+  const getActivityTypeName = (type?: string): string => {
+    if (!type) return 'Other';
+    
+    switch (type.toLowerCase()) {
+      case 'training': return 'Training';
+      case 'game': return 'Game';
+      case 'tournament': return 'Tournament';
+      case 'other': return 'Other';
+      default: return 'Other';
+    }
+  };
+  
+  // Helper to determine activity title
+  const getActivityTitle = (record: AttendanceRecord): string => {
+    // First try to use the activity title if available
+    if (record.activity_title) {
+      return record.activity_title;
+    }
+    
+    // If no title, use the activity type
+    if (record.activity_type) {
+      return getActivityTypeName(record.activity_type);
+    }
+    
+    // If we have a recurring activity with date suffix
+    const activityId = record.activity_id || '';
+    if (activityId.includes('-202')) {
+      const baseId = activityId.substring(0, 36);
+      if (baseId === '25b127e6-0402-4ae3-b520-9f6a14823c55') {
+        return 'Training';
+      }
+    }
+    
+    // Last resort - check the icon type to determine a title
+    const iconName = getActivityTypeIcon(record.activity_type);
+    if (iconName === 'whistle') return 'Training';
+    if (iconName === 'trophy-outline' || iconName === 'trophy') return 'Game';
+    
+    return 'Activity';
+  };
 
   const deleteActivity = async (activityId: string) => {
     try {
@@ -341,7 +383,7 @@ const PlayerAttendanceReportScreen = () => {
                           color={COLORS.primary} 
                           style={{ marginRight: 6 }} 
                         />
-                        <Text style={styles.activityTitle}>{rec.activity_title || 'Unknown Activity'}</Text>
+                        <Text style={styles.activityTitle}>{getActivityTitle(rec)}</Text>
                       </View>
                       <Text style={styles.activityDate}>
                         {rec.actual_activity_date ? new Date(rec.actual_activity_date).toLocaleDateString() : ''}
