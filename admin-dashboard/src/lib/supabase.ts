@@ -1,12 +1,25 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Use the same Supabase project as the mobile app
-const supabaseUrl = 'https://ulltpjezntzgiawchmaj.supabase.co';
-// We'll need to use a different API key for the admin dashboard
-// This should be an "anon" key with limited permissions controlled by RLS policies
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVsbHRwamV6bnR6Z2lhd2NobWFqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDUzMzczNDIsImV4cCI6MjA2MDkxMzM0Mn0.HZLgLWTSNEdTbE9HEaAQ92HkHe7k_gx4Pj2meQyZxfE';
+// Get the Supabase URL and key from environment variables
+const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || 'https://ulltpjezntzgiawchmaj.supabase.co';
+const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVsbHRwamV6bnR6Z2lhd2NobWFqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDUzMzczNDIsImV4cCI6MjA2MDkxMzM0Mn0.HZLgLWTSNEdTbE9HEaAQ92HkHe7k_gx4Pj2meQyZxfE';
+const supabaseServiceKey = process.env.REACT_APP_SUPABASE_SERVICE_KEY;
 
+console.log('Using Supabase URL:', supabaseUrl);
+console.log('Using service key:', supabaseServiceKey ? 'Yes' : 'No');
+
+// Create the standard client with anon key
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+// Create an admin client with service role key if available
+export const adminSupabase = supabaseServiceKey 
+  ? createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    })
+  : supabase; // Fall back to regular client if no service key
 
 // Helper function to get authenticated user
 export const getCurrentUser = async () => {
