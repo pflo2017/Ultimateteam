@@ -9,33 +9,18 @@ import {
   Card,
   Avatar,
   Table,
-  ActionIcon,
   Divider,
   Grid,
   Paper,
   Container,
   Tabs,
-  Image,
   Loader,
   Center,
-  Stack,
-  Switch,
-  Box,
-  Modal,
-  TextInput,
-  Select,
-  Accordion,
 } from '@mantine/core';
-import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import {
-  IconEdit,
-  IconTrash,
   IconUsers,
   IconUser,
-  IconBallFootball,
-  IconCheck,
-  IconX,
   IconArrowLeft,
   IconInfoCircle,
 } from '@tabler/icons-react';
@@ -54,13 +39,16 @@ interface ClubData {
   is_suspended: boolean;
   admin_name: string;
   admin_email: string;
+  admin_club_logo?: string;
+  admin_club_location?: string;
   player_count: number;
   team_count: number;
   coach_count: number;
   city?: string;
   country?: string;
   players?: { id: string; name: string; team_name?: string }[];
-  coaches?: { id: string; name: string }[];
+  coaches?: { id: string; name: string; is_active?: boolean }[];
+  email?: string;
 }
 
 export default function ClubDetail() {
@@ -85,7 +73,27 @@ export default function ClubDetail() {
 
       if (clubError) throw clubError;
 
-      console.log('Raw club data:', clubData);
+      // Direct query to get admin information - this will work even if club_details doesn't have it
+      if (clubData.admin_id) {
+        // Create a direct SQL RPC query to get all information in one call
+        const { data: adminData, error: adminError } = await supabase.rpc('get_club_admin_details', { 
+          club_id_param: clubId 
+        });
+        
+        console.log('Direct query for admin details:', adminData, 'Error:', adminError);
+        
+        if (!adminError && adminData && adminData.length > 0) {
+          // Important fix: adminData is an array with the first item containing our data
+          const adminInfo = adminData[0];
+          console.log('Found admin info:', adminInfo);
+          
+          // Update clubData with the admin information
+          clubData.admin_name = adminInfo.admin_name;
+          clubData.admin_email = adminInfo.admin_email;
+        }
+      }
+
+      console.log('Club data after direct query:', clubData);
 
       // Count players
       const { count: playerCount } = await supabase
@@ -128,9 +136,8 @@ export default function ClubDetail() {
       // Fetch coaches
       const { data: coachesData, error: coachesError } = await supabase
         .from('coaches')
-        .select('id, name')
+        .select('id, name, is_active')
         .eq('club_id', clubId)
-        .eq('is_active', true)
         .order('name');
       
       if (coachesError) {
@@ -153,22 +160,38 @@ export default function ClubDetail() {
 
       // Log the data for debugging
       console.log('Club detail data:', {
-        clubData,
+        rawClubData: clubData,
         playerCount,
         teamCount,
         coachCount,
         players: formattedPlayers,
-        coaches: coachesData
+        coaches: coachesData,
+        adminInfo: {
+          name: clubData.admin_name,
+          email: clubData.admin_email || clubData.email // Fallback to club email if admin_email not found
+        }
       });
       
-      setClubData({
+      // Create a copy of clubData with all necessary fields
+      const completeClubData = {
         ...clubData,
         player_count: playerCount || 0,
         team_count: teamCount || 0,
         coach_count: coachCount || 0,
         players: formattedPlayers,
-        coaches: coachesData || []
+        coaches: coachesData || [],
+        // Explicitly set admin fields to ensure they're always available
+        admin_email: clubData.admin_email || clubData.email || '',
+        admin_name: clubData.admin_name || 'Unknown'
+      };
+
+      console.log('Final data for rendering:', {
+        admin_name: completeClubData.admin_name,
+        admin_email: completeClubData.admin_email,
+        email: completeClubData.email
       });
+      
+      setClubData(completeClubData);
     } catch (error) {
       console.error('Error fetching club data:', error);
       notifications.show({
@@ -314,10 +337,12 @@ export default function ClubDetail() {
                         <Text size="sm">{clubData.admin_name || 'Unknown'}</Text>
                         
                         <Text size="sm" weight={500} mt="md">Admin Email:</Text>
-                        <Text size="sm">{clubData.admin_email || 'No email'}</Text>
+                        <Text size="sm" color="blue">
+                          {clubData.admin_email || clubData.email || 'No email'}
+                        </Text>
                         
                         <Text size="sm" weight={500} mt="md">Contact Email:</Text>
-                        <Text size="sm">{clubData.contact_email || 'Not provided'}</Text>
+                        <Text size="sm">{clubData.email || 'Not provided'}</Text>
                       </Grid.Col>
                       
                       <Grid.Col span={6}>
@@ -392,12 +417,21 @@ export default function ClubDetail() {
                     <thead>
                       <tr>
                         <th>Name</th>
+                        <th>Status</th>
                       </tr>
                     </thead>
                     <tbody>
                       {clubData.coaches.map(coach => (
                         <tr key={coach.id}>
                           <td>{coach.name}</td>
+                          <td>
+                            <Badge 
+                              color={coach.is_active ? "green" : "red"}
+                              variant="light"
+                            >
+                              {coach.is_active ? 'Active' : 'Inactive'}
+                            </Badge>
+                          </td>
                         </tr>
                       ))}
                     </tbody>

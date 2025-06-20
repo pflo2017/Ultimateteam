@@ -100,7 +100,8 @@ const Dashboard: React.FC = () => {
       const { count: teamsCount, error: teamsError } = await supabase
         .from('teams')
         .select('*', { count: 'exact', head: true })
-        .eq('is_active', true);
+        .eq('is_active', true)
+        .not('club_id', 'is', null);  // Only count teams that have a club assigned
       
       if (teamsError) throw teamsError;
       
