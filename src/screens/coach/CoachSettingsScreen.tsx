@@ -4,6 +4,7 @@ import { Text, TextInput } from 'react-native-paper';
 import { COLORS, SPACING, FONT_SIZES } from '../../constants/theme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../../lib/supabase';
+import { getCoachData, getCoachInternalId } from '../../utils/coachUtils';
 
 export const CoachSettingsScreen = () => {
   const [profile, setProfile] = useState({
@@ -36,6 +37,28 @@ export const CoachSettingsScreen = () => {
           email: coachData.email || coachData.user_metadata?.email || '',
         });
         setEmailInput(coachData.email || coachData.user_metadata?.email || '');
+        
+        // If the email is missing in AsyncStorage but we have a user_id, try to get it from the database
+        if (!coachData.email && coachData.id) {
+          console.log('Email missing in local storage, fetching from database...');
+          const { data, error } = await supabase
+            .from('coaches')
+            .select('email')
+            .eq('id', coachData.id)
+            .single();
+            
+          if (!error && data?.email) {
+            console.log('Found email in database:', data.email);
+            setProfile(prev => ({ ...prev, email: data.email }));
+            setEmailInput(data.email);
+            
+            // Update the local storage with the email
+            await AsyncStorage.setItem('coach_data', JSON.stringify({
+              ...coachData,
+              email: data.email
+            }));
+          }
+        }
       }
     } catch (error) {
       console.error('Error loading profile:', error);
@@ -101,6 +124,28 @@ export const CoachSettingsScreen = () => {
         Alert.alert('Error', authError.message || 'Failed to update email');
         setIsSavingEmail(false);
         return;
+      }
+      
+      // Get the coach's internal ID from the stored data
+      const coachId = await getCoachInternalId();
+      if (!coachId) {
+        console.error('No coach ID found in stored data');
+        Alert.alert('Error', 'Could not identify coach record');
+        setIsSavingEmail(false);
+        return;
+      }
+      
+      // Update the coach's email in the coaches table
+      const { error: updateError } = await supabase
+        .from('coaches')
+        .update({ email: emailInput.trim() })
+        .eq('id', coachId);
+      
+      if (updateError) {
+        console.error('Failed to update email in coaches table:', updateError);
+        // Proceed anyway since auth update was successful
+      } else {
+        console.log('Successfully updated email in coaches table');
       }
       
       // Get the stored coach data

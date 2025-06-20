@@ -108,6 +108,7 @@ const CoachesList: React.FC = () => {
           created_at,
           club_id,
           admin_id,
+          email,
           clubs:club_id (id, name)
         `)
         .order('created_at', { ascending: false });
@@ -163,9 +164,12 @@ const CoachesList: React.FC = () => {
 
       // Transform coaches data with emails and club names
       const transformedCoaches = coachesData?.map((coach: any) => {
+        // Use email from coach record first, then fall back to auth email
+        const coachEmail = coach.email || (coach.user_id ? userEmails[coach.user_id] || null : null);
+        
         return {
           ...coach,
-          email: coach.user_id ? userEmails[coach.user_id] || null : null,
+          email: coachEmail, 
           club_name: coach.clubs ? coach.clubs.name : 'Unknown Club'
         };
       }) || [];
