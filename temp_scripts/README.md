@@ -54,4 +54,49 @@ This directory contains scripts to fix security warnings identified by the Supab
 
 - The view definitions in the script are examples. You should check the actual structure of your views before applying the changes.
 - For the `club_details` view, ensure you're not losing functionality by removing the auth.users reference.
-- Security policies have been added to backup tables that provide access only to super admins. Adjust these policies based on your access requirements. 
+- Security policies have been added to backup tables that provide access only to super admins. Adjust these policies based on your access requirements.
+
+## UltimateTeam Scripts
+
+This directory contains various utility scripts used for database management, debugging, and maintenance of the UltimateTeam application.
+
+### Environment Variables
+
+The scripts in this directory require environment variables to be set for secure operation. Create a `.env` file in the project root with the following variables:
+
+```
+# Supabase Configuration
+SUPABASE_URL=https://your-supabase-project-url.supabase.co
+SUPABASE_ANON_KEY=your-supabase-anon-key
+SUPABASE_SERVICE_KEY=your-supabase-service-key
+```
+
+### Security Notice
+
+All service keys and sensitive credentials have been removed from the scripts and replaced with environment variable references. Never commit API keys or service keys to the repository.
+
+### Running Scripts
+
+To run a script:
+
+```bash
+node temp_scripts/script_name.js
+```
+
+Make sure you have the required environment variables set before running any script.
+
+### Script Categories
+
+The scripts are organized into several categories:
+
+1. **Parent Management**: Scripts for managing parent accounts, authentication, and relationships with children
+2. **Player Management**: Scripts for player data management and cleanup
+3. **Authentication**: Scripts for managing auth users and fixing authentication issues
+4. **Database Maintenance**: SQL scripts for database structure and policy updates
+5. **Diagnostics**: Scripts for investigating issues and verifying data integrity
+
+### Common Use Cases
+
+- **Fix Authentication Issues**: Use the auth-related scripts to diagnose and fix authentication problems
+- **Clean Up Data**: Use the cleanup scripts to remove orphaned records or fix inconsistent data
+- **Database Structure**: SQL scripts to update database structure, functions, and policies 

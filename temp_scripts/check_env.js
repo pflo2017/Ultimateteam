@@ -1,16 +1,44 @@
 require('dotenv').config();
 
-console.log('Checking environment variables:');
-console.log('EXPO_PUBLIC_SUPABASE_URL:', process.env.EXPO_PUBLIC_SUPABASE_URL ? 'Available' : 'Missing');
-console.log('EXPO_PUBLIC_SUPABASE_ANON_KEY:', process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ? 'Available' : 'Missing');
-console.log('SUPABASE_SERVICE_KEY:', process.env.SUPABASE_SERVICE_KEY ? 'Available' : 'Missing');
+/**
+ * Checks if required environment variables are set
+ * This script helps ensure all necessary environment variables are available
+ * before running any of the utility scripts
+ */
 
-// List all environment variables (masked for security)
-console.log('\nAll environment variables:');
-Object.keys(process.env).forEach(key => {
-  if (key.includes('SUPABASE') || key.includes('EXPO')) {
-    const value = process.env[key];
-    const maskedValue = value ? `${value.substring(0, 3)}...${value.substring(value.length - 3)}` : 'undefined';
-    console.log(`${key}: ${maskedValue}`);
+const requiredVars = [
+  'SUPABASE_URL',
+  'SUPABASE_SERVICE_KEY'
+];
+
+const missingVars = [];
+
+for (const varName of requiredVars) {
+  if (!process.env[varName]) {
+    missingVars.push(varName);
   }
-}); 
+}
+
+if (missingVars.length > 0) {
+  console.error('❌ Error: Missing required environment variables:');
+  missingVars.forEach(varName => {
+    console.error(`   - ${varName}`);
+  });
+  console.error('\nPlease set these variables in a .env file or in your environment.');
+  console.error('See the README.md for more information on required environment variables.');
+  process.exit(1);
+} else {
+  console.log('✅ All required environment variables are set.');
+  console.log('You can now run the utility scripts.');
+}
+
+// Export a function to check environment variables in other scripts
+module.exports = {
+  checkEnv: () => {
+    if (missingVars.length > 0) {
+      console.error('❌ Error: Missing required environment variables.');
+      process.exit(1);
+    }
+    return true;
+  }
+}; 

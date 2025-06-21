@@ -5,7 +5,7 @@ const path = require('path');
 
 // Supabase connection details (from your app.config.js)
 const supabaseUrl = 'https://ulltpjezntzgiawchmaj.supabase.co';
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVsbHRwamV6bnR6Z2lhd2NobWFqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDUzMzczNDIsImV4cCI6MjA2MDkxMzM0Mn0.HZLgLWTSNEdTbE9HEaAQ92HkHe7k_gx4Pj2meQyZxfE';
+const supabaseAnonKey = 'process.env.SUPABASE_SERVICE_KEY || "REMOVED_FOR_SECURITY"';
 
 // Initialize Supabase client
 const supabase = createClient(supabaseUrl, supabaseAnonKey);

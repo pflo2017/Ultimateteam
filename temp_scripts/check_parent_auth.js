@@ -40,11 +40,11 @@ try {
 
 // Hardcoded values as last resort
 if (!supabaseUrl) supabaseUrl = 'https://ulltpjezntzgiawchmaj.supabase.co';
-if (!supabaseAnonKey) supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVsbHRwamV6bnR6Z2lhd2NobWFqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDUzMzczNDIsImV4cCI6MjA2MDkxMzM0Mn0.KKvmQTHKCFtO-UmEJGhXHCUbQQDdUdPYVzQHZfEpFWI';
+if (!supabaseAnonKey) supabaseAnonKey = 'process.env.SUPABASE_SERVICE_KEY || "REMOVED_FOR_SECURITY"';
 
 // For admin operations, we need the service role key
 // This is not ideal for security, but for this script it's acceptable
-const supabaseServiceKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVsbHRwamV6bnR6Z2lhd2NobWFqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NTMzNzM0MiwiZXhwIjoyMDYwOTEzMzQyfQ.5MPohDgqv5b4U77jLnEZ-zeYVlazThOjNNKVzrcrfoI';
+const supabaseServiceKey = 'process.env.SUPABASE_SERVICE_KEY || "REMOVED_FOR_SECURITY"';
 
 console.log('Using Supabase URL:', supabaseUrl);
 const supabase = createClient(supabaseUrl, supabaseServiceKey);

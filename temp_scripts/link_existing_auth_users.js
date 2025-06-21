@@ -16,7 +16,7 @@ if (!supabaseUrlMatch) {
 const SUPABASE_URL = supabaseUrlMatch[1];
 
 // Use the provided service role key
-const SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVsbHRwamV6bnR6Z2lhd2NobWFqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NTMzNzM0MiwiZXhwIjoyMDYwOTEzMzQyfQ.5MPohDgqv5b4U77jLnEZ-zeYVlazThOjNNKVzrcrfoI';
+const SERVICE_ROLE_KEY = 'process.env.SUPABASE_SERVICE_KEY || "REMOVED_FOR_SECURITY"';
 
 console.log('Using Supabase URL:', SUPABASE_URL);
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);

@@ -4,7 +4,7 @@ const { createClient } = require('@supabase/supabase-js');
 // Read environment variables
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 // Use the provided service role key for verification
-const serviceRoleKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVsbHRwamV6bnR6Z2lhd2NobWFqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NTMzNzM0MiwiZXhwIjoyMDYwOTEzMzQyfQ.5MPohDgqv5b4U77jLnEZ-zeYVlazThOjNNKVzrcrfoI';
+const serviceRoleKey = 'process.env.SUPABASE_SERVICE_KEY || "REMOVED_FOR_SECURITY"';
 
 if (!supabaseUrl) {
   console.error('Missing Supabase URL. Make sure EXPO_PUBLIC_SUPABASE_URL is set in .env file');
