@@ -22,8 +22,34 @@ export const getUserClubId = async (): Promise<string | null> => {
           console.log('[getUserClubId] admin_data found but no club_id in it');
         }
       }
+      
+      // CRITICAL FIX: Also check for coach data in AsyncStorage
+      const coachDataStr = await AsyncStorage.getItem('coach_data');
+      console.log('[getUserClubId] Coach data from AsyncStorage:', coachDataStr ? 'Found' : 'Not found');
+      
+      if (coachDataStr) {
+        const coachData = JSON.parse(coachDataStr);
+        console.log('[getUserClubId] Coach data contents:', coachData);
+        
+        if (coachData.club_id) {
+          console.log('[getUserClubId] Found club_id in coach_data:', coachData.club_id);
+          
+          // CRITICAL FIX: Ensure the coach user_id is set in the database
+          if (coachData.user_id && coachData.id) {
+            console.log('[getUserClubId] Ensuring coach user_id is set in database');
+            await supabase
+              .from('coaches')
+              .update({ user_id: coachData.user_id })
+              .eq('id', coachData.id);
+          }
+          
+          return coachData.club_id;
+        } else {
+          console.log('[getUserClubId] coach_data found but no club_id in it');
+        }
+      }
     } catch (e) {
-      console.log('[getUserClubId] Error reading admin_data from AsyncStorage:', e);
+      console.log('[getUserClubId] Error reading data from AsyncStorage:', e);
     }
     
     // Check if user is authenticated via Supabase auth
@@ -77,8 +103,46 @@ export const getUserClubId = async (): Promise<string | null> => {
     
     if (coachError) {
       console.log('[getUserClubId] Error or no result when checking if user is coach:', coachError.message);
+      
+      // CRITICAL FIX: Try to get coach data from AsyncStorage to find by phone instead
+      try {
+        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+        const coachDataStr = await AsyncStorage.getItem('coach_data');
+        
+        if (coachDataStr) {
+          const coachData = JSON.parse(coachDataStr);
+          
+          if (coachData.phone_number) {
+            console.log('[getUserClubId] Trying to find coach by phone number:', coachData.phone_number);
+            
+            // Try to get coach by phone number
+            const { data: coachByPhone, error: phoneError } = await supabase
+              .from('coaches')
+              .select('club_id, id')
+              .eq('phone_number', coachData.phone_number)
+              .single();
+              
+            if (!phoneError && coachByPhone) {
+              console.log('[getUserClubId] Found coach by phone number, club_id:', coachByPhone.club_id);
+              
+              // Update the coach record with the user_id for future lookups
+              if (coachData.id && user.id) {
+                console.log('[getUserClubId] Updating coach record with user_id');
+                await supabase
+                  .from('coaches')
+                  .update({ user_id: user.id })
+                  .eq('id', coachData.id);
+              }
+              
+              return coachByPhone.club_id;
+            }
+          }
+        }
+      } catch (e) {
+        console.log('[getUserClubId] Error in phone number fallback:', e);
+      }
     }
-
+    
     if (coach) {
       console.log('[getUserClubId] Found club via coach:', coach.club_id);
       return coach.club_id;
