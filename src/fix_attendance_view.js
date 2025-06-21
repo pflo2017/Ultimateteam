@@ -1,8 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
+require('dotenv').config();
 
-// Use the same Supabase URL and key as in app.config.js
-const SUPABASE_URL = "https://ulltpjezntzgiawchmaj.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVsbHRwamV6bnR6Z2lhd2NobWFqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDUzMzczNDIsImV4cCI6MjA2MDkxMzM0Mn0.HZLgLWTSNEdTbE9HEaAQ92HkHe7k_gx4Pj2meQyZxfE";
+// Use environment variables or fallback to placeholders
+const SUPABASE_URL = process.env.SUPABASE_URL || "https://ulltpjezntzgiawchmaj.supabase.co";
+const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY || "REMOVED_FOR_SECURITY";
 
 // Initialize the Supabase client
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
