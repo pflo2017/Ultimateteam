@@ -51,8 +51,24 @@ export const CoachLoginScreen = () => {
     setError('');
     try {
       // Format phone number to E.164 format (e.g., +40712345678)
-      const formattedPhone = phone.trim();
+      let formattedPhone = phone.trim();
+      
+      // Fix common phone number format issues
+      if (formattedPhone.startsWith('+0')) {
+        // Replace +0 with the correct country code +40 for Romania
+        formattedPhone = '+4' + formattedPhone.substring(2);
+        console.log('Corrected phone number format from +0 to +4:', formattedPhone);
+      }
+      
       console.log('Attempting to login with phone number:', formattedPhone);
+      
+      // Debug: Log all coaches in the database to check phone formats
+      const { data: allCoaches, error: allCoachesError } = await supabase
+        .from('coaches')
+        .select('id, name, phone_number, user_id')
+        .limit(10);
+        
+      console.log('All coaches in DB:', allCoaches, 'Error:', allCoachesError);
       
       // First, let's check what coaches exist in the database
       const { data: coachData, error: coachError } = await supabase
@@ -66,38 +82,59 @@ export const CoachLoginScreen = () => {
       }
       
       if (coachError || !coachData) {
-        setError('No coach found with this phone number. Please contact your administrator.');
-        setIsLoading(false);
-        return;
-      }
-
-      console.log('Found coach:', coachData);
-      setCoach(coachData);
-      
-      // If coach has no user_id, check if there's an auth user with this phone
-      if (!coachData.user_id) {
-        console.log('Coach has no user_id. Checking for existing auth user...');
+        // Try with alternative format (without spaces)
+        const cleanedPhone = formattedPhone.replace(/\s/g, '');
+        console.log('Trying alternative phone format:', cleanedPhone);
         
-        // Try to sign in with a dummy password to check if user exists
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-          phone: formattedPhone,
-          password: 'this-is-a-dummy-password-that-will-fail'
-        });
-        
-        // If error contains "Invalid login credentials", user exists but password is wrong
-        if (signInError && signInError.message && 
-            (signInError.message.includes('Invalid login credentials') || 
-             signInError.message.includes('Invalid login'))) {
-          console.log('Auth user exists but not linked to coach. Showing login screen.');
-          setStep('login');
+        const { data: altCoachData, error: altCoachError } = await supabase
+          .from('coaches')
+          .select('*')
+          .eq('phone_number', cleanedPhone)
+          .single();
+          
+        if (altCoachError || !altCoachData) {
+          console.log('Alternative coach lookup also failed:', altCoachError);
+          setError('No coach found with this phone number. Please contact your administrator.');
           setIsLoading(false);
           return;
         }
         
-        // Otherwise, this is a new registration
-        setStep('register');
+        console.log('Found coach with alternative phone format:', altCoachData);
+        setCoach(altCoachData);
+      } else {
+        console.log('Found coach with exact phone format:', coachData);
+        setCoach(coachData);
+      }
+      
+      const activeCoach = coachData || {};
+      
+      // If coach has no user_id, they need to register
+      if (!activeCoach.user_id) {
+        console.log('Coach has no user_id. Proceeding to registration...');
+        
+        // Check if there's already an auth user with this phone number
+        // by checking if the user exists in auth.users table
+        const { data: authUserData, error: authUserError } = await supabase
+          .rpc('check_phone_exists', { phone_param: formattedPhone });
+          
+        console.log('Auth user check result:', authUserData, 'Error:', authUserError);
+        
+        if (authUserError) {
+          console.error('Error checking if phone exists in auth:', authUserError);
+          // If we can't check, assume registration is needed
+          setStep('register');
+        } else if (authUserData && authUserData.exists) {
+          // If auth user exists, go to login
+          console.log('Auth user exists but not linked to coach. Showing login screen.');
+          setStep('login');
+        } else {
+          // No auth user exists, go to registration
+          console.log('No auth user exists. Showing registration screen.');
+          setStep('register');
+        }
       } else {
         // Coach already has user_id, proceed to login
+        console.log('Coach has user_id. Proceeding to login...');
         setStep('login');
       }
     } catch (err) {
