@@ -80,7 +80,7 @@ export const AddCoachScreen = () => {
             phone_number: formattedPhone,
             admin_id: user.id,
             club_id: clubData.id,
-            is_active: true
+            is_active: false
           }
         ]);
 
@@ -93,7 +93,7 @@ export const AddCoachScreen = () => {
         [
           { 
             text: 'OK',
-            onPress: () => navigation.navigate('AdminRoot', { screen: 'Manage', params: { activeTab: 'coaches', refresh: true } })
+            onPress: () => navigation.goBack()
           }
         ]
       );

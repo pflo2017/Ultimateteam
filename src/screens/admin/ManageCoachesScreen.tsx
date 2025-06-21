@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, TextInput, RefreshControl, Alert } from 'react-native';
 import { Text, ActivityIndicator, Card, Snackbar, IconButton, Divider } from 'react-native-paper';
 import { COLORS, SPACING, FONT_SIZES } from '../../constants/theme';
@@ -14,6 +14,7 @@ interface Coach {
   phone_number: string;
   created_at: string;
   is_active: boolean;
+  user_id?: string;
   teams: {
     id: string;
     name: string;
@@ -39,6 +40,17 @@ export const ManageCoachesScreen: React.FC<ManageCoachesScreenProps> = ({
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [showSnackbar, setShowSnackbar] = useState(false);
 
+  // Filter coaches to show:
+  // 1. Active coaches (is_active=true)
+  // 2. Pending registration coaches (no user_id) regardless of is_active status
+  const filteredCoaches = coaches.filter(coach => {
+    // For debugging - check each coach's status
+    console.log(`Coach ${coach.id} (${coach.name}): is_active=${coach.is_active}, user_id=${coach.user_id ? 'set' : 'undefined'}`);
+    
+    // Show active coaches OR pending registration coaches (no user_id)
+    return coach.is_active === true || !coach.user_id;
+  });
+
   const renderCoachCard = (coach: Coach) => (
     <Card 
       key={coach.id} 
@@ -52,7 +64,7 @@ export const ManageCoachesScreen: React.FC<ManageCoachesScreenProps> = ({
         shadowRadius: 4,
         elevation: 3,
         borderWidth: 1,
-        borderColor: COLORS.grey[200],
+        borderColor: coach.is_active ? COLORS.grey[200] : COLORS.warning,
         overflow: 'hidden'
       }}
       mode="outlined"
@@ -75,7 +87,7 @@ export const ManageCoachesScreen: React.FC<ManageCoachesScreenProps> = ({
               width: 48,
               height: 48,
               borderRadius: 24,
-              backgroundColor: COLORS.primary + '15',
+              backgroundColor: coach.is_active ? COLORS.primary + '15' : COLORS.warning + '30',
               justifyContent: 'center',
               alignItems: 'center',
               marginRight: SPACING.md
@@ -83,7 +95,7 @@ export const ManageCoachesScreen: React.FC<ManageCoachesScreenProps> = ({
               <MaterialCommunityIcons 
                 name="account-tie" 
                 size={28} 
-                color={COLORS.primary} 
+                color={coach.is_active ? COLORS.primary : COLORS.warning} 
               />
             </View>
             
@@ -99,15 +111,35 @@ export const ManageCoachesScreen: React.FC<ManageCoachesScreenProps> = ({
               >
                 {coach.name}
               </Text>
-              <Text 
-                style={{
-                  fontSize: FONT_SIZES.sm,
-                  color: COLORS.grey[600],
-                }}
-                numberOfLines={1}
-              >
-                Coach
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text 
+                  style={{
+                    fontSize: FONT_SIZES.sm,
+                    color: COLORS.grey[600],
+                    marginRight: 4
+                  }}
+                  numberOfLines={1}
+                >
+                  Coach
+                </Text>
+                
+                {!coach.is_active && (
+                  <View style={{
+                    backgroundColor: COLORS.warning + '20',
+                    paddingHorizontal: 8,
+                    paddingVertical: 2,
+                    borderRadius: 4
+                  }}>
+                    <Text style={{
+                      fontSize: FONT_SIZES.xs,
+                      color: COLORS.warning,
+                      fontWeight: '600'
+                    }}>
+                      Pending Registration
+                    </Text>
+                  </View>
+                )}
+              </View>
             </View>
           </View>
           
@@ -232,10 +264,10 @@ export const ManageCoachesScreen: React.FC<ManageCoachesScreenProps> = ({
           }
           contentContainerStyle={styles.scrollContent}
         >
-          {!coaches?.length ? (
+          {!filteredCoaches?.length ? (
             <Text style={styles.emptyText}>No coaches found</Text>
           ) : (
-            coaches.map(renderCoachCard)
+            filteredCoaches.map(renderCoachCard)
           )}
         </ScrollView>
 

@@ -107,12 +107,71 @@ export const EditCoachScreen = () => {
           onPress: async () => {
             setIsLoading(true);
             try {
-              const { error } = await supabase
+              console.log('Attempting to delete coach with ID:', coachId);
+              
+              // First check if coach has a user_id
+              const { data: coachData, error: fetchError } = await supabase
                 .from('coaches')
-                .update({ is_active: false })
-                .eq('id', coachId);
+                .select('user_id, name')
+                .eq('id', coachId)
+                .single();
+                
+              if (fetchError) {
+                console.error('Error fetching coach data:', fetchError);
+                throw fetchError;
+              }
+              
+              let error;
+              
+              // For coaches without user_id (pending registration), actually delete them from database
+              if (!coachData.user_id) {
+                console.log(`Coach ${coachData.name} has no user_id - performing actual DELETE from database`);
+                const { error: deleteError } = await supabase
+                  .from('coaches')
+                  .delete()
+                  .eq('id', coachId);
+                  
+                error = deleteError;
+              } else {
+                // For registered coaches, just mark as inactive (soft delete)
+                console.log(`Coach ${coachData.name} has user_id - performing soft delete by setting is_active=false`);
+                const { error: updateError } = await supabase
+                  .from('coaches')
+                  .update({ is_active: false })
+                  .eq('id', coachId);
+                  
+                error = updateError;
+              }
 
               if (error) throw error;
+              
+              // Verify the operation worked
+              if (!coachData.user_id) {
+                // For deleted coaches, verify they're gone
+                const { data: verifyDelete, error: verifyError } = await supabase
+                  .from('coaches')
+                  .select('id')
+                  .eq('id', coachId);
+                  
+                if (verifyError) {
+                  console.error('Error verifying coach deletion:', verifyError);
+                } else {
+                  console.log('Coach deletion verified, records found:', verifyDelete?.length || 0);
+                }
+              } else {
+                // For soft-deleted coaches, verify is_active=false
+                const { data: verifyCoach, error: verifyError } = await supabase
+                  .from('coaches')
+                  .select('is_active')
+                  .eq('id', coachId)
+                  .single();
+                  
+                if (verifyError) {
+                  console.error('Error verifying coach deletion:', verifyError);
+                } else {
+                  console.log('Coach soft deletion verified, is_active set to:', verifyCoach.is_active);
+                }
+              }
 
               Alert.alert(
                 'Success',
@@ -128,7 +187,7 @@ export const EditCoachScreen = () => {
                             { name: 'AdminTabs' },
                             {
                               name: 'AdminTabs',
-                              params: { screen: 'Manage', params: { activeTab: 'coaches', refresh: true } }
+                              params: { screen: 'Manage', params: { activeTab: 'coaches', refresh: Date.now() } }
                             }
                           ]
                         })
