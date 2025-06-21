@@ -2,8 +2,11 @@
 
 # This script replaces Supabase service keys with a placeholder in all JS files in temp_scripts
 
+# Define the pattern to search for without hardcoding the actual token
+JWT_PATTERN="eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*"
+
 # List of files to process
-FILES=$(grep -l "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" temp_scripts/*.js)
+FILES=$(grep -l "$JWT_PATTERN" temp_scripts/*.js)
 
 # Count the files
 COUNT=$(echo "$FILES" | wc -l)
@@ -15,7 +18,7 @@ for file in $FILES; do
   
   # Use sed to replace the service key with a placeholder
   # This pattern looks for a JWT token format (starts with eyJ and has two periods)
-  sed -i '' 's/\(eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*\)/process.env.SUPABASE_SERVICE_KEY || "REMOVED_FOR_SECURITY"/g' "$file"
+  sed -i '' "s/\($JWT_PATTERN\)/process.env.SUPABASE_SERVICE_KEY || \"REMOVED_FOR_SECURITY\"/g" "$file"
   
   # Also replace any hardcoded service role keys
   sed -i '' 's/\(serviceKey: \)"[^"]*"/\1process.env.SUPABASE_SERVICE_KEY || "REMOVED_FOR_SECURITY"/g' "$file"
