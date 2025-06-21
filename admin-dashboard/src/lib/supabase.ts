@@ -80,4 +80,93 @@ export const isSuperAdmin = async () => {
     console.error('Error checking super admin status:', error);
     return false;
   }
+};
+
+// Helper function to check if user is a club admin
+export const isClubAdmin = async () => {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      console.log('No authenticated user found');
+      return false;
+    }
+    
+    console.log('Checking if user is club admin:', user.id);
+    
+    // Check if the user is a club admin by looking in the clubs table
+    const { data, error } = await supabase
+      .from('clubs')
+      .select('id, name')
+      .eq('admin_id', user.id);
+      
+    console.log('Club admin check result:', { data, error });
+    
+    // Return true if we found at least one record and no error
+    return Array.isArray(data) && data.length > 0 && !error;
+  } catch (error) {
+    console.error('Error checking club admin status:', error);
+    return false;
+  }
+};
+
+// Helper function to get the club ID for a club admin
+export const getClubAdminClubId = async () => {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      console.log('No authenticated user found');
+      return null;
+    }
+    
+    console.log('Getting club ID for club admin:', user.id);
+    
+    // Get the club ID from the clubs table
+    const { data, error } = await supabase
+      .from('clubs')
+      .select('id')
+      .eq('admin_id', user.id)
+      .single();
+      
+    if (error) {
+      console.error('Error getting club ID:', error);
+      return null;
+    }
+    
+    console.log('Club ID found:', data?.id);
+    return data?.id || null;
+  } catch (error) {
+    console.error('Error getting club ID:', error);
+    return null;
+  }
+};
+
+// Helper function to get the club details for a club admin
+export const getClubAdminClubDetails = async () => {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      console.log('No authenticated user found');
+      return null;
+    }
+    
+    console.log('Getting club details for club admin:', user.id);
+    
+    // Get the club details from the clubs table
+    const { data, error } = await supabase
+      .from('clubs')
+      .select('id, name, logo_url, is_suspended')
+      .eq('admin_id', user.id)
+      .single();
+      
+    if (error) {
+      console.error('Error getting club details:', error);
+      return null;
+    }
+    
+    console.log('Club details found:', data);
+    return data || null;
+  } catch (error) {
+    console.error('Error getting club details:', error);
+    return null;
+  }
 }; 

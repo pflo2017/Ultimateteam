@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   AppShell,
@@ -29,7 +29,8 @@ import {
   IconChevronDown,
   IconSun,
   IconMoonStars,
-  IconCreditCard
+  IconCreditCard,
+  IconUserCircle
 } from '@tabler/icons-react';
 import { supabase } from '../../lib/supabase';
 
@@ -50,23 +51,55 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
   const location = useLocation();
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [userMenuOpened, setUserMenuOpened] = useState(false);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [clubName, setClubName] = useState<string | null>(null);
   
-  const navItems = [
-    { label: 'Dashboard', icon: <IconDashboard size={20} />, path: '/' },
+  // Get user role from localStorage on component mount
+  useEffect(() => {
+    const role = localStorage.getItem('userRole');
+    setUserRole(role);
+    
+    if (role === 'clubAdmin') {
+      const name = localStorage.getItem('clubName');
+      setClubName(name);
+    }
+  }, []);
+  
+  // Navigation items for master admin
+  const masterAdminNavItems = [
+    { label: 'Dashboard', icon: <IconDashboard size={20} />, path: '/dashboard' },
     { label: 'Clubs', icon: <IconBuildingCommunity size={20} />, path: '/clubs' },
     { label: 'All Users', icon: <IconUsers size={20} />, path: '/users' },
     { label: 'Coaches', icon: <IconUsers size={20} />, path: '/coaches' },
     { label: 'Players', icon: <IconUsers size={20} />, path: '/players' },
     { label: 'Parents', icon: <IconUsers size={20} />, path: '/parents' },
     { label: 'Payments', icon: <IconCreditCard size={20} />, path: '/payments' },
-    { label: 'Schedule', icon: <IconCalendarEvent size={20} />, path: '/schedule' },
     { label: 'Analytics', icon: <IconReportAnalytics size={20} />, path: '/analytics' },
-    { label: 'Billing', icon: <IconReportAnalytics size={20} />, path: '/billing' },
+    { label: 'Billing', icon: <IconCreditCard size={20} />, path: '/billing' },
     { label: 'Settings', icon: <IconSettings size={20} />, path: '/settings' },
   ];
+  
+  // Navigation items for club admin
+  const clubAdminNavItems = [
+    { label: 'Dashboard', icon: <IconDashboard size={20} />, path: '/dashboard' },
+    { label: 'Teams', icon: <IconUsers size={20} />, path: '/teams' },
+    { label: 'Coaches', icon: <IconUserCircle size={20} />, path: '/coaches' },
+    { label: 'Players', icon: <IconUsers size={20} />, path: '/players' },
+    { label: 'Parents', icon: <IconUsers size={20} />, path: '/parents' },
+    { label: 'Schedule', icon: <IconCalendarEvent size={20} />, path: '/schedule' },
+    { label: 'Payments', icon: <IconCreditCard size={20} />, path: '/payments' },
+    { label: 'Settings', icon: <IconSettings size={20} />, path: '/settings' },
+  ];
+  
+  // Select the appropriate nav items based on user role
+  const navItems = userRole === 'clubAdmin' ? clubAdminNavItems : masterAdminNavItems;
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+    // Clear localStorage
+    localStorage.removeItem('userRole');
+    localStorage.removeItem('clubId');
+    localStorage.removeItem('clubName');
     navigate('/login');
   };
 
@@ -119,7 +152,11 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                   mr="xl"
                 />
               </MediaQuery>
-              <Title order={3}>UltimateTeam Admin</Title>
+              <Title order={3}>
+                {userRole === 'clubAdmin' && clubName 
+                  ? `${clubName} Admin` 
+                  : 'UltimateTeam Admin'}
+              </Title>
             </Group>
 
             <Group>
@@ -139,7 +176,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                       <Avatar size={30} radius="xl" />
                       <Box sx={{ flex: 1 }}>
                         <Text size="sm" weight={500}>
-                          Admin User
+                          {userRole === 'clubAdmin' ? 'Club Admin' : 'Master Admin'}
                         </Text>
                       </Box>
                       <IconChevronDown size={12} />

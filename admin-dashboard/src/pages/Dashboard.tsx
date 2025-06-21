@@ -67,17 +67,144 @@ const Dashboard: React.FC = () => {
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
   const [topClubs, setTopClubs] = useState<TopClub[]>([]);
   const [loading, setLoading] = useState(true);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [clubId, setClubId] = useState<string | null>(null);
+  const [clubName, setClubName] = useState<string | null>(null);
 
   useEffect(() => {
+    // Get user role and club ID from localStorage
+    const role = localStorage.getItem('userRole');
+    setUserRole(role);
+    
+    if (role === 'clubAdmin') {
+      setClubId(localStorage.getItem('clubId'));
+      setClubName(localStorage.getItem('clubName'));
+    }
+    
     fetchDashboardData();
   }, []);
 
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
-      // In a real app, we'd fetch this data from Supabase
-      // For now, we'll use mock data
+      const role = localStorage.getItem('userRole');
+      const clubId = localStorage.getItem('clubId');
       
+      if (role === 'clubAdmin' && clubId) {
+        // Club admin view - fetch data only for this club
+        await fetchClubAdminData(clubId);
+      } else {
+        // Master admin view - fetch data for all clubs
+        await fetchMasterAdminData();
+      }
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+      
+      // Use mock data as fallback
+      setStats({
+        totalClubs: 1,
+        totalUsers: 10,
+        totalPlayers: 50,
+        totalTeams: 3,
+        totalCoaches: 5,
+        activeClubs: 1,
+        suspendedClubs: 0,
+        attendanceRate: 78
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const fetchClubAdminData = async (clubId: string) => {
+    try {
+      // Fetch players count for this club
+      const { count: playersCount, error: playersError } = await supabase
+        .from('players')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_active', true)
+        .eq('club_id', clubId);
+      
+      if (playersError) throw playersError;
+      
+      // Fetch teams count for this club
+      const { data: teamsData, error: teamsDataError } = await supabase
+        .from('teams')
+        .select('id, name, club_id, is_active')
+        .eq('is_active', true)
+        .eq('club_id', clubId);
+      
+      if (teamsDataError) throw teamsDataError;
+      
+      const teamsCount = teamsData?.length || 0;
+      
+      // Fetch coaches count for this club
+      const { count: coachesCount, error: coachesError } = await supabase
+        .from('coaches')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_active', true)
+        .eq('club_id', clubId);
+      
+      if (coachesError) throw coachesError;
+      
+      // Fetch attendance rate for this club (mock data for now)
+      const attendanceRate = 82; // We would calculate this from actual attendance records
+      
+      // Set stats for club admin view
+      setStats({
+        totalClubs: 1, // Club admin only manages one club
+        totalUsers: coachesCount || 0, // Only count coaches as users for club admin
+        totalPlayers: playersCount || 0,
+        totalTeams: teamsCount,
+        totalCoaches: coachesCount || 0,
+        activeClubs: 1,
+        suspendedClubs: 0,
+        attendanceRate: attendanceRate
+      });
+      
+      // Fetch recent activities for this club
+      try {
+        // Get recent activities for this specific club
+        const { data: activitiesData, error: activitiesError } = await supabase
+          .from('activity_logs')
+          .select('id, club_id, action, created_at, user_name, clubs(name)')
+          .eq('club_id', clubId)
+          .order('created_at', { ascending: false })
+          .limit(10);
+          
+        if (activitiesError) throw activitiesError;
+        
+        if (activitiesData && activitiesData.length > 0) {
+          // Transform data to match our interface
+          const formattedActivities = activitiesData.map((activity: any) => ({
+            id: activity.id,
+            club_name: activity.clubs?.name || 'Your Club',
+            action: activity.action,
+            date: new Date(activity.created_at).toISOString().split('T')[0],
+            user: activity.user_name
+          }));
+          
+          setRecentActivity(formattedActivities);
+        } else {
+          // If no activities found, use empty array
+          setRecentActivity([]);
+        }
+      } catch (activitiesError) {
+        console.error('Error fetching recent activities:', activitiesError);
+        setRecentActivity([]);
+      }
+      
+      // For club admin, we don't need top clubs data
+      setTopClubs([]);
+      
+    } catch (error) {
+      console.error('Error fetching club admin dashboard data:', error);
+      throw error;
+    }
+  };
+  
+  const fetchMasterAdminData = async () => {
+    try {
       // Fetch active clubs count
       const { count: activeClubsCount, error: activeClubsError } = await supabase
         .from('clubs')
@@ -103,7 +230,6 @@ const Dashboard: React.FC = () => {
       if (playersError) throw playersError;
       
       // Fetch active teams count
-      // Fetch full team details to debug why count is wrong
       const { data: teamsData, error: teamsDataError } = await supabase
         .from('teams')
         .select('id, name, club_id, is_active')
@@ -205,23 +331,9 @@ const Dashboard: React.FC = () => {
         // Use empty array as fallback
         setTopClubs([]);
       }
-      
     } catch (error) {
-      console.error('Error fetching dashboard data:', error);
-      
-      // Use mock data as fallback
-      setStats({
-        totalClubs: 3,
-        totalUsers: 25,
-        totalPlayers: 270,
-        totalTeams: 18,
-        totalCoaches: 15,
-        activeClubs: 2,
-        suspendedClubs: 1,
-        attendanceRate: 78
-      });
-    } finally {
-      setLoading(false);
+      console.error('Error fetching master admin dashboard data:', error);
+      throw error;
     }
   };
 
@@ -235,7 +347,9 @@ const Dashboard: React.FC = () => {
 
   return (
     <>
-      <Title order={2} mb="md">Master Admin Dashboard</Title>
+      <Title order={2} mb="md">
+        {userRole === 'clubAdmin' && clubName ? `${clubName} Dashboard` : 'Master Admin Dashboard'}
+      </Title>
       
       {/* Stats Cards */}
       <SimpleGrid cols={4} spacing="md" mb="md">
@@ -243,7 +357,7 @@ const Dashboard: React.FC = () => {
           <Group position="apart">
             <div>
               <Text color="dimmed" size="xs" transform="uppercase" weight={700}>
-                Total Clubs
+                {userRole === 'clubAdmin' ? 'Your Club' : 'Total Clubs'}
               </Text>
               <Text weight={700} size="xl">
                 {stats?.totalClubs}
@@ -253,14 +367,16 @@ const Dashboard: React.FC = () => {
               <IconBuildingCommunity size={22} />
             </ThemeIcon>
           </Group>
-          <Group position="apart" mt="xs">
-            <Text size="xs" color="green">
-              Active: {stats?.activeClubs}
-            </Text>
-            <Text size="xs" color="red">
-              Suspended: {stats?.suspendedClubs}
-            </Text>
-          </Group>
+          {userRole !== 'clubAdmin' && (
+            <Group position="apart" mt="xs">
+              <Text size="xs" color="green">
+                Active: {stats?.activeClubs}
+              </Text>
+              <Text size="xs" color="red">
+                Suspended: {stats?.suspendedClubs}
+              </Text>
+            </Group>
+          )}
         </Paper>
 
         <Paper withBorder p="md" radius="md">
@@ -278,7 +394,7 @@ const Dashboard: React.FC = () => {
             </ThemeIcon>
           </Group>
           <Text size="xs" color="dimmed" mt="xs">
-            Active players across all clubs
+            {userRole === 'clubAdmin' ? 'Active players in your club' : 'Active players across all clubs'}
           </Text>
         </Paper>
 
@@ -297,7 +413,7 @@ const Dashboard: React.FC = () => {
             </ThemeIcon>
           </Group>
           <Text size="xs" color="dimmed" mt="xs">
-            Teams across all clubs
+            {userRole === 'clubAdmin' ? 'Teams in your club' : 'Teams across all clubs'}
           </Text>
         </Paper>
 
@@ -305,10 +421,10 @@ const Dashboard: React.FC = () => {
           <Group position="apart">
             <div>
               <Text color="dimmed" size="xs" transform="uppercase" weight={700}>
-                Attendance Rate
+                {userRole === 'clubAdmin' ? 'Coaches' : 'Attendance Rate'}
               </Text>
               <Text weight={700} size="xl">
-                {stats?.attendanceRate}%
+                {userRole === 'clubAdmin' ? stats?.totalCoaches : `${stats?.attendanceRate}%`}
               </Text>
             </div>
             <ThemeIcon color="violet" variant="light" size={38} radius="md">
@@ -316,134 +432,137 @@ const Dashboard: React.FC = () => {
             </ThemeIcon>
           </Group>
           <Text size="xs" color="dimmed" mt="xs">
-            Average across all clubs
+            {userRole === 'clubAdmin' ? 'Active coaches in your club' : 'Average across all clubs'}
           </Text>
         </Paper>
       </SimpleGrid>
 
-      <SimpleGrid cols={2} spacing="md">
-        {/* Club Status Overview */}
-        <Card withBorder p="md" radius="md">
-          <Card.Section withBorder inheritPadding py="xs">
-            <Group position="apart">
-              <Text weight={500}>Club Status Overview</Text>
-            </Group>
-          </Card.Section>
-          
-          <Group position="center" py="md" style={{ height: 260, position: 'relative' }}>
-            <Doughnut
-              data={{
-                labels: ['Active Clubs', 'Suspended Clubs'],
-                datasets: [
-                  {
-                    label: 'Club Status',
-                    data: [stats?.activeClubs || 0, stats?.suspendedClubs || 0],
-                    backgroundColor: [
-                      'rgba(75, 192, 112, 0.8)',
-                      'rgba(255, 99, 132, 0.8)',
-                    ],
-                    borderColor: [
-                      'rgba(75, 192, 112, 1)',
-                      'rgba(255, 99, 132, 1)',
-                    ],
-                    borderWidth: 1,
-                    hoverOffset: 4,
-                  },
-                ],
-              }}
-              options={{
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                  legend: {
-                    position: 'bottom',
-                    labels: {
-                      usePointStyle: true,
-                      boxWidth: 10,
-                      padding: 20,
+      {/* Club admin doesn't need to see the club status overview */}
+      {userRole !== 'clubAdmin' && (
+        <SimpleGrid cols={2} spacing="md">
+          {/* Club Status Overview */}
+          <Card withBorder p="md" radius="md">
+            <Card.Section withBorder inheritPadding py="xs">
+              <Group position="apart">
+                <Text weight={500}>Club Status Overview</Text>
+              </Group>
+            </Card.Section>
+            
+            <Group position="center" py="md" style={{ height: 260, position: 'relative' }}>
+              <Doughnut
+                data={{
+                  labels: ['Active Clubs', 'Suspended Clubs'],
+                  datasets: [
+                    {
+                      label: 'Club Status',
+                      data: [stats?.activeClubs || 0, stats?.suspendedClubs || 0],
+                      backgroundColor: [
+                        'rgba(75, 192, 112, 0.8)',
+                        'rgba(255, 99, 132, 0.8)',
+                      ],
+                      borderColor: [
+                        'rgba(75, 192, 112, 1)',
+                        'rgba(255, 99, 132, 1)',
+                      ],
+                      borderWidth: 1,
+                      hoverOffset: 4,
+                    },
+                  ],
+                }}
+                options={{
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: {
+                    legend: {
+                      position: 'bottom',
+                      labels: {
+                        usePointStyle: true,
+                        boxWidth: 10,
+                        padding: 20,
+                      },
+                    },
+                    tooltip: {
+                      callbacks: {
+                        title: (items) => items[0].label,
+                        label: (item) => `${item.formattedValue} clubs (${((item.parsed / (stats?.totalClubs || 1)) * 100).toFixed(1)}%)`,
+                      },
                     },
                   },
-                  tooltip: {
-                    callbacks: {
-                      title: (items) => items[0].label,
-                      label: (item) => `${item.formattedValue} clubs (${((item.parsed / (stats?.totalClubs || 1)) * 100).toFixed(1)}%)`,
-                    },
-                  },
-                },
-                cutout: '65%',
-              }}
-            />
-            <div style={{ 
-              position: 'absolute', 
-              top: '50%', 
-              left: '50%', 
-              transform: 'translate(-50%, -50%)',
-              textAlign: 'center',
-            }}>
-              <Text weight={700} size="xl">{stats?.totalClubs}</Text>
-              <Text size="xs" color="dimmed">Total Clubs</Text>
-            </div>
-          </Group>
-          
-          <Group position="apart" mt="sm" px="md">
-            <Card withBorder p="xs" radius="md" style={{ background: 'rgba(75, 192, 112, 0.1)', borderColor: 'rgba(75, 192, 112, 0.5)', width: '48%' }}>
-              <Group position="apart">
-                <Text size="sm" weight={600}>Active</Text>
-                <Badge color="green" size="lg" radius="sm" variant="filled">
-                  {stats?.activeClubs}
-                </Badge>
-              </Group>
-            </Card>
-            <Card withBorder p="xs" radius="md" style={{ background: 'rgba(255, 99, 132, 0.1)', borderColor: 'rgba(255, 99, 132, 0.5)', width: '48%' }}>
-              <Group position="apart">
-                <Text size="sm" weight={600}>Suspended</Text>
-                <Badge color="red" size="lg" radius="sm" variant="filled">
-                  {stats?.suspendedClubs}
-                </Badge>
-              </Group>
-            </Card>
-          </Group>
-        </Card>
-        
-        {/* Top Clubs */}
-        <Card withBorder p="md" radius="md">
-          <Card.Section withBorder inheritPadding py="xs">
-            <Group position="apart">
-              <Text weight={500}>Top Clubs by Player Count</Text>
+                  cutout: '65%',
+                }}
+              />
+              <div style={{ 
+                position: 'absolute', 
+                top: '50%', 
+                left: '50%', 
+                transform: 'translate(-50%, -50%)',
+                textAlign: 'center',
+              }}>
+                <Text weight={700} size="xl">{stats?.totalClubs}</Text>
+                <Text size="xs" color="dimmed">Total Clubs</Text>
+              </div>
             </Group>
-          </Card.Section>
+            
+            <Group position="apart" mt="sm" px="md">
+              <Card withBorder p="xs" radius="md" style={{ background: 'rgba(75, 192, 112, 0.1)', borderColor: 'rgba(75, 192, 112, 0.5)', width: '48%' }}>
+                <Group position="apart">
+                  <Text size="sm" weight={600}>Active</Text>
+                  <Badge color="green" size="lg" radius="sm" variant="filled">
+                    {stats?.activeClubs}
+                  </Badge>
+                </Group>
+              </Card>
+              <Card withBorder p="xs" radius="md" style={{ background: 'rgba(255, 99, 132, 0.1)', borderColor: 'rgba(255, 99, 132, 0.5)', width: '48%' }}>
+                <Group position="apart">
+                  <Text size="sm" weight={600}>Suspended</Text>
+                  <Badge color="red" size="lg" radius="sm" variant="filled">
+                    {stats?.suspendedClubs}
+                  </Badge>
+                </Group>
+              </Card>
+            </Group>
+          </Card>
           
-          <Table>
-            <thead>
-              <tr>
-                <th>Club Name</th>
-                <th>Players</th>
-                <th>Teams</th>
-                <th>Activity</th>
-              </tr>
-            </thead>
-            <tbody>
-              {topClubs.map((club) => (
-                <tr key={club.id}>
-                  <td>{club.name}</td>
-                  <td>{club.player_count}</td>
-                  <td>{club.team_count}</td>
-                  <td>
-                    <Badge 
-                      color={
-                        club.activity_level === 'high' ? 'green' : 
-                        club.activity_level === 'medium' ? 'blue' : 'gray'
-                      }
-                    >
-                      {club.activity_level}
-                    </Badge>
-                  </td>
+          {/* Top Clubs */}
+          <Card withBorder p="md" radius="md">
+            <Card.Section withBorder inheritPadding py="xs">
+              <Group position="apart">
+                <Text weight={500}>Top Clubs by Player Count</Text>
+              </Group>
+            </Card.Section>
+            
+            <Table>
+              <thead>
+                <tr>
+                  <th>Club Name</th>
+                  <th>Players</th>
+                  <th>Teams</th>
+                  <th>Activity</th>
                 </tr>
-              ))}
-            </tbody>
-          </Table>
-        </Card>
-      </SimpleGrid>
+              </thead>
+              <tbody>
+                {topClubs.map((club) => (
+                  <tr key={club.id}>
+                    <td>{club.name}</td>
+                    <td>{club.player_count}</td>
+                    <td>{club.team_count}</td>
+                    <td>
+                      <Badge 
+                        color={
+                          club.activity_level === 'high' ? 'green' : 
+                          club.activity_level === 'medium' ? 'blue' : 'gray'
+                        }
+                      >
+                        {club.activity_level}
+                      </Badge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          </Card>
+        </SimpleGrid>
+      )}
       
       {/* Recent Activity */}
       <Paper withBorder p="md" radius="md" mt="md">
@@ -451,21 +570,29 @@ const Dashboard: React.FC = () => {
         <Table>
           <thead>
             <tr>
-              <th>Club</th>
+              <th>{userRole === 'clubAdmin' ? 'Activity' : 'Club'}</th>
               <th>Action</th>
               <th>User</th>
               <th>Date</th>
             </tr>
           </thead>
           <tbody>
-            {recentActivity.map((activity) => (
-              <tr key={activity.id}>
-                <td>{activity.club_name}</td>
-                <td>{activity.action}</td>
-                <td>{activity.user}</td>
-                <td>{activity.date}</td>
+            {recentActivity.length > 0 ? (
+              recentActivity.map((activity) => (
+                <tr key={activity.id}>
+                  <td>{activity.club_name}</td>
+                  <td>{activity.action}</td>
+                  <td>{activity.user}</td>
+                  <td>{activity.date}</td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={4} style={{ textAlign: 'center', padding: '20px' }}>
+                  No recent activity found
+                </td>
               </tr>
-            ))}
+            )}
           </tbody>
         </Table>
       </Paper>

@@ -324,7 +324,7 @@ const UsersList: React.FC = () => {
         console.error('Error fetching parents:', parentsError);
         throw parentsError;
       }
-
+      
       // Get last sign in data from auth_user_details view
       debugData.queries.push({ name: 'authUserDetails', startTime: new Date().toISOString() });
       const { data: authUserDetails, error: authUserDetailsError } = await supabase
@@ -371,8 +371,8 @@ const UsersList: React.FC = () => {
       else if (authSessions && !authSessionsError) {
         authSessions.forEach(session => {
           if (session.user_id) {
-            if (!lastSignInMap.has(session.user_id)) {
-              lastSignInMap.set(session.user_id, session.created_at);
+          if (!lastSignInMap.has(session.user_id)) {
+            lastSignInMap.set(session.user_id, session.created_at);
             }
             if (session.email && !emailToLastSignInMap.has(session.email.toLowerCase())) {
               emailToLastSignInMap.set(session.email.toLowerCase(), session.created_at);
@@ -861,7 +861,7 @@ const UsersList: React.FC = () => {
     if (!lastSignIn) return 'Never';
     
     try {
-      const date = new Date(lastSignIn);
+    const date = new Date(lastSignIn);
       // Check if date is valid
       if (isNaN(date.getTime())) return 'Never';
       
@@ -1196,4 +1196,4 @@ const UsersList: React.FC = () => {
   );
 };
 
-export default UsersList;
+export default UsersList; 

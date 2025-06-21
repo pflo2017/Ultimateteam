@@ -17,9 +17,11 @@ import PaymentsPage from './pages/PaymentsPage';
 import AdminPasswordReset from './pages/AdminPasswordReset';
 import ResetPasswordConfirmation from './pages/ResetPasswordConfirmation';
 import SuspendedClubBanner from './components/SuspendedClubBanner';
+import { Notifications } from '@mantine/notifications';
+import ScheduleManagement from './pages/ScheduleManagement';
+import TeamsPage from './pages/TeamsPage';
 
 // Placeholder for future components
-const ScheduleManagement = () => <div>Schedule Management</div>;
 const Analytics = () => <div>Analytics</div>;
 const Billing = () => <div>Billing</div>;
 const AdminSettings = () => <div>Admin Settings</div>;
@@ -27,7 +29,7 @@ const AdminSettings = () => <div>Admin Settings</div>;
 // Protected route component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
-  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+  const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
   const [debugInfo, setDebugInfo] = useState<string>('');
   
   useEffect(() => {
@@ -43,43 +45,60 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
         setDebugInfo(prev => `${prev}\nAuth check: ${JSON.stringify({ isAuth, hasSession: !!session })}`);
         
         if (session) {
-          // Check if master admin
-          try {
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          // Get user role from localStorage
+          const userRole = localStorage.getItem('userRole');
+          
+          if (userRole === 'masterAdmin') {
+            // Verify master admin status
             const { data, error: userError } = await supabase
               .from('master_admins')
               .select('*')
               .eq('user_id', session.user.id);
             
-            console.log('Admin check:', { data, userError });
-            setDebugInfo(prev => `${prev}\nAdmin check: ${JSON.stringify({ 
+            console.log('Master admin check:', { data, userError });
+            setDebugInfo(prev => `${prev}\nMaster admin check: ${JSON.stringify({ 
               found: data && data.length > 0,
               userId: session.user.id,
               error: userError?.message
             })}`);
             
             const isAdminUser = data && data.length > 0 && !userError;
-            setIsAdmin(isAdminUser);
-          } catch (adminError) {
-            console.error('Error checking admin status:', adminError);
-            setDebugInfo(prev => `${prev}\nAdmin check error: ${JSON.stringify(adminError)}`);
-            setIsAdmin(false);
+            setIsAuthorized(isAdminUser);
+          } else if (userRole === 'clubAdmin') {
+            // Verify club admin status
+            const { data, error: userError } = await supabase
+              .from('clubs')
+              .select('*')
+              .eq('admin_id', session.user.id);
+            
+            console.log('Club admin check:', { data, userError });
+            setDebugInfo(prev => `${prev}\nClub admin check: ${JSON.stringify({ 
+              found: data && data.length > 0,
+              userId: session.user.id,
+              error: userError?.message
+            })}`);
+            
+            const isClubAdminUser = data && data.length > 0 && !userError;
+            setIsAuthorized(isClubAdminUser);
+          } else {
+            // No valid role found
+            setIsAuthorized(false);
           }
         } else {
-          setIsAdmin(false);
+          setIsAuthorized(false);
         }
       } catch (error) {
         console.error('Auth check error:', error);
         setDebugInfo(prev => `${prev}\nError: ${JSON.stringify(error)}`);
         setIsAuthenticated(false);
-        setIsAdmin(false);
+        setIsAuthorized(false);
       }
     };
     
     checkAuth();
   }, []);
   
-  if (isAuthenticated === null || isAdmin === null) {
+  if (isAuthenticated === null || isAuthorized === null) {
     return (
       <div style={{ padding: 20 }}>
         <h2>Loading...</h2>
@@ -101,11 +120,202 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
     return <Navigate to="/login" />;
   }
   
-  if (!isAdmin) {
+  if (!isAuthorized) {
     return (
       <div style={{ padding: 20 }}>
         <h2>Access Denied</h2>
         <p>You don't have permission to access this area.</p>
+        <pre style={{ 
+          whiteSpace: 'pre-wrap', 
+          background: '#f5f5f5', 
+          padding: 10, 
+          border: '1px solid #ddd',
+          maxHeight: '400px',
+          overflow: 'auto'
+        }}>
+          {debugInfo || 'No debug info available'}
+        </pre>
+      </div>
+    );
+  }
+  
+  return <>{children}</>;
+};
+
+// Master Admin only route
+const MasterAdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [isMasterAdmin, setIsMasterAdmin] = useState<boolean | null>(null);
+  const [debugInfo, setDebugInfo] = useState<string>('');
+  
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        // Check session
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        const isAuth = !!session;
+        setIsAuthenticated(isAuth);
+        
+        console.log('Auth check:', { isAuth, session, sessionError });
+        setDebugInfo(prev => `${prev}\nAuth check: ${JSON.stringify({ isAuth, hasSession: !!session })}`);
+        
+        if (session) {
+          // Check if the user is a master admin
+          const { data, error: userError } = await supabase
+            .from('master_admins')
+            .select('*')
+            .eq('user_id', session.user.id);
+          
+          console.log('Master admin check:', { data, userError });
+          setDebugInfo(prev => `${prev}\nMaster admin check: ${JSON.stringify({ 
+            found: data && data.length > 0,
+            userId: session.user.id,
+            error: userError?.message
+          })}`);
+          
+          const isAdminUser = data && data.length > 0 && !userError;
+          setIsMasterAdmin(isAdminUser);
+        } else {
+          setIsMasterAdmin(false);
+        }
+      } catch (error) {
+        console.error('Auth check error:', error);
+        setDebugInfo(prev => `${prev}\nError: ${JSON.stringify(error)}`);
+        setIsAuthenticated(false);
+        setIsMasterAdmin(false);
+      }
+    };
+    
+    checkAuth();
+  }, []);
+  
+  if (isAuthenticated === null || isMasterAdmin === null) {
+    return (
+      <div style={{ padding: 20 }}>
+        <h2>Loading...</h2>
+        <pre style={{ 
+          whiteSpace: 'pre-wrap', 
+          background: '#f5f5f5', 
+          padding: 10, 
+          border: '1px solid #ddd',
+          maxHeight: '400px',
+          overflow: 'auto'
+        }}>
+          {debugInfo || 'No debug info available'}
+        </pre>
+      </div>
+    );
+  }
+  
+  if (!isAuthenticated) {
+    return <Navigate to="/login" />;
+  }
+  
+  if (!isMasterAdmin) {
+    return (
+      <div style={{ padding: 20 }}>
+        <h2>Access Denied</h2>
+        <p>Only Master Administrators can access this area.</p>
+        <pre style={{ 
+          whiteSpace: 'pre-wrap', 
+          background: '#f5f5f5', 
+          padding: 10, 
+          border: '1px solid #ddd',
+          maxHeight: '400px',
+          overflow: 'auto'
+        }}>
+          {debugInfo || 'No debug info available'}
+        </pre>
+      </div>
+    );
+  }
+  
+  return <>{children}</>;
+};
+
+// Club Admin only route
+const ClubAdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [isClubAdmin, setIsClubAdmin] = useState<boolean | null>(null);
+  const [debugInfo, setDebugInfo] = useState<string>('');
+  
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        // Check session
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        const isAuth = !!session;
+        setIsAuthenticated(isAuth);
+        
+        console.log('Auth check:', { isAuth, session, sessionError });
+        setDebugInfo(prev => `${prev}\nAuth check: ${JSON.stringify({ isAuth, hasSession: !!session })}`);
+        
+        if (session) {
+          // Check if the user is a club admin
+          const { data, error: userError } = await supabase
+            .from('clubs')
+            .select('*')
+            .eq('admin_id', session.user.id);
+          
+          console.log('Club admin check:', { data, userError });
+          setDebugInfo(prev => `${prev}\nClub admin check: ${JSON.stringify({ 
+            found: data && data.length > 0,
+            userId: session.user.id,
+            error: userError?.message
+          })}`);
+          
+          const isClubAdminUser = data && data.length > 0 && !userError;
+          setIsClubAdmin(isClubAdminUser);
+          
+          if (isClubAdminUser && data && data.length > 0) {
+            // Store club info in localStorage if not already there
+            if (!localStorage.getItem('clubId')) {
+              localStorage.setItem('clubId', data[0].id);
+              localStorage.setItem('clubName', data[0].name);
+              localStorage.setItem('userRole', 'clubAdmin');
+            }
+          }
+        } else {
+          setIsClubAdmin(false);
+        }
+      } catch (error) {
+        console.error('Auth check error:', error);
+        setDebugInfo(prev => `${prev}\nError: ${JSON.stringify(error)}`);
+        setIsAuthenticated(false);
+        setIsClubAdmin(false);
+      }
+    };
+    
+    checkAuth();
+  }, []);
+  
+  if (isAuthenticated === null || isClubAdmin === null) {
+    return (
+      <div style={{ padding: 20 }}>
+        <h2>Loading...</h2>
+        <pre style={{ 
+          whiteSpace: 'pre-wrap', 
+          background: '#f5f5f5', 
+          padding: 10, 
+          border: '1px solid #ddd',
+          maxHeight: '400px',
+          overflow: 'auto'
+        }}>
+          {debugInfo || 'No debug info available'}
+        </pre>
+      </div>
+    );
+  }
+  
+  if (!isAuthenticated) {
+    return <Navigate to="/login" />;
+  }
+  
+  if (!isClubAdmin) {
+    return (
+      <div style={{ padding: 20 }}>
+        <h2>Access Denied</h2>
+        <p>Only Club Administrators can access this area.</p>
         <pre style={{ 
           whiteSpace: 'pre-wrap', 
           background: '#f5f5f5', 
@@ -219,148 +429,149 @@ const App: React.FC = () => {
   const toggleColorScheme = (value?: ColorScheme) =>
     setColorScheme(value || (colorScheme === 'dark' ? 'light' : 'dark'));
   
+  // Add state to track if user has explicitly logged in during this session
+  const [hasExplicitLogin, setHasExplicitLogin] = useState<boolean>(false);
+  
+  // Check localStorage on component mount to see if we should clear auth
+  useEffect(() => {
+    // Clear any existing auth session when the app loads
+    const clearSession = async () => {
+      // Only clear if user hasn't explicitly logged in during this session
+      if (!hasExplicitLogin) {
+        localStorage.removeItem('userRole');
+        localStorage.removeItem('clubId');
+        localStorage.removeItem('clubName');
+        await supabase.auth.signOut();
+      }
+    };
+    
+    clearSession();
+  }, [hasExplicitLogin]);
+  
   return (
     <ColorSchemeProvider colorScheme={colorScheme} toggleColorScheme={toggleColorScheme}>
       <MantineProvider theme={{ colorScheme }} withGlobalStyles withNormalizeCSS>
+        <Notifications />
         <Router>
           <Routes>
-            <Route path="/login" element={<Login />} />
+            <Route path="/login" element={<Login setHasExplicitLogin={setHasExplicitLogin} />} />
             
             {/* Public routes */}
             <Route path="/reset-admin-password" element={<AdminPasswordReset />} />
             <Route path="/reset-password-confirmation" element={<ResetPasswordConfirmation />} />
             
-            <Route 
-              path="/" 
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout colorScheme={colorScheme} toggleColorScheme={toggleColorScheme}>
-                    <Dashboard />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
+            {/* Redirect root to login */}
+            <Route path="/" element={<Navigate to="/login" replace />} />
             
-            <Route 
-              path="/clubs" 
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout colorScheme={colorScheme} toggleColorScheme={toggleColorScheme}>
-                    <ClubsList />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
+            {/* Protected routes that both master and club admins can access */}
+            <Route path="/dashboard" element={
+              <ProtectedRoute>
+                <DashboardLayout colorScheme={colorScheme} toggleColorScheme={toggleColorScheme}>
+                  <Dashboard />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } />
             
-            <Route 
-              path="/clubs/:id" 
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout colorScheme={colorScheme} toggleColorScheme={toggleColorScheme}>
-                    <ClubDetail />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
+            {/* Master admin only routes */}
+            <Route path="/clubs" element={
+              <MasterAdminRoute>
+                <DashboardLayout colorScheme={colorScheme} toggleColorScheme={toggleColorScheme}>
+                  <ClubsList />
+                </DashboardLayout>
+              </MasterAdminRoute>
+            } />
             
-            <Route 
-              path="/users" 
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout colorScheme={colorScheme} toggleColorScheme={toggleColorScheme}>
-                    <UsersList />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
+            <Route path="/clubs/:id" element={
+              <MasterAdminRoute>
+                <DashboardLayout colorScheme={colorScheme} toggleColorScheme={toggleColorScheme}>
+                  <ClubDetail />
+                </DashboardLayout>
+              </MasterAdminRoute>
+            } />
             
-            <Route 
-              path="/coaches" 
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout colorScheme={colorScheme} toggleColorScheme={toggleColorScheme}>
-                    <CoachesList />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
+            <Route path="/users" element={
+              <MasterAdminRoute>
+                <DashboardLayout colorScheme={colorScheme} toggleColorScheme={toggleColorScheme}>
+                  <UsersList />
+                </DashboardLayout>
+              </MasterAdminRoute>
+            } />
             
-            <Route 
-              path="/players" 
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout colorScheme={colorScheme} toggleColorScheme={toggleColorScheme}>
-                    <PlayersPage />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
+            {/* Club admin only routes */}
+            <Route path="/schedule" element={
+              <ClubAdminRoute>
+                <DashboardLayout colorScheme={colorScheme} toggleColorScheme={toggleColorScheme}>
+                  <ScheduleManagement />
+                </DashboardLayout>
+              </ClubAdminRoute>
+            } />
             
-            <Route 
-              path="/parents" 
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout colorScheme={colorScheme} toggleColorScheme={toggleColorScheme}>
-                    <Parents />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
+            <Route path="/teams" element={
+              <ClubAdminRoute>
+                <DashboardLayout colorScheme={colorScheme} toggleColorScheme={toggleColorScheme}>
+                  <TeamsPage />
+                </DashboardLayout>
+              </ClubAdminRoute>
+            } />
             
-            <Route 
-              path="/payments" 
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout colorScheme={colorScheme} toggleColorScheme={toggleColorScheme}>
-                    <PaymentsPage />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
+            {/* Routes accessible by both admin types */}
+            <Route path="/coaches" element={
+              <ProtectedRoute>
+                <DashboardLayout colorScheme={colorScheme} toggleColorScheme={toggleColorScheme}>
+                  <CoachesList />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } />
             
-            <Route 
-              path="/schedule" 
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout colorScheme={colorScheme} toggleColorScheme={toggleColorScheme}>
-                    <ScheduleManagement />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
+            <Route path="/players" element={
+              <ProtectedRoute>
+                <DashboardLayout colorScheme={colorScheme} toggleColorScheme={toggleColorScheme}>
+                  <PlayersPage />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } />
             
-            <Route 
-              path="/analytics" 
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout colorScheme={colorScheme} toggleColorScheme={toggleColorScheme}>
-                    <Analytics />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
+            <Route path="/parents" element={
+              <ProtectedRoute>
+                <DashboardLayout colorScheme={colorScheme} toggleColorScheme={toggleColorScheme}>
+                  <Parents />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } />
             
-            <Route 
-              path="/billing" 
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout colorScheme={colorScheme} toggleColorScheme={toggleColorScheme}>
-                    <Billing />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
+            <Route path="/payments" element={
+              <ProtectedRoute>
+                <DashboardLayout colorScheme={colorScheme} toggleColorScheme={toggleColorScheme}>
+                  <PaymentsPage />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } />
             
-            <Route 
-              path="/settings" 
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout colorScheme={colorScheme} toggleColorScheme={toggleColorScheme}>
-                    <AdminSettings />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
+            <Route path="/analytics" element={
+              <ProtectedRoute>
+                <DashboardLayout colorScheme={colorScheme} toggleColorScheme={toggleColorScheme}>
+                  <Analytics />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } />
+            
+            <Route path="/billing" element={
+              <ProtectedRoute>
+                <DashboardLayout colorScheme={colorScheme} toggleColorScheme={toggleColorScheme}>
+                  <Billing />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } />
+            
+            <Route path="/settings" element={
+              <ProtectedRoute>
+                <DashboardLayout colorScheme={colorScheme} toggleColorScheme={toggleColorScheme}>
+                  <AdminSettings />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } />
+            
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Router>
       </MantineProvider>

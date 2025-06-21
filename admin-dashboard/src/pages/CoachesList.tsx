@@ -53,8 +53,20 @@ const CoachesList: React.FC = () => {
   const [actionLoading, setActionLoading] = useState(false);
   const [debugInfo, setDebugInfo] = useState<any>(null);
   const [showDebug, setShowDebug] = useState(false);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [clubId, setClubId] = useState<string | null>(null);
+  const [clubName, setClubName] = useState<string | null>(null);
 
   useEffect(() => {
+    // Get user role and club ID from localStorage
+    const role = localStorage.getItem('userRole');
+    setUserRole(role);
+    
+    if (role === 'clubAdmin') {
+      setClubId(localStorage.getItem('clubId'));
+      setClubName(localStorage.getItem('clubName'));
+    }
+    
     fetchCoaches();
   }, []);
 
@@ -77,27 +89,12 @@ const CoachesList: React.FC = () => {
         throw new Error('Not authenticated');
       }
       
-      // Check if the current user is a master admin
-      debugData.queries.push({ name: 'checkMasterAdmin', startTime: new Date().toISOString() });
-      const { data: masterAdminCheck, error: masterAdminCheckError } = await supabase
-        .from('master_admins')
-        .select('*')
-        .eq('user_id', session.user.id)
-        .single();
+      // Get user role from localStorage
+      const userRole = localStorage.getItem('userRole');
+      const clubId = localStorage.getItem('clubId');
       
-      debugData.masterAdminCheck = {
-        data: masterAdminCheck,
-        error: masterAdminCheckError ? masterAdminCheckError.message : null
-      };
-      debugData.queries[debugData.queries.length - 1].endTime = new Date().toISOString();
-      
-      if (masterAdminCheckError || !masterAdminCheck) {
-        throw new Error('You are not authorized as a master admin');
-      }
-
-      // Fetch coaches with club information
-      debugData.queries.push({ name: 'coaches', startTime: new Date().toISOString() });
-      const { data: coachesData, error: coachesError } = await supabase
+      // Build query based on user role
+      let query = supabase
         .from('coaches')
         .select(`
           id, 
@@ -110,15 +107,26 @@ const CoachesList: React.FC = () => {
           admin_id,
           email,
           clubs:club_id (id, name)
-        `)
-        .order('created_at', { ascending: false });
+        `);
+      
+      // If club admin, filter by club_id
+      if (userRole === 'clubAdmin' && clubId) {
+        query = query.eq('club_id', clubId);
+      } else if (userRole === 'masterAdmin') {
+        // For master admin, no additional filtering needed
+      } else {
+        // If not a master admin or club admin with valid club ID, throw error
+        throw new Error('You do not have permission to view coaches');
+      }
+      
+      // Execute the query
+      const { data: coachesData, error: coachesError } = await query.order('created_at', { ascending: false });
 
       debugData.coaches = { 
         data: coachesData, 
         count: coachesData?.length || 0,
         error: coachesError ? coachesError.message : null
       };
-      debugData.queries[debugData.queries.length - 1].endTime = new Date().toISOString();
       
       if (coachesError) {
         console.error('Error fetching coaches:', coachesError);
@@ -249,212 +257,160 @@ const CoachesList: React.FC = () => {
     }
   };
 
+  const getStatusBadge = (isActive: boolean) => {
+    return (
+      <Badge color={isActive ? 'green' : 'gray'}>
+        {isActive ? 'Active' : 'Inactive'}
+      </Badge>
+    );
+  };
+
+  const getStatusActionIcon = (coach: Coach) => {
+    return coach.is_active ? (
+      <Tooltip label="Deactivate Coach">
+        <ActionIcon color="red" onClick={() => handleToggleStatus(coach)}>
+          <IconLock size={16} />
+        </ActionIcon>
+      </Tooltip>
+    ) : (
+      <Tooltip label="Activate Coach">
+        <ActionIcon color="green" onClick={() => handleToggleStatus(coach)}>
+          <IconLockOpen size={16} />
+        </ActionIcon>
+      </Tooltip>
+    );
+  };
+
   // Filter coaches based on search term and active tab
   const filteredCoaches = coaches.filter(coach => {
-    // Filter by search term
     const matchesSearch = 
-      (coach.name?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
-      (coach.email?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
-      (coach.phone_number?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
-      (coach.club_name?.toLowerCase().includes(searchTerm.toLowerCase()) || false);
-    
-    // Filter by active tab
-    const matchesTab = 
-      activeTab === 'all' ? true :
-      activeTab === 'active' ? coach.is_active :
-      !coach.is_active;
-    
-    return matchesSearch && matchesTab;
+      coach.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (coach.email && coach.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      coach.phone_number.includes(searchTerm);
+      
+    if (activeTab === 'all') return matchesSearch;
+    if (activeTab === 'active') return matchesSearch && coach.is_active;
+    if (activeTab === 'inactive') return matchesSearch && !coach.is_active;
+    return matchesSearch;
   });
-
-  const getStatusBadge = (isActive: boolean) => {
-    return isActive ? 
-      <Badge color="green" variant="filled">Active</Badge> : 
-      <Badge color="red" variant="filled">Inactive</Badge>;
-  };
 
   return (
     <>
-      <Group position="apart" mb="md">
-        <Title order={2}>Coaches Management</Title>
-        <Group>
-          <Button 
-            variant="outline"
-            onClick={() => setShowDebug(!showDebug)}
-            size="sm"
-          >
-            {showDebug ? 'Hide Debug' : 'Show Debug'}
-          </Button>
-          <Button 
-            leftIcon={<IconPlus size={16} />} 
-            onClick={() => navigate('/coaches/new')}
-          >
-            Add Coach
-          </Button>
-        </Group>
-      </Group>
-
-      {showDebug && debugInfo && (
-        <Paper p="md" mb="md" withBorder>
-          <Title order={4}>Debug Information</Title>
-          <pre style={{ whiteSpace: 'pre-wrap' }}>
-            {JSON.stringify(debugInfo, null, 2)}
-          </pre>
-        </Paper>
-      )}
-
+      <Title order={2} mb="md">
+        {userRole === 'clubAdmin' && clubName ? `${clubName} Coaches` : 'All Coaches'}
+      </Title>
+      
       <Paper p="md" mb="md">
         <Group position="apart">
           <TextInput
-            placeholder="Search coaches by name, email, phone or club..."
+            placeholder="Search by name, email or phone..."
             icon={<IconSearch size={16} />}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             style={{ flexGrow: 1 }}
           />
-          <Group>
-            <Button 
-              variant={activeTab === 'all' ? 'filled' : 'outline'}
-              onClick={() => setActiveTab('all')}
-            >
-              All
-            </Button>
-            <Button 
-              variant={activeTab === 'active' ? 'filled' : 'outline'}
-              color="green"
-              onClick={() => setActiveTab('active')}
-            >
-              Active
-            </Button>
-            <Button 
-              variant={activeTab === 'inactive' ? 'filled' : 'outline'}
-              color="red"
-              onClick={() => setActiveTab('inactive')}
-            >
-              Inactive
-            </Button>
-          </Group>
+          <Button
+            leftIcon={<IconUserPlus size={16} />}
+            onClick={() => navigate('/coaches/new')}
+          >
+            Add Coach
+          </Button>
         </Group>
       </Paper>
-
+      
       {loading ? (
         <Center p="xl">
           <Loader />
         </Center>
+      ) : filteredCoaches.length === 0 ? (
+        <Text align="center" mt="lg" color="dimmed">
+          No coaches found. {searchTerm ? 'Try a different search term.' : 'Add a coach to get started.'}
+        </Text>
       ) : (
-        <Paper withBorder p={0}>
-          <Table striped highlightOnHover>
-            <thead>
-              <tr>
-                <th>Coach</th>
-                <th>Phone</th>
-                <th>Club</th>
-                <th>Created</th>
-                <th>Status</th>
-                <th>Actions</th>
+        <Table striped>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Phone</th>
+              {userRole === 'masterAdmin' && <th>Club</th>}
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredCoaches.map((coach) => (
+              <tr key={coach.id}>
+                <td>
+                  <Group spacing="sm">
+                    <Avatar size={30} radius={30} color="blue">
+                      {coach.name.substring(0, 2).toUpperCase()}
+                    </Avatar>
+                    <Text size="sm" weight={500}>
+                      {coach.name}
+                    </Text>
+                  </Group>
+                </td>
+                <td>{coach.email || 'No email'}</td>
+                <td>
+                  <Group spacing="xs" noWrap>
+                    <IconPhone size={16} />
+                    <Text size="sm">{coach.phone_number}</Text>
+                  </Group>
+                </td>
+                {userRole === 'masterAdmin' && (
+                  <td>{coach.club_name}</td>
+                )}
+                <td>{getStatusBadge(coach.is_active)}</td>
+                <td>
+                  <Group spacing="xs">
+                    <Tooltip label="Edit Coach">
+                      <ActionIcon color="blue" onClick={() => navigate(`/coaches/${coach.id}`)}>
+                        <IconEdit size={16} />
+                      </ActionIcon>
+                    </Tooltip>
+                    {getStatusActionIcon(coach)}
+                  </Group>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {filteredCoaches.length > 0 ? (
-                filteredCoaches.map((coach) => (
-                  <tr key={coach.id}>
-                    <td>
-                      <Group spacing="sm">
-                        <Avatar color="green" radius="xl">
-                          <IconUserPlus size={24} />
-                        </Avatar>
-                        <div>
-                          <Text weight={500}>{coach.name || 'Unknown'}</Text>
-                          <Text size="xs" color="dimmed">{coach.email || 'No email'}</Text>
-                        </div>
-                      </Group>
-                    </td>
-                    <td>
-                      <Group spacing={4}>
-                        <IconPhone size={14} />
-                        <Text size="sm">{coach.phone_number || 'No phone'}</Text>
-                      </Group>
-                    </td>
-                    <td>{coach.club_name || 'No club assigned'}</td>
-                    <td>{new Date(coach.created_at).toLocaleDateString()}</td>
-                    <td>{getStatusBadge(coach.is_active)}</td>
-                    <td>
-                      <Group spacing={8} position="left">
-                        <Tooltip label="Edit Coach">
-                          <ActionIcon onClick={() => navigate(`/coaches/${coach.id}`)}>
-                            <IconEdit size={16} />
-                          </ActionIcon>
-                        </Tooltip>
-                        
-                        <Tooltip label={coach.is_active ? 'Deactivate' : 'Activate'}>
-                          <ActionIcon 
-                            color={coach.is_active ? 'red' : 'green'}
-                            onClick={() => handleToggleStatus(coach)}
-                          >
-                            {coach.is_active ? <IconLock size={16} /> : <IconLockOpen size={16} />}
-                          </ActionIcon>
-                        </Tooltip>
-                      </Group>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={6}>
-                    <Center p="xl">
-                      <Stack align="center" spacing="md">
-                        <Text align="center" size="lg" weight={500} color="dimmed">
-                          No coaches found
-                        </Text>
-                        <Text align="center" color="dimmed" size="sm">
-                          {coaches.length === 0 
-                            ? "There are no coaches in the database. Try adding some coaches or check the debug information for errors."
-                            : "No coaches match your current filters. Try adjusting your search or filter criteria."}
-                        </Text>
-                        {coaches.length === 0 && (
-                          <Button 
-                            variant="outline" 
-                            onClick={() => setShowDebug(true)}
-                            leftIcon={<IconSearch size={16} />}
-                          >
-                            Show Debug Information
-                          </Button>
-                        )}
-                      </Stack>
-                    </Center>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </Table>
-        </Paper>
+            ))}
+          </tbody>
+        </Table>
       )}
-
-      {/* Suspend/Activate Coach Modal */}
+      
+      {/* Status Toggle Confirmation Modal */}
       <Modal
         opened={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={selectedCoach?.is_active ? "Deactivate Coach" : "Activate Coach"}
+        title={`${selectedCoach?.is_active ? 'Deactivate' : 'Activate'} Coach`}
       >
-        <Stack>
-          <Text>
-            {selectedCoach?.is_active 
-              ? `Are you sure you want to deactivate ${selectedCoach?.name || 'this coach'}?` 
-              : `Are you sure you want to activate ${selectedCoach?.name || 'this coach'}?`}
-          </Text>
-          <Group position="right" mt="md">
-            <Button variant="outline" onClick={() => setModalOpen(false)} disabled={actionLoading}>
-              Cancel
-            </Button>
-            <Button 
-              color={selectedCoach?.is_active ? "red" : "green"} 
-              onClick={confirmToggleStatus}
-              loading={actionLoading}
-            >
-              {selectedCoach?.is_active ? "Deactivate" : "Activate"}
-            </Button>
-          </Group>
-        </Stack>
+        <Text size="sm" mb="lg">
+          Are you sure you want to {selectedCoach?.is_active ? 'deactivate' : 'activate'} coach <strong>{selectedCoach?.name}</strong>?
+        </Text>
+        <Group position="right">
+          <Button variant="default" onClick={() => setModalOpen(false)} disabled={actionLoading}>
+            Cancel
+          </Button>
+          <Button 
+            color={selectedCoach?.is_active ? 'red' : 'green'}
+            onClick={confirmToggleStatus}
+            loading={actionLoading}
+          >
+            Confirm
+          </Button>
+        </Group>
+      </Modal>
+      
+      {/* Debug Info Modal */}
+      <Modal
+        opened={showDebug}
+        onClose={() => setShowDebug(false)}
+        title="Debug Information"
+        size="xl"
+      >
+        <pre style={{ whiteSpace: 'pre-wrap', fontSize: '12px' }}>
+          {JSON.stringify(debugInfo, null, 2)}
+        </pre>
       </Modal>
     </>
   );
