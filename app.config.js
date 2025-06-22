@@ -39,6 +39,12 @@ export default {
         projectId: "f43e8b35-5e2a-4e5d-92bb-9cdc051ca72a"
       }
     },
+    updates: {
+      url: "https://u.expo.dev/f43e8b35-5e2a-4e5d-92bb-9cdc051ca72a"
+    },
+    runtimeVersion: {
+      policy: "appVersion"
+    },
     plugins: [],
     experiments: {
       tsconfigPaths: true
