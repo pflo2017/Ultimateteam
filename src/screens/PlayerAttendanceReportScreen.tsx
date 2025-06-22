@@ -5,6 +5,7 @@ import { COLORS, SPACING } from '../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 import { useRoute, useNavigation } from '@react-navigation/native';
+import { fetchPlayerAttendanceStats } from '../services/attendanceService';
 
 // Define proper types for better type safety
 interface ActivityType {
@@ -23,6 +24,9 @@ interface AttendanceRecord {
   base_activity_id?: string;
   activity_date?: string;
   activity?: ActivityType;
+  actual_activity_date?: string;
+  activity_title?: string;
+  activity_type?: string;
 }
 
 interface AttendanceSummary {
@@ -104,16 +108,22 @@ const PlayerAttendanceReportScreen = () => {
       try {
         console.log('Fetching attendance for playerId:', playerId);
         
-        // 1. Fetch all attendance records for the player
-        const { data: attendanceData, error: attendanceError } = await supabase
-          .from('activity_attendance')
-          .select('*')
-          .eq('player_id', playerId);
-          
-        if (attendanceError) {
-          console.error('Supabase error:', attendanceError);
-          throw new Error(`Failed to fetch attendance: ${attendanceError.message}`);
-        }
+        // Calculate date range for the selected month
+        const startDate = new Date(selectedYear, selectedMonth, 1);
+        const endDate = new Date(selectedYear, selectedMonth + 1, 0); // Last day of month
+        
+        // Format dates for the query
+        const startDateStr = startDate.toISOString();
+        const endDateStr = endDate.toISOString();
+        
+        // Use the new attendance service function that handles composite IDs correctly
+        const attendanceData = await fetchPlayerAttendanceStats(
+          playerId,
+          undefined, // No team filter needed here
+          startDateStr,
+          endDateStr,
+          selectedActivityType === 'all' ? undefined : selectedActivityType
+        );
         
         if (!attendanceData || attendanceData.length === 0) {
           console.log('No attendance records found for player:', playerId);
@@ -124,128 +134,82 @@ const PlayerAttendanceReportScreen = () => {
           return;
         }
         
-        // 2. Parse base activity UUIDs and dates - with robust error handling
-        const parsedRecords: AttendanceRecord[] = [];
+        console.log('DEBUG - PlayerAttendanceReportScreen - All attendance records:', JSON.stringify(attendanceData, null, 2));
         
-        for (const rec of attendanceData) {
-          try {
-            // Handle different activity_id formats
-            let baseId = rec.activity_id;
-            let dateStr = '';
-            
-            // Check if activity_id contains date information
-            if (rec.activity_id && rec.activity_id.length > 36 && rec.activity_id.includes('-')) {
-              baseId = rec.activity_id.slice(0, 36);
-              dateStr = rec.activity_id.slice(37);
-            } else {
-              // Try to get date from created_at if activity_id doesn't have it
-              if (rec.created_at) {
-                const createdDate = new Date(rec.created_at);
-                dateStr = `${createdDate.getFullYear()}${(createdDate.getMonth() + 1).toString().padStart(2, '0')}${createdDate.getDate().toString().padStart(2, '0')}`;
+        // Process the records with the actual_activity_date from our view
+        const processedRecords = attendanceData.map((record: any) => {
+          const actDate = new Date(record.actual_activity_date);
+          const dateStr = `${actDate.getFullYear()}${(actDate.getMonth() + 1).toString().padStart(2, '0')}${actDate.getDate().toString().padStart(2, '0')}`;
+          
+          // Determine activity type for each record
+          let activityType = record.activity_type;
+          
+          // If activity_type is null, determine it based on activity_id pattern
+          if (!activityType) {
+            const activityId = record.activity_id || '';
+            if (activityId.includes('-202')) {
+              const baseId = activityId.substring(0, 36);
+              if (baseId === '25b127e6-0402-4ae3-b520-9f6a14823c55') {
+                activityType = 'training';
               }
             }
-            
-            parsedRecords.push({
-              ...rec,
-              base_activity_id: baseId,
-              activity_date: dateStr
-            });
-          } catch (e) {
-            console.error('Error parsing record:', rec, e);
-            // Still include the record even if parsing fails
-            parsedRecords.push({
-              ...rec,
-              base_activity_id: rec.activity_id,
-              activity_date: ''
-            });
-          }
-        }
-        
-        // 3. Fetch all activities for these base UUIDs
-        const uniqueBaseIds = [...new Set(parsedRecords
-          .map(r => r.base_activity_id)
-          .filter(id => id && id.length > 0) as string[]
-        )];
-        
-        let activitiesMap: Record<string, ActivityType> = {};
-        
-        if (uniqueBaseIds.length > 0) {
-          const { data: activitiesData, error: activitiesError } = await supabase
-            .from('activities')
-            .select('id, title, type')
-            .in('id', uniqueBaseIds);
-            
-          if (activitiesError) {
-            console.error('Supabase error (activities):', activitiesError);
-            throw new Error(`Failed to fetch activities: ${activitiesError.message}`);
           }
           
-          if (activitiesData) {
-            activitiesMap = activitiesData.reduce((acc: Record<string, ActivityType>, act) => {
-              if (act && act.id) {
-                acc[act.id] = act;
-              }
-              return acc;
-            }, {});
-          }
-        }
+          return {
+            ...record,
+            activity_date: dateStr,
+            activity_type: activityType, // Use the determined type
+            activity: {
+              id: record.base_activity_id,
+              title: record.activity_title,
+              type: activityType // Also set it in the activity object
+            }
+          };
+        });
         
-        // 4. Join attendance records with activity details
-        const joinedRecords = parsedRecords.map((rec) => ({
-          ...rec,
-          activity: rec.base_activity_id ? activitiesMap[rec.base_activity_id] || {
-            id: rec.base_activity_id,
-            title: 'Unknown Activity',
-            type: 'other'
-          } : undefined,
-        }));
-        
-        // 5. Sort by activity_date descending
-        joinedRecords.sort((a, b) => {
-          const dateA = parseActivityDate(a.activity_date);
-          const dateB = parseActivityDate(b.activity_date);
-          
-          if (!dateA && !dateB) return 0;
-          if (!dateA) return 1;
-          if (!dateB) return -1;
-          
+        // Sort by actual_activity_date descending
+        processedRecords.sort((a: AttendanceRecord, b: AttendanceRecord) => {
+          const dateA = new Date(a.actual_activity_date || '');
+          const dateB = new Date(b.actual_activity_date || '');
           return dateB.getTime() - dateA.getTime();
         });
         
-        setAttendanceRecords(joinedRecords);
+        setAttendanceRecords(processedRecords);
         
-        // 6. Filter by selected month, year, and activity type
-        const filtered = joinedRecords.filter((rec) => {
-          const date = parseActivityDate(rec.activity_date);
+        // Filter by selected month, year, and activity type
+        const filtered = processedRecords.filter((rec: AttendanceRecord) => {
+          if (!rec.actual_activity_date) return false;
           
-          if (!date) return false;
+          const date = new Date(rec.actual_activity_date);
           
           const matchesMonth = date.getMonth() === selectedMonth && date.getFullYear() === selectedYear;
-          const matchesType = selectedActivityType === 'all' || 
-                             (rec.activity?.type === selectedActivityType);
-                             
+          const matchesType = selectedActivityType === 'all' || rec.activity_type === selectedActivityType;
+                           
           return matchesMonth && matchesType;
         });
         
+        console.log('DEBUG - PlayerAttendanceReportScreen - Filtered records:', JSON.stringify(filtered, null, 2));
+        
         setFilteredRecords(filtered);
         
-        // 7. Calculate summary for filtered records
+        // Calculate summary for filtered records
         let present = 0, absent = 0;
         const byType: Record<string, { present: number, absent: number }> = {};
         
-        filtered.forEach((rec) => {
-          const type = rec.activity?.type || 'other';
+        filtered.forEach((rec: AttendanceRecord) => {
+          // Determine the actual activity type using our helper function
+          const actualType = getActivityTypeForSummary(rec);
           
-          if (!byType[type]) {
-            byType[type] = { present: 0, absent: 0 };
+          if (!byType[actualType]) {
+            byType[actualType] = { present: 0, absent: 0 };
           }
           
           if (rec.status === 'present') {
             present++;
-            byType[type].present++;
+            byType[actualType].present++;
           } else if (rec.status === 'absent') {
             absent++;
-            byType[type].absent++;
+            byType[actualType].absent++;
           }
         });
         
@@ -266,6 +230,30 @@ const PlayerAttendanceReportScreen = () => {
     
     fetchAttendance();
   }, [playerId, selectedMonth, selectedYear, selectedActivityType]);
+  
+  // Helper to determine activity type for summary grouping
+  const getActivityTypeForSummary = (record: AttendanceRecord): string => {
+    // First check if we have a defined activity type
+    if (record.activity_type) {
+      return record.activity_type;
+    }
+    
+    // If we have a recurring activity with date suffix
+    const activityId = record.activity_id || '';
+    if (activityId.includes('-202')) {
+      const baseId = activityId.substring(0, 36);
+      if (baseId === '25b127e6-0402-4ae3-b520-9f6a14823c55') {
+        return 'training';
+      }
+    }
+    
+    // Use icon type as fallback
+    const iconName = getActivityTypeIcon(record.activity_type);
+    if (iconName === 'whistle') return 'training';
+    if (iconName === 'trophy-outline' || iconName === 'trophy') return 'game';
+    
+    return 'other';
+  };
 
   // Helper for activity type icon
   const getActivityTypeIcon = (type?: string): any => {
@@ -277,6 +265,83 @@ const PlayerAttendanceReportScreen = () => {
       case 'tournament': return 'trophy';
       case 'other': return 'calendar-text';
       default: return 'calendar';
+    }
+  };
+  
+  // Helper to get activity type name
+  const getActivityTypeName = (type?: string): string => {
+    if (!type) return 'Other';
+    
+    switch (type.toLowerCase()) {
+      case 'training': return 'Training';
+      case 'game': return 'Game';
+      case 'tournament': return 'Tournament';
+      case 'other': return 'Other';
+      default: return 'Other';
+    }
+  };
+  
+  // Helper to determine activity title
+  const getActivityTitle = (record: AttendanceRecord): string => {
+    // First try to use the activity title if available
+    if (record.activity_title) {
+      return record.activity_title;
+    }
+    
+    // If no title, use the activity type
+    if (record.activity_type) {
+      return getActivityTypeName(record.activity_type);
+    }
+    
+    // If we have a recurring activity with date suffix
+    const activityId = record.activity_id || '';
+    if (activityId.includes('-202')) {
+      const baseId = activityId.substring(0, 36);
+      if (baseId === '25b127e6-0402-4ae3-b520-9f6a14823c55') {
+        return 'Training';
+      }
+    }
+    
+    // Last resort - check the icon type to determine a title
+    const iconName = getActivityTypeIcon(record.activity_type);
+    if (iconName === 'whistle') return 'Training';
+    if (iconName === 'trophy-outline' || iconName === 'trophy') return 'Game';
+    
+    return 'Activity';
+  };
+
+  const deleteActivity = async (activityId: string) => {
+    try {
+      let idToDelete = activityId;
+      
+      // If it's an extended ID (has a date suffix), extract the base UUID
+      if (activityId.includes('-') && activityId.length > 36) {
+        idToDelete = activityId.substring(0, 36);
+      }
+      
+      // Delete using the base UUID
+      const { error } = await supabase
+        .from('activities')
+        .delete()
+        .eq('id', idToDelete);
+      
+      // Also delete any attendance records with the full ID
+      await supabase
+        .from('activity_attendance')
+        .delete()
+        .eq('activity_id', activityId);
+        
+      // Delete any other related records
+      await supabase
+        .from('activity_presence')
+        .delete()
+        .eq('activity_id', activityId);
+      
+      if (error) throw error;
+      return { success: true };
+    } catch (error) {
+      console.error('Error deleting activity:', error);
+      throw error;
     }
   };
 
@@ -353,15 +418,15 @@ const PlayerAttendanceReportScreen = () => {
                     <View style={styles.activityInfo}>
                       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                         <MaterialCommunityIcons 
-                          name={getActivityTypeIcon(rec.activity?.type)} 
+                          name={getActivityTypeIcon(rec.activity_type)} 
                           size={18} 
-                          color={COLORS.primary} 
+                          color={rec.activity_type?.toLowerCase() === 'game' || getActivityTypeForSummary(rec) === 'game' ? '#E67E22' : COLORS.primary} 
                           style={{ marginRight: 6 }} 
                         />
-                        <Text style={styles.activityTitle}>{rec.activity?.title || 'Unknown Activity'}</Text>
+                        <Text style={styles.activityTitle}>{getActivityTitle(rec)}</Text>
                       </View>
                       <Text style={styles.activityDate}>
-                        {formatDateForDisplay(rec.activity_date)}
+                        {rec.actual_activity_date ? new Date(rec.actual_activity_date).toLocaleDateString() : ''}
                       </Text>
                     </View>
                     <View style={styles.statusInfo}>
@@ -378,9 +443,9 @@ const PlayerAttendanceReportScreen = () => {
                       >
                         {rec.status === 'present' ? 'Present' : 'Absent'}
                       </Text>
-                      {rec.status === 'absent' && (
+                      {rec.status === 'absent' && rec.note && (
                         <Text style={styles.reasonText}>
-                          Reason: {rec.note ? rec.note : (rec.activity?.type === 'game' ? 'No reason provided' : 'N/A')}
+                          Reason: {rec.note}
                         </Text>
                       )}
                     </View>

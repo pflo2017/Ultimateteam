@@ -25,6 +25,39 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
   ...supabaseOptions
 });
 
+// Set up auth state change listener to handle token refresh
+supabase.auth.onAuthStateChange((event, session) => {
+  console.log('Supabase auth state changed:', event);
+  
+  if (event === 'TOKEN_REFRESHED') {
+    console.log('JWT token was refreshed successfully');
+  }
+  
+  if (event === 'SIGNED_OUT') {
+    console.log('User signed out');
+    // Clear any local storage items related to the user
+    AsyncStorage.multiRemove(['admin_data', 'coach_data', 'parent_data', 'clubId', 'clubName']);
+  }
+});
+
+// Function to manually refresh the token if needed
+export const refreshToken = async () => {
+  try {
+    const { data, error } = await supabase.auth.refreshSession();
+    
+    if (error) {
+      console.error('Error refreshing token:', error);
+      return false;
+    }
+    
+    console.log('Token refreshed successfully:', data.session?.expires_at);
+    return true;
+  } catch (error) {
+    console.error('Exception during token refresh:', error);
+    return false;
+  }
+};
+
 // Test the connection
 (async () => {
   try {

@@ -20,10 +20,9 @@ import { AttendanceScreen } from '../screens/AttendanceScreen';
 import { Image, Pressable, View, ActivityIndicator, Alert, StyleSheet, Text, Platform, StatusBar } from 'react-native';
 import { Menu } from 'react-native-paper';
 import { supabase } from '../lib/supabase';
-import { SUPABASE_URL } from '@env';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { AdminStackParamList, AdminTabParamList } from '../types/navigation';
+import type { AdminTabParamList } from '../types/navigation';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
@@ -31,8 +30,38 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PostEditorScreen } from '../screens/admin/PostEditorScreen';
 import { PlayerDetailsScreen } from '../screens/PlayerDetailsScreen';
 
+// Add the CardType type definition
+type CardType = 'players' | 'teams' | 'coaches';
+
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
+
 const Tab = createBottomTabNavigator<AdminTabParamList>();
 const Stack = createNativeStackNavigator<AdminStackParamList>();
+
+// Define AdminStackParamList here instead of importing it
+export type AdminStackParamList = {
+  AdminTabs: undefined;
+  ClubSettings: undefined;
+  AdminManage: { refresh?: boolean };
+  AddTeam: undefined;
+  AddCoach: undefined;
+  AddPlayer: undefined;
+  EditCoach: { coachId: string };
+  EditTeam: { teamId: string };
+  EditPlayer: { playerId: string };
+  TeamDetails: { teamId: string };
+  Manage: { activeTab?: CardType; refresh?: boolean };
+  CreateActivity: { type: 'practice' | 'match' | 'event' };
+  ActivityDetails: { activityId: string };
+  PostEditor: {
+    mode: 'create' | 'edit';
+    post?: any;
+    availableTeams?: any[];
+    isAdmin?: boolean;
+    onSave?: () => void;
+  };
+  PlayerDetails: { playerId: string; role: 'admin' };
+};
 
 type AdminNavigationProp = NativeStackNavigationProp<AdminStackParamList>;
 
@@ -348,30 +377,6 @@ const TabNavigator = () => {
       />
     </Tab.Navigator>
   );
-};
-
-export type AdminStackParamList = {
-  AdminTabs: undefined;
-  ClubSettings: undefined;
-  AdminManage: { refresh?: boolean };
-  AddTeam: undefined;
-  AddCoach: undefined;
-  AddPlayer: undefined;
-  EditCoach: { coachId: string };
-  EditTeam: { teamId: string };
-  EditPlayer: { playerId: string };
-  TeamDetails: { teamId: string };
-  Manage: { activeTab?: CardType; refresh?: boolean };
-  CreateActivity: { type: 'practice' | 'match' | 'event' };
-  ActivityDetails: { activityId: string };
-  PostEditor: {
-    mode: 'create' | 'edit';
-    post?: any;
-    availableTeams?: any[];
-    isAdmin?: boolean;
-    onSave?: () => void;
-  };
-  PlayerDetails: { playerId: string; role: 'admin' };
 };
 
 export const AdminNavigator = () => {

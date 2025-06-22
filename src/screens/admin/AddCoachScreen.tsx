@@ -27,6 +27,21 @@ export const AddCoachScreen = () => {
     setIsLoading(true);
 
     try {
+      // Format phone number properly
+      let formattedPhone = phoneNumber.trim();
+      
+      // Fix common phone number format issues
+      if (formattedPhone.startsWith('+0')) {
+        // Replace +0 with the correct country code +40 for Romania
+        formattedPhone = '+4' + formattedPhone.substring(2);
+        console.log('Corrected phone number format from +0 to +4:', formattedPhone);
+      }
+      
+      // Remove any spaces in the phone number
+      formattedPhone = formattedPhone.replace(/\s/g, '');
+      
+      console.log('Creating coach with phone number:', formattedPhone);
+
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       
       if (userError || !user) {
@@ -47,7 +62,7 @@ export const AddCoachScreen = () => {
       const { data: existingCoach } = await supabase
         .from('coaches')
         .select('id')
-        .eq('phone_number', phoneNumber.trim())
+        .eq('phone_number', formattedPhone)
         .eq('club_id', clubData.id)
         .single();
 
@@ -62,10 +77,10 @@ export const AddCoachScreen = () => {
         .insert([
           {
             name: coachName.trim(),
-            phone_number: phoneNumber.trim(),
+            phone_number: formattedPhone,
             admin_id: user.id,
             club_id: clubData.id,
-            is_active: true
+            is_active: false
           }
         ]);
 
@@ -74,11 +89,11 @@ export const AddCoachScreen = () => {
       // Show success message
       Alert.alert(
         'Coach Created',
-        `Coach has been created successfully!\n\nPhone Number: ${phoneNumber.trim()}\n\nShare this phone number with the coach so they can complete their registration.`,
+        `Coach has been created successfully!\n\nPhone Number: ${formattedPhone}\n\nShare this phone number with the coach so they can complete their registration.`,
         [
           { 
             text: 'OK',
-            onPress: () => navigation.navigate('AdminRoot', { screen: 'Manage', params: { activeTab: 'coaches', refresh: true } })
+            onPress: () => navigation.goBack()
           }
         ]
       );
@@ -137,7 +152,14 @@ export const AddCoachScreen = () => {
             defaultValue: phoneNumber,
             defaultCode: "RO",
             layout: "first",
-            onChangeFormattedText: setPhoneNumber,
+            onChangeFormattedText: (text: string) => {
+              // Ensure phone number always has +40 prefix for Romania
+              let formattedText = text;
+              if (formattedText.startsWith('+0')) {
+                formattedText = '+4' + formattedText.substring(2);
+              }
+              setPhoneNumber(formattedText);
+            },
             containerStyle: { marginBottom: 16 },
             textInputProps: {
               placeholder: 'Enter phone number',

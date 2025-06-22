@@ -74,6 +74,7 @@ interface ParentChild {
 
 type ManageScreenParams = {
   activeTab?: CardType;
+  refresh?: boolean | number;
 };
 
 interface SupabaseTeam {
@@ -107,6 +108,13 @@ export const AdminManageScreen = () => {
       setActiveTab(route.params.activeTab);
     }
   }, [route.params?.activeTab]);
+
+  useEffect(() => {
+    if (route.params?.refresh) {
+      console.log('Refresh parameter detected, reloading data...');
+      loadData();
+    }
+  }, [route.params?.refresh]);
 
   useEffect(() => {
     if (isFocused) {
@@ -260,14 +268,14 @@ export const AdminManageScreen = () => {
           phone_number,
           created_at,
           is_active,
+          user_id,
           teams (
             id,
             name
           )
         `)
-        .eq('club_id', clubId)
-        .eq('is_active', true);
-
+        .eq('club_id', clubId);
+      
       if (coachesError) throw coachesError;
       setCoaches(coachesData || []);
     } catch (error) {

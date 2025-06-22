@@ -1,0 +1,183 @@
+-- COMBINED SQL FIXES FOR SUPABASE PERFORMANCE ISSUES
+-- Copy and paste this entire file into the Supabase SQL Editor
+
+-- Start transaction for safety
+BEGIN;
+
+-- Fix RLS Performance Issues (auth_rls_initplan warnings)
+-- This optimizes row level security policies by replacing direct calls to auth.<function>()
+-- with (SELECT auth.<function>()) to prevent re-evaluation for each row
+
+-- Post views table
+DROP POLICY IF EXISTS "Users can view their own post views" ON public.post_views;
+CREATE POLICY "Users can view their own post views" 
+ON public.post_views
+FOR SELECT
+USING (user_id = (SELECT auth.uid()));
+
+DROP POLICY IF EXISTS "Users can insert their own post views" ON public.post_views;
+CREATE POLICY "Users can insert their own post views" 
+ON public.post_views
+FOR INSERT
+WITH CHECK (user_id = (SELECT auth.uid()));
+
+-- Admin profiles table
+DROP POLICY IF EXISTS "Users can view their own profile" ON public.admin_profiles;
+CREATE POLICY "Users can view their own profile" 
+ON public.admin_profiles
+FOR SELECT
+USING (user_id = (SELECT auth.uid()));
+
+DROP POLICY IF EXISTS "Users can update their own profile" ON public.admin_profiles;
+CREATE POLICY "Users can update their own profile" 
+ON public.admin_profiles
+FOR UPDATE
+USING (user_id = (SELECT auth.uid()))
+WITH CHECK (user_id = (SELECT auth.uid()));
+
+DROP POLICY IF EXISTS "Users can create their own profile" ON public.admin_profiles;
+CREATE POLICY "Users can create their own profile" 
+ON public.admin_profiles
+FOR INSERT
+WITH CHECK (user_id = (SELECT auth.uid()));
+
+-- Clubs table
+DROP POLICY IF EXISTS "Clubs are viewable by their admin" ON public.clubs;
+CREATE POLICY "Clubs are viewable by their admin" 
+ON public.clubs
+FOR SELECT
+USING (admin_id = (SELECT auth.uid()));
+
+-- Teams table
+DROP POLICY IF EXISTS "Teams are viewable by users in the same club" ON public.teams;
+CREATE POLICY "Teams are viewable by users in the same club" 
+ON public.teams
+FOR SELECT
+USING (
+  club_id IN (
+    -- Admin's club
+    SELECT c.id FROM clubs c WHERE c.admin_id = (SELECT auth.uid())
+    UNION
+    -- Coach's club
+    SELECT c.club_id FROM coaches c WHERE c.user_id = (SELECT auth.uid())
+  )
+);
+
+-- Consolidate duplicate permissive policies
+
+-- Activities table
+-- Consolidate DELETE policies
+DROP POLICY IF EXISTS "Allow activities with team_id" ON public.activities;
+DROP POLICY IF EXISTS "Coaches can manage team activities" ON public.activities;
+CREATE POLICY "Consolidated activities delete policy" 
+ON public.activities
+FOR DELETE
+USING (
+  -- Combined condition
+  team_id IS NOT NULL 
+  OR 
+  EXISTS (
+    SELECT 1 FROM teams t
+    JOIN coaches c ON t.coach_id = c.id
+    WHERE t.id = activities.team_id
+    AND c.user_id = (SELECT auth.uid())
+  )
+);
+
+-- Clubs table
+-- Consolidate SELECT policies
+DROP POLICY IF EXISTS "Clubs are viewable by their admin" ON public.clubs;
+DROP POLICY IF EXISTS "Master admins can view all clubs" ON public.clubs;
+CREATE POLICY "Consolidated clubs select policy" 
+ON public.clubs
+FOR SELECT
+USING (
+  -- Combined condition
+  admin_id = (SELECT auth.uid())
+  OR
+  EXISTS (
+    SELECT 1 FROM master_admins ma
+    WHERE ma.user_id = (SELECT auth.uid())
+  )
+);
+
+-- Remove duplicate indexes
+DROP INDEX IF EXISTS admin_profiles_user_id_idx;
+
+-- Function to identify duplicate indexes
+CREATE OR REPLACE FUNCTION find_duplicate_indexes() RETURNS TABLE(
+    schema_name text,
+    table_name text,
+    index_name text,
+    duplicate_index_name text,
+    index_columns text,
+    duplicate_index_columns text
+) AS $$
+BEGIN
+    RETURN QUERY
+    WITH index_list AS (
+        SELECT
+            schemaname::text AS schema_name,
+            tablename::text AS table_name,
+            indexname::text AS index_name,
+            array_agg(attname::text ORDER BY attnum) AS columns,
+            indexdef::text AS index_def
+        FROM
+            pg_indexes
+        JOIN
+            pg_attribute ON pg_indexes.tablename = pg_attribute.attrelid::regclass::text
+        JOIN
+            pg_index ON pg_attribute.attrelid = pg_index.indrelid
+            AND pg_attribute.attnum = ANY(pg_index.indkey)
+        JOIN
+            pg_class ON pg_index.indexrelid = pg_class.oid
+            AND pg_indexes.indexname = pg_class.relname
+        WHERE
+            schemaname NOT IN ('pg_catalog', 'information_schema')
+        GROUP BY
+            schemaname, tablename, indexname, indexdef
+    )
+    SELECT
+        i1.schema_name,
+        i1.table_name,
+        i1.index_name,
+        i2.index_name AS duplicate_index_name,
+        array_to_string(i1.columns, ', ') AS index_columns,
+        array_to_string(i2.columns, ', ') AS duplicate_index_columns
+    FROM
+        index_list i1
+    JOIN
+        index_list i2 ON i1.schema_name = i2.schema_name
+        AND i1.table_name = i2.table_name
+        AND i1.columns::text = i2.columns::text
+        AND i1.index_name < i2.index_name
+    ORDER BY
+        i1.schema_name, i1.table_name, i1.index_name;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Remove other duplicate indexes found by the function
+DO $$
+DECLARE
+    duplicate_record RECORD;
+BEGIN
+    FOR duplicate_record IN SELECT * FROM find_duplicate_indexes() LOOP
+        RAISE NOTICE 'Dropping duplicate index: %.%', 
+            duplicate_record.schema_name, 
+            duplicate_record.duplicate_index_name;
+            
+        EXECUTE format('DROP INDEX IF EXISTS %I.%I', 
+            duplicate_record.schema_name, 
+            duplicate_record.duplicate_index_name);
+    END LOOP;
+END;
+$$;
+
+-- Add comments to explain the changes
+COMMENT ON TABLE admin_profiles IS 'Admin profiles table with optimized RLS policies for better performance';
+COMMENT ON TABLE post_views IS 'Post views table with optimized RLS policies for better performance';
+COMMENT ON TABLE clubs IS 'Clubs table with consolidated RLS policies for better performance';
+COMMENT ON TABLE activities IS 'Activities table with consolidated RLS policies for better performance';
+
+-- Commit the transaction if everything went well
+COMMIT; 

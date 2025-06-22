@@ -1,45 +1,15 @@
 {
   "expo": {
-    "name": "UltimateTeam",
-    "slug": "UltimateTeam",
-    "version": "1.0.0",
-    "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
-    "updates": {
-      "enabled": false,
-      "checkAutomatically": "OFF",
-      "fallbackToCacheTimeout": 0
-    },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
-    "ios": {
-      "supportsTablet": true,
-      "backgroundColor": "#ffffff"
-    },
-    "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      }
-    },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    },
     "extra": {
       "eas": {
-        "projectId": "your-project-id"
+        "projectId": "f43e8b35-5e2a-4e5d-92bb-9cdc051ca72a"
       }
     },
-    "runtimeVersion": {
-      "policy": "nativeVersion"
-    }
+    "runtimeVersion": "1.0.0",
+    "updates": {
+      "url": "https://u.expo.dev/f43e8b35-5e2a-4e5d-92bb-9cdc051ca72a"
+    },
+    "android": {},
+    "ios": {}
   }
 }

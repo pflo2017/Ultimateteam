@@ -22,8 +22,34 @@ export const getUserClubId = async (): Promise<string | null> => {
           console.log('[getUserClubId] admin_data found but no club_id in it');
         }
       }
+      
+      // CRITICAL FIX: Also check for coach data in AsyncStorage
+      const coachDataStr = await AsyncStorage.getItem('coach_data');
+      console.log('[getUserClubId] Coach data from AsyncStorage:', coachDataStr ? 'Found' : 'Not found');
+      
+      if (coachDataStr) {
+        const coachData = JSON.parse(coachDataStr);
+        console.log('[getUserClubId] Coach data contents:', coachData);
+        
+        if (coachData.club_id) {
+          console.log('[getUserClubId] Found club_id in coach_data:', coachData.club_id);
+          
+          // CRITICAL FIX: Ensure the coach user_id is set in the database
+          if (coachData.user_id && coachData.id) {
+            console.log('[getUserClubId] Ensuring coach user_id is set in database');
+            await supabase
+              .from('coaches')
+              .update({ user_id: coachData.user_id })
+              .eq('id', coachData.id);
+          }
+          
+          return coachData.club_id;
+        } else {
+          console.log('[getUserClubId] coach_data found but no club_id in it');
+        }
+      }
     } catch (e) {
-      console.log('[getUserClubId] Error reading admin_data from AsyncStorage:', e);
+      console.log('[getUserClubId] Error reading data from AsyncStorage:', e);
     }
     
     // Check if user is authenticated via Supabase auth
@@ -77,8 +103,46 @@ export const getUserClubId = async (): Promise<string | null> => {
     
     if (coachError) {
       console.log('[getUserClubId] Error or no result when checking if user is coach:', coachError.message);
+      
+      // CRITICAL FIX: Try to get coach data from AsyncStorage to find by phone instead
+      try {
+        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+        const coachDataStr = await AsyncStorage.getItem('coach_data');
+        
+        if (coachDataStr) {
+          const coachData = JSON.parse(coachDataStr);
+          
+          if (coachData.phone_number) {
+            console.log('[getUserClubId] Trying to find coach by phone number:', coachData.phone_number);
+            
+            // Try to get coach by phone number
+            const { data: coachByPhone, error: phoneError } = await supabase
+              .from('coaches')
+              .select('club_id, id')
+              .eq('phone_number', coachData.phone_number)
+              .single();
+              
+            if (!phoneError && coachByPhone) {
+              console.log('[getUserClubId] Found coach by phone number, club_id:', coachByPhone.club_id);
+              
+              // Update the coach record with the user_id for future lookups
+              if (coachData.id && user.id) {
+                console.log('[getUserClubId] Updating coach record with user_id');
+                await supabase
+                  .from('coaches')
+                  .update({ user_id: user.id })
+                  .eq('id', coachData.id);
+              }
+              
+              return coachByPhone.club_id;
+            }
+          }
+        }
+      } catch (e) {
+        console.log('[getUserClubId] Error in phone number fallback:', e);
+      }
     }
-
+    
     if (coach) {
       console.log('[getUserClubId] Found club via coach:', coach.club_id);
       return coach.club_id;
@@ -199,11 +263,22 @@ export const deleteActivity = async (id: string): Promise<{ error: Error | null 
   try {
     console.log(`Deleting activity with ID: ${id}`);
     
+    // Handle composite IDs (UUID-date format)
+    let baseId = id;
+    let isCompositeId = false;
+    
+    // Check if this is a composite ID (UUID + date suffix)
+    if (id.includes('-') && id.length > 36) {
+      baseId = id.substring(0, 36);
+      isCompositeId = true;
+      console.log(`Composite ID detected. Base ID: ${baseId}, Full ID: ${id}`);
+    }
+    
     // First check if this is a game activity to properly handle game-specific data
     const { data: activityData, error: activityError } = await supabase
       .from('activities')
       .select('type, lineup_players, is_repeating, team_id')
-      .eq('id', id)
+      .eq('id', baseId) // Use baseId for the activities table
       .single();
     
     if (activityError) {
@@ -217,16 +292,16 @@ export const deleteActivity = async (id: string): Promise<{ error: Error | null 
     
     // Start deleting all related data
     
-    // 1. Delete attendance records
+    // 1. Delete attendance records - use the full composite ID for attendance
     console.log('Deleting official attendance records (marked by coach)');
     const { error: attendanceError } = await supabase
       .from('activity_attendance')
       .delete()
-      .eq('activity_id', id);
+      .eq('activity_id', id); // Use the full ID here
     
     if (attendanceError) {
       console.error('Error deleting attendance records:', attendanceError);
-      throw attendanceError;
+      // Don't throw, continue with other deletions
     }
     
     // 2. Delete presence responses (RSVP)
@@ -234,25 +309,56 @@ export const deleteActivity = async (id: string): Promise<{ error: Error | null 
     const { error: presenceError } = await supabase
       .from('activity_presence')
       .delete()
-      .eq('activity_id', id);
+      .eq('activity_id', id); // Use the full ID here
     
     if (presenceError) {
       console.error('Error deleting presence records:', presenceError);
       // Continue with deletion even if presence deletion fails
     }
     
+    // If this is a composite ID, we're done - we don't delete the base activity
+    if (isCompositeId) {
+      console.log(`Composite activity instance deleted: ${id}`);
+      return { error: null };
+    }
+    
     // 3. If this is a recurring activity, delete all its instances
-    if (activityData?.type && activityData?.is_repeating) {
-      // Extract the base ID (first 36 characters) from recurring instances
-      const baseId = id.slice(0, 36);
-      const { error: recurringError } = await supabase
+    if (activityData?.is_repeating) {
+      console.log(`Deleting recurring instances for activity: ${baseId}`);
+      
+      try {
+        // Use a different approach - get all activities and filter on the client side
+        const { data: allActivities, error: fetchError } = await supabase
+          .from('activities')
+          .select('id');
+        
+        if (fetchError) {
+          console.error('Error fetching activities for recurring instance check:', fetchError);
+        } else if (allActivities) {
+          // Filter instances on the client side by checking if they start with baseId + "-"
+          const recurringInstances = allActivities.filter(
+            activity => typeof activity.id === 'string' && 
+                       activity.id.startsWith(baseId + '-')
+          );
+          
+          console.log(`Found ${recurringInstances.length} recurring instances to delete`);
+          
+          // Delete each instance individually
+          for (const instance of recurringInstances) {
+            const { error: deleteError } = await supabase
         .from('activities')
         .delete()
-        .like('id', `${baseId}-%`); // Match pattern for recurring instances
+              .eq('id', instance.id);
       
-      if (recurringError) {
-        console.error('Error deleting recurring instances:', recurringError);
-        // Continue with deleting the main activity
+            if (deleteError) {
+              console.error(`Error deleting recurring instance ${instance.id}:`, deleteError);
+            } else {
+              console.log(`Successfully deleted recurring instance: ${instance.id}`);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error processing recurring instances:', err);
       }
     }
     
@@ -260,7 +366,7 @@ export const deleteActivity = async (id: string): Promise<{ error: Error | null 
     const { error } = await supabase
       .from('activities')
       .delete()
-      .eq('id', id);
+      .eq('id', baseId);
     
     if (error) throw error;
     
@@ -329,85 +435,129 @@ export const getTeamActivities = async (teamId: string): Promise<ActivitiesRespo
  * Generate recurring activity instances based on repeat pattern
  */
 const generateRecurringInstances = (activity: Activity, startDate: string, endDate: string): Activity[] => {
-  if (!activity.is_repeating || !activity.repeat_type || !activity.repeat_until || !activity.id) {
+  if (!activity.is_repeating || !activity.repeat_type || !activity.repeat_until) {
     return [];
   }
-
+  
+  // Handle different repeat types
   const instances: Activity[] = [];
-  const start = parseISO(startDate);
-  const end = parseISO(endDate);
-  const repeatUntil = parseISO(activity.repeat_until);
-  const activityStart = parseISO(activity.start_time);
+  const baseActivity = { ...activity };
+  const start = new Date(activity.start_time);
+  const activityDate = new Date(start);
+  const repeatUntil = new Date(activity.repeat_until);
+  const rangeStart = new Date(startDate);
+  const rangeEnd = new Date(endDate);
   
-  // Don't process if the original activity is outside our range
-  if (isAfter(activityStart, end) || isAfter(start, repeatUntil)) {
-    return [];
-  }
-
-  let currentDate = activityStart;
+  let current: Date;
   
-  while (isBefore(currentDate, repeatUntil) || isSameDay(currentDate, repeatUntil)) {
-    // Skip the original instance as it's already in the data
-    if (!isSameDay(currentDate, activityStart)) {
-      // For weekly recurrence, check if this day of week is included
-      if (activity.repeat_type === 'weekly' && activity.repeat_days) {
-        const dayOfWeek = getDay(currentDate);
-        if (!activity.repeat_days.includes(dayOfWeek)) {
-          // Skip this date if it's not in the repeat days
-          currentDate = addDays(currentDate, 1);
-          continue;
+  // Handle different repeat types
+  switch (activity.repeat_type) {
+    case 'daily':
+      current = new Date(activityDate);
+      while (current <= repeatUntil && current <= rangeEnd) {
+        if (current >= rangeStart) {
+          const instance = createRecurringInstance(baseActivity, current);
+          instances.push(instance);
         }
+        current = addDays(current, 1);
       }
+      break;
       
-      // Only include dates that fall within our query range
-      if ((isBefore(currentDate, end) || isSameDay(currentDate, end)) && 
-          (isAfter(currentDate, start) || isSameDay(currentDate, start))) {
-        
-        // Calculate the time difference to maintain same time of day
-        const timeDiff = currentDate.getTime() - activityStart.getTime();
-        
-        // Create a unique, predictable ID for the recurring instance
-        const formattedDate = format(currentDate, 'yyyyMMdd');
-        const instanceId = `${activity.id}-${formattedDate}`;
-        
-        const instance: Activity = {
-          ...activity,
-          id: instanceId,
-          start_time: new Date(parseISO(activity.start_time).getTime() + timeDiff).toISOString(),
-          parent_activity_id: activity.id,
-          is_recurring_instance: true
-        };
-        
-        // If end_time exists, adjust it too
-        if (activity.end_time) {
-          instance.end_time = new Date(parseISO(activity.end_time).getTime() + timeDiff).toISOString();
+    case 'weekly':
+      if (!activity.repeat_days || activity.repeat_days.length === 0) {
+        // Default to the day of the week of the original activity
+        const dayOfWeek = getDay(activityDate);
+        current = new Date(activityDate);
+        while (current <= repeatUntil && current <= rangeEnd) {
+          if (current >= rangeStart) {
+            const instance = createRecurringInstance(baseActivity, current);
+            instances.push(instance);
+          }
+          current = addWeeks(current, 1);
         }
+      } else {
+        // For each specified day of the week, generate instances
+        const activityDayOfWeek = getDay(activityDate);
+        const activityTime = activityDate.getTime() - new Date(
+          activityDate.getFullYear(),
+          activityDate.getMonth(),
+          activityDate.getDate()
+        ).getTime();
         
-        instances.push(instance);
+        activity.repeat_days.forEach(day => {
+          // Get the first occurrence of this day of the week
+          let dayDiff = day - activityDayOfWeek;
+          if (dayDiff < 0) dayDiff += 7; // Wrap around to the next week
+          
+          const firstOccurrence = new Date(activityDate);
+          firstOccurrence.setDate(activityDate.getDate() + dayDiff);
+          
+          // Set the time component from the original activity
+          firstOccurrence.setTime(
+            new Date(
+              firstOccurrence.getFullYear(),
+              firstOccurrence.getMonth(),
+              firstOccurrence.getDate()
+            ).getTime() + activityTime
+          );
+          
+          // Generate weekly instances for this day
+          current = new Date(firstOccurrence);
+          while (current <= repeatUntil && current <= rangeEnd) {
+            if (current >= rangeStart) {
+              const instance = createRecurringInstance(baseActivity, current);
+              instances.push(instance);
+            }
+            current = addWeeks(current, 1);
+          }
+        });
       }
-    }
-    
-    // Advance to next occurrence based on repeat type
-    switch (activity.repeat_type) {
-      case 'daily':
-        currentDate = addDays(currentDate, 1);
-        break;
-      case 'weekly':
-        if (activity.repeat_days) {
-          currentDate = addDays(currentDate, 1);
-        } else {
-          currentDate = addWeeks(currentDate, 1);
+      break;
+      
+    case 'monthly':
+      current = new Date(activityDate);
+      while (current <= repeatUntil && current <= rangeEnd) {
+        if (current >= rangeStart) {
+          const instance = createRecurringInstance(baseActivity, current);
+          instances.push(instance);
         }
-        break;
-      case 'monthly':
-        currentDate = addMonths(currentDate, 1);
-        break;
-      default:
-        currentDate = addDays(currentDate, 1);
-    }
+        current = addMonths(current, 1);
+      }
+      break;
   }
   
   return instances;
+};
+
+const createRecurringInstance = (baseActivity: Activity, date: Date): Activity => {
+  // Create a copy of the base activity
+  const instance: Activity = { ...baseActivity };
+  
+  // Set the start time for this instance
+  const originalStart = new Date(baseActivity.start_time);
+  const newStart = new Date(date);
+  newStart.setHours(
+    originalStart.getHours(),
+    originalStart.getMinutes(),
+    originalStart.getSeconds(),
+    originalStart.getMilliseconds()
+  );
+  instance.start_time = newStart.toISOString();
+  
+  // Adjust end time if present
+  if (baseActivity.end_time) {
+    const originalEnd = new Date(baseActivity.end_time);
+    const duration = originalEnd.getTime() - originalStart.getTime();
+    const newEnd = new Date(newStart.getTime() + duration);
+    instance.end_time = newEnd.toISOString();
+  }
+  
+  // Generate unique ID for this instance
+  instance.id = generateActivityIdForDate(baseActivity.id, date);
+  instance.parent_activity_id = baseActivity.id;
+  instance.is_recurring_instance = true;
+  
+  return instance;
 };
 
 /**
@@ -499,6 +649,44 @@ export const getActivitiesByDateRange = async (startDate: string, endDate: strin
       throw new Error('User not associated with a club');
     }
 
+    // Check if user is a coach and get their teams
+    let isCoach = false;
+    let coachTeamIds: string[] = [];
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        // Check if user is a coach
+        const { data: coach, error: coachError } = await supabase
+          .from('coaches')
+          .select('id')
+          .eq('user_id', user.id)
+          .single();
+
+        if (!coachError && coach) {
+          isCoach = true;
+          console.log('[activitiesService] Coach detected, id:', coach.id);
+          
+          // Get coach's teams from coach_teams junction table
+          const { data: coachTeams, error: teamsError } = await supabase
+            .rpc('get_coach_teams', { p_coach_id: coach.id });
+            
+          if (!teamsError && coachTeams && coachTeams.length > 0) {
+            coachTeamIds = coachTeams.map((team: any) => team.team_id);
+            console.log('[activitiesService] Coach teams:', coachTeamIds);
+          } else {
+            console.log('[activitiesService] No teams found for coach or error:', teamsError);
+            // If coach has no teams, return empty array
+            if (isCoach) {
+              console.log('[activitiesService] Coach has no teams, returning empty activities array');
+              return { data: [], error: null };
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.log('[activitiesService] Error checking if user is coach:', e);
+    }
+
     // Get stored activities from the database
     let query = supabase
       .from('activities')
@@ -510,6 +698,10 @@ export const getActivitiesByDateRange = async (startDate: string, endDate: strin
     // Add team filter if teamId is provided
     if (teamId) {
       query = query.eq('team_id', teamId);
+    }
+    // If user is a coach and no specific teamId is provided, filter by coach's teams
+    else if (isCoach && coachTeamIds.length > 0) {
+      query = query.in('team_id', coachTeamIds);
     }
 
     const { data, error } = await query;
@@ -553,33 +745,46 @@ export const getActivitiesByDateRange = async (startDate: string, endDate: strin
  */
 export const getActivityById = async (id: string): Promise<ActivityResponse> => {
   try {
-    // Detect composite ID (UUID + date)
+    console.log(`Getting activity by ID: ${id}`);
+    
+    // Handle composite IDs (UUID-date format)
+    let baseId = id;
+    
+    // Check if this is a composite ID (UUID + date suffix)
     const compositeIdMatch = id.match(/^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-(\d{8})$/i);
+    
     if (compositeIdMatch) {
-      const baseUuid = compositeIdMatch[1];
+      baseId = compositeIdMatch[1];
       const datePortion = compositeIdMatch[2];
+      console.log(`Composite ID detected. Base ID: ${baseId}, Date portion: ${datePortion}`);
+      
       // Fetch the parent activity by base UUID
       const { data: parentActivity, error: parentError } = await supabase
         .from('activities')
         .select('*')
-        .eq('id', baseUuid)
+        .eq('id', baseId)
         .maybeSingle();
+        
       if (parentError) throw parentError;
       if (!parentActivity) return { data: null, error: new Error('Parent activity not found') };
+      
       // Reconstruct the instance details
       const year = parseInt(datePortion.substring(0, 4));
       const month = parseInt(datePortion.substring(4, 6)) - 1;
       const day = parseInt(datePortion.substring(6, 8));
       const instanceDate = new Date(year, month, day);
       const startDate = new Date(parentActivity.start_time);
+      
       let activityInstance = { ...parentActivity };
+      
       // Adjust the start time for this instance
       const newStartTime = new Date(instanceDate);
       newStartTime.setHours(startDate.getHours(), startDate.getMinutes(), 0, 0);
       activityInstance.start_time = newStartTime.toISOString();
       activityInstance.id = id; // Set the composite ID
-      activityInstance.parent_activity_id = baseUuid;
+      activityInstance.parent_activity_id = baseId;
       activityInstance.is_recurring_instance = true;
+      
       // Adjust end_time if present
       if (parentActivity.end_time) {
         const origStart = new Date(parentActivity.start_time);
@@ -588,20 +793,24 @@ export const getActivityById = async (id: string): Promise<ActivityResponse> => 
         const newEndTime = new Date(newStartTime.getTime() + durationMs);
         activityInstance.end_time = newEndTime.toISOString();
       }
+      
+      console.log(`Successfully retrieved composite activity: ${id}`);
       return { data: activityInstance, error: null };
     }
 
-    // Standard activity lookup
+    // Standard activity lookup for non-composite IDs
     let clubId = await getUserClubId();
     if (clubId) {
       // Admin/coach: fetch by club
       const { data, error } = await supabase
         .from('activities')
         .select('*')
-        .eq('id', id)
+        .eq('id', baseId) // Use baseId which is the same as id for non-composite IDs
         .eq('club_id', clubId)
         .single();
+        
       if (error) throw error;
+      console.log(`Successfully retrieved standard activity: ${id}`);
       return { data, error: null };
     }
 
@@ -617,6 +826,7 @@ export const getActivityById = async (id: string): Promise<ActivityResponse> => 
     } catch (e) {
       parentId = null;
     }
+    
     if (parentId) {
       // Get all children for this parent
       const { data: children, error: childrenError } = await supabase
@@ -624,16 +834,19 @@ export const getActivityById = async (id: string): Promise<ActivityResponse> => 
         .select('team_id')
         .eq('parent_id', parentId)
         .eq('is_active', true);
+        
       if (!childrenError && children && children.length > 0) {
         const teamIds = Array.from(new Set(children.map((c: any) => c.team_id).filter(Boolean)));
+        
         if (teamIds.length > 0) {
           // Fetch the activity if it belongs to one of the parent's children teams
           const { data, error } = await supabase
             .from('activities')
             .select('*')
-            .eq('id', id)
+            .eq('id', baseId) // Use baseId which is the same as id for non-composite IDs
             .in('team_id', teamIds)
             .maybeSingle();
+            
           if (error) throw error;
           if (data) return { data, error: null };
         }
@@ -695,4 +908,21 @@ export const updateGameScore = async (activityId: string, homeScore: number, awa
     console.error('Error updating game score:', error);
     return { error: error as Error };
   }
+};
+
+/**
+ * Generate a unique activity ID for a recurring activity instance on a specific date
+ * This ensures each recurring instance has its own unique ID by appending the date
+ */
+export const generateActivityIdForDate = (baseActivityId: string, date: Date): string => {
+  // Ensure we're using just the base ID (standard UUID)
+  const baseId = baseActivityId.includes('-202') 
+    ? baseActivityId.substring(0, 36)  // Extract base UUID if it already has a date suffix
+    : baseActivityId;
+  
+  // Format date as YYYYMMDD
+  const dateStr = format(date, 'yyyyMMdd');
+  
+  // Return the combined ID
+  return `${baseId}-${dateStr}`;
 }; 

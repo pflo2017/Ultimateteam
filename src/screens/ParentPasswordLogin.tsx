@@ -4,7 +4,7 @@ import { Text, TextInput, ActivityIndicator } from 'react-native-paper';
 import { COLORS, SPACING, FONT_SIZES, SHADOWS } from '../constants/theme';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp, CommonActions } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import type { RootStackParamList } from '../types/navigation';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -28,6 +28,11 @@ export const ParentPasswordLoginScreen = () => {
   const navigation = useNavigation<ParentPasswordLoginScreenNavigationProp>();
   const route = useRoute<ParentPasswordLoginScreenRouteProp>();
   const { phoneNumber } = route.params;
+
+  // Handle back button press with improved navigation
+  const handleBackPress = () => {
+    navigation.navigate('ParentLogin');
+  };
 
   const handleLogin = async () => {
     console.log('DEBUG: handleLogin called');
@@ -129,6 +134,27 @@ export const ParentPasswordLoginScreen = () => {
       await AsyncStorage.removeItem('coach_data');
       await AsyncStorage.setItem('parent_data', JSON.stringify(parent));
       
+      // If the parent doesn't have a user_id, update it with the current auth user's ID
+      if (!parent.user_id && authData.user?.id) {
+        try {
+          const { error: updateError } = await supabase
+            .from('parents')
+            .update({ user_id: authData.user.id })
+            .eq('id', parent.id);
+            
+          if (updateError) {
+            console.error('Error updating parent user_id:', updateError);
+          } else {
+            console.log('Updated parent record with auth user ID');
+            // Update the local parent data with the user_id
+            parent.user_id = authData.user.id;
+            await AsyncStorage.setItem('parent_data', JSON.stringify(parent));
+          }
+        } catch (err) {
+          console.error('Error updating parent user_id:', err);
+        }
+      }
+      
       if (global.reloadRole) {
         global.reloadRole();
       }
@@ -151,7 +177,7 @@ export const ParentPasswordLoginScreen = () => {
     >
       <Pressable 
         style={styles.backButton} 
-        onPress={() => navigation.goBack()}
+        onPress={handleBackPress}
       >
         <MaterialCommunityIcons 
           name="arrow-left" 
@@ -190,6 +216,13 @@ export const ParentPasswordLoginScreen = () => {
             secureTextEntry={!showPassword}
             error={!!error}
             disabled={isLoading}
+            textContentType="oneTimeCode"
+            autoComplete="off"
+            autoCapitalize="none"
+            autoCorrect={false}
+            spellCheck={false}
+            blurOnSubmit={true}
+            keyboardType="visible-password"
             right={
               <TextInput.Icon 
                 icon={showPassword ? "eye-off" : "eye"} 

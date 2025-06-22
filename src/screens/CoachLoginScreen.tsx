@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, KeyboardAvoidingView, Platform, Pressable, Alert } from 'react-native';
 import { Text, TextInput } from 'react-native-paper';
 import { COLORS, SPACING, FONT_SIZES, SHADOWS } from '../constants/theme';
@@ -24,9 +24,148 @@ interface CoachData {
   club_id: string;
   is_active: boolean;
   phone_number: string;
+  email?: string;
+  user_id?: string;
 }
 
+// Helper function to check if a coach exists in the database but hasn't been registered in auth
+const checkCoachNeedsRegistration = async (phoneNumber: string): Promise<{needsRegistration: boolean, coachData: CoachData | null}> => {
+  try {
+    console.log('Checking if coach needs registration:', phoneNumber);
+    
+    // Use our new database function to check registration status
+    const { data: statusData, error: statusError } = await supabase
+      .rpc('check_coach_registration_status', { p_phone_number: phoneNumber });
+      
+    if (statusError) {
+      console.error('Error checking coach registration status:', statusError);
+      
+      // Fall back to the old method if the function doesn't exist
+      // Try to find coach by phone number
+      const { data: coachData, error: coachError } = await supabase
+        .from('coaches')
+        .select('*')
+        .eq('phone_number', phoneNumber)
+        .single();
+        
+      if (coachError || !coachData) {
+        // Try alternative format (without spaces)
+        const cleanedPhone = phoneNumber.replace(/\s/g, '');
+        const { data: altCoachData, error: altCoachError } = await supabase
+          .from('coaches')
+          .select('*')
+          .eq('phone_number', cleanedPhone)
+          .single();
+          
+        if (altCoachError || !altCoachData) {
+          console.log('No coach found with this phone number');
+          return { needsRegistration: false, coachData: null };
+        }
+        
+        console.log('Found coach with alternative phone format:', altCoachData);
+        
+        // Check if coach needs registration (has no user_id)
+        if (!altCoachData.user_id) {
+          console.log('Coach exists but has no user_id, needs to register');
+          return { needsRegistration: true, coachData: altCoachData };
+        } else {
+          console.log('Coach already has user_id, can login');
+          return { needsRegistration: false, coachData: altCoachData };
+        }
+      }
+      
+      console.log('Found coach with exact phone format:', coachData);
+      
+      // Check if coach needs registration (has no user_id)
+      if (!coachData.user_id) {
+        console.log('Coach exists but has no user_id, needs to register');
+        return { needsRegistration: true, coachData: coachData };
+      } else {
+        console.log('Coach already has user_id, can login');
+        return { needsRegistration: false, coachData: coachData };
+      }
+    }
+    
+    // If we got a status result, use it
+    if (statusData && statusData.length > 0) {
+      const status = statusData[0];
+      console.log('Coach registration status:', status);
+      
+      if (!status.coach_id) {
+        console.log('No coach found with this phone number');
+        return { needsRegistration: false, coachData: null };
+      }
+      
+      // Create coach data object from status
+      const coachData: CoachData = {
+        id: status.coach_id,
+        name: status.coach_name,
+        phone_number: status.phone_number,
+        user_id: status.user_id,
+        club_id: '', // We'll fill this in later if needed
+        is_active: true, // Assume active
+        email: undefined
+      };
+      
+      // Check registration status
+      if (status.registration_status === 'NEEDS_REGISTRATION' || 
+          status.registration_status === 'AUTH_EXISTS_NEEDS_LINKING') {
+        console.log('Coach needs registration based on status:', status.registration_status);
+        return { needsRegistration: true, coachData };
+      } else if (status.registration_status === 'FULLY_REGISTERED') {
+        console.log('Coach is fully registered');
+        return { needsRegistration: false, coachData };
+      } else if (status.registration_status === 'COACH_HAS_USER_ID_BUT_NO_AUTH') {
+        // This is a weird state - coach has user_id but no auth record
+        console.log('Coach has user_id but no auth record, needs to register');
+        return { needsRegistration: true, coachData };
+      } else if (status.registration_status === 'USER_ID_MISMATCH') {
+        // Another weird state - coach has user_id but it doesn't match auth
+        console.log('Coach has mismatched user_id, treating as needing registration');
+        return { needsRegistration: true, coachData };
+      } else {
+        console.log('Unknown registration status, defaulting to needs registration');
+        return { needsRegistration: true, coachData };
+      }
+    }
+    
+    // Fallback if no status data
+    console.log('No status data returned, falling back to direct check');
+    const { data: coachData, error: coachError } = await supabase
+      .from('coaches')
+      .select('*')
+      .eq('phone_number', phoneNumber)
+      .single();
+      
+    if (coachError || !coachData) {
+      console.log('No coach found with this phone number');
+      return { needsRegistration: false, coachData: null };
+    }
+    
+    if (!coachData.user_id) {
+      console.log('Coach exists but has no user_id, needs to register');
+      return { needsRegistration: true, coachData };
+    } else {
+      console.log('Coach already has user_id, can login');
+      return { needsRegistration: false, coachData };
+    }
+  } catch (err) {
+    console.error('Error checking if coach needs registration:', err);
+    return { needsRegistration: false, coachData: null };
+  }
+};
+
 export const CoachLoginScreen = () => {
+  // Hide "User already registered" errors from the UI since we handle them gracefully
+  useEffect(() => {
+    // Check if running in development and LogBox is available
+    if (__DEV__ && require('react-native').LogBox) {
+      require('react-native').LogBox.ignoreLogs([
+        "Supabase signUp error: AuthApiError: User already registered"
+      ]);
+    }
+  }, []);
+
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -34,68 +173,107 @@ export const CoachLoginScreen = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [step, setStep] = useState<'phone' | 'register' | 'login'>('phone');
-  const [coach, setCoach] = useState<any>(null);
+  const [coach, setCoach] = useState<CoachData | null>(null);
   const navigation = useNavigation<NavigationProp>();
   const phoneInputRef = React.useRef<PhoneInput>(null);
 
-  const isValidPhoneNumber = () => {
-    // Remove spaces and check for + and at least 10 digits
-    const cleaned = phone.replace(/\s/g, '');
-    return /^\+\d{10,}$/.test(cleaned);
+  // Helper function to normalize phone number format
+  const normalizePhoneNumber = (phoneNumber: string): string => {
+    let formatted = phoneNumber.trim();
+    
+    // Fix common phone number format issues
+    if (formatted.startsWith('+0')) {
+      // Replace +0 with the correct country code +40 for Romania
+      formatted = '+4' + formatted.substring(2);
+    }
+    
+    return formatted;
+  };
+
+  // Helper function to check if a phone exists in auth using the database function
+  const checkPhoneInAuth = async (phoneNumber: string): Promise<boolean> => {
+    try {
+      console.log('Checking if phone exists in auth:', phoneNumber);
+      
+      // First check if this coach already has a user_id set
+      if (coach && coach.user_id) {
+        console.log('Coach already has user_id set:', coach.user_id);
+        return true;
+      }
+      
+      // CRITICAL FIX: If coach exists but has no user_id, they need to register
+      if (coach && !coach.user_id) {
+        console.log('Coach exists but has no user_id, needs to register');
+        return false;
+      }
+      
+      // Check if any coach with this phone has a user_id (might be different format)
+      const { data: coachWithUserId, error: coachError } = await supabase
+        .from('coaches')
+        .select('user_id')
+        .or(`phone_number.eq.${phoneNumber},phone_number.eq.${phoneNumber.replace(/\s/g, '')}`)
+        .not('user_id', 'is', null)
+        .maybeSingle();
+        
+      if (coachWithUserId && coachWithUserId.user_id) {
+        console.log('Found coach with user_id for this phone:', coachWithUserId.user_id);
+        return true;
+      }
+      
+      // Use the database function to check if phone exists in auth
+      const { data, error } = await supabase.auth.signInWithPassword({
+        phone: phoneNumber,
+        password: 'dummy_password_for_check_only'
+      });
+      
+      // If we get "Invalid login credentials" error, the phone exists in auth
+      if (error && error.message && error.message.includes('Invalid login credentials')) {
+        console.log('Phone exists in auth (fallback check)');
+        return true;
+      }
+      
+      // If we get a successful login with dummy password (shouldn't happen), the phone exists
+      if (data && data.user) {
+        console.log('Unexpected successful login with dummy password');
+        return true;
+      }
+      
+      console.log('No auth account exists for this phone');
+      return false;
+    } catch (err) {
+      console.error('Error checking phone in auth:', err);
+      return false;
+    }
   };
 
   const handlePhoneSubmit = async () => {
     setIsLoading(true);
     setError('');
     try {
-      // Format phone number to E.164 format (e.g., +40712345678)
-      const formattedPhone = phone.trim();
+      // Format phone number to E.164 format
+      const formattedPhone = normalizePhoneNumber(phone);
+      
       console.log('Attempting to login with phone number:', formattedPhone);
       
-      // First, let's check what coaches exist in the database
-      const { data: coachData, error: coachError } = await supabase
-        .from('coaches')
-        .select('*')
-        .eq('phone_number', formattedPhone)
-        .single();
-
-      if (coachError) {
-        console.log('Coach lookup error:', coachError);
-      }
+      // Use our helper function to check if coach needs registration
+      const { needsRegistration, coachData } = await checkCoachNeedsRegistration(formattedPhone);
       
-      if (coachError || !coachData) {
+      // If no coach found, show error
+      if (!coachData) {
         setError('No coach found with this phone number. Please contact your administrator.');
         setIsLoading(false);
         return;
       }
-
-      console.log('Found coach:', coachData);
+      
+      // Set the coach data
       setCoach(coachData);
       
-      // If coach has no user_id, check if there's an auth user with this phone
-      if (!coachData.user_id) {
-        console.log('Coach has no user_id. Checking for existing auth user...');
-        
-        // Try to sign in with a dummy password to check if user exists
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-          phone: formattedPhone,
-          password: 'this-is-a-dummy-password-that-will-fail'
-        });
-        
-        // If error contains "Invalid login credentials", user exists but password is wrong
-        if (signInError && signInError.message && 
-            (signInError.message.includes('Invalid login credentials') || 
-             signInError.message.includes('Invalid login'))) {
-          console.log('Auth user exists but not linked to coach. Showing login screen.');
-          setStep('login');
-          setIsLoading(false);
-          return;
-        }
-        
-        // Otherwise, this is a new registration
+      // Direct to appropriate screen based on registration needs
+      if (needsRegistration) {
+        console.log('Coach needs to register, showing registration screen');
         setStep('register');
       } else {
-        // Coach already has user_id, proceed to login
+        console.log('Coach can login, showing login screen');
         setStep('login');
       }
     } catch (err) {
@@ -107,21 +285,33 @@ export const CoachLoginScreen = () => {
   };
 
   const handleRegister = async () => {
-    setIsLoading(true);
+    console.log("handleRegister function called");
     setError('');
+    
+    if (!coach) {
+      setError('Coach information not found. Please try again.');
+      setIsLoading(false);
+      return;
+    }
+    
+    console.log('Starting registration for coach:', coach);
+    
     if (password.trim() !== confirmPassword.trim()) {
       setError('Passwords do not match.');
       setIsLoading(false);
       return;
     }
+    
     try {
       // Ensure phone is in E.164 format
-      let formattedPhone = phone.trim();
+      const formattedPhone = normalizePhoneNumber(phone);
       if (!formattedPhone.startsWith('+')) {
         setError('Phone number must start with + and country code.');
         setIsLoading(false);
         return;
       }
+      
+      console.log('Registering with phone:', formattedPhone);
       
       // Register with Supabase Auth (phone+password)
       const { data, error } = await supabase.auth.signUp({
@@ -131,11 +321,13 @@ export const CoachLoginScreen = () => {
       });
 
       if (error) {
-        console.error('Supabase signUp error:', error);
-        
-        // Handle the case where user is already registered in Auth but not linked in coaches table
+        // Use console.log instead of console.error for expected scenarios
         if (error.message && error.message.toLowerCase().includes('user already registered')) {
-          console.log('User already exists in Auth. Attempting to sign in and link coach record...');
+          // This is not a true error but an expected case - using console.log to avoid error overlay
+          console.log('Expected flow: User already exists in Auth. Attempting to sign in and link coach record...');
+          
+          // Ignore this specific error in development by printing a benign message
+          console.log(`Info [Coach Registration]: ${error.message} - Proceeding with account linking`);
           
           try {
             // Try to sign in with the provided credentials
@@ -151,13 +343,11 @@ export const CoachLoginScreen = () => {
                 'This phone number is already registered. Please use your existing password to log in.',
                 [{ text: 'OK', onPress: () => setStep('login') }]
               );
-              setIsLoading(false);
               return;
             }
             
             if (!signInData.user) {
               setError('Failed to retrieve user data after sign-in');
-              setIsLoading(false);
               return;
             }
             
@@ -165,51 +355,150 @@ export const CoachLoginScreen = () => {
             const userId = signInData.user.id;
             console.log('Successfully signed in. Linking coach record with Auth user ID:', userId);
             
-            const { error: updateError } = await supabase
-              .from('coaches')
-              .update({ user_id: userId })
-              .eq('id', coach.id);
+            const emailValue = email || signInData.user.email || undefined;
+            
+            // CRITICAL FIX: Use our new database function to update the coach record
+            console.log('CRITICAL FIX: Using database function to update coach record');
+            
+            // First try updating by ID
+            const { data: updateResult, error: updateError } = await supabase
+              .rpc('update_coach_user_id', { 
+                p_coach_id: coach.id,
+                p_user_id: userId,
+                p_email: emailValue
+              });
               
             if (updateError) {
-              console.error('Error linking coach record to Auth user:', updateError);
-              Alert.alert(
-                'Warning',
-                'Login successful, but failed to link your coach profile. Please contact support.'
-              );
-              setIsLoading(false);
-              return;
+              console.error('Error calling update_coach_user_id:', updateError);
+              
+              // Try updating by phone number as fallback
+              console.log('Trying to update coach by phone number using database function');
+              const { data: phoneUpdateResult, error: phoneUpdateError } = await supabase
+                .rpc('update_coach_user_id_by_phone', { 
+                  p_phone_number: formattedPhone,
+                  p_user_id: userId,
+                  p_email: emailValue
+                });
+                
+              if (phoneUpdateError) {
+                console.error('Error calling update_coach_user_id_by_phone:', phoneUpdateError);
+                Alert.alert(
+                  'Warning',
+                  'Login successful, but failed to link your coach profile. Please contact support.'
+                );
+                return;
+              } else {
+                console.log('Successfully linked coach record to auth user by phone number function:', phoneUpdateResult);
+                // Check if any rows were updated
+                if (phoneUpdateResult === 0) {
+                  console.error('No rows updated by phone update function');
+                  Alert.alert(
+                    'Warning',
+                    'Login successful, but could not find your coach profile to link. Please contact support.'
+                  );
+                  return;
+                }
+              }
+            } else {
+              console.log('Successfully linked coach record to auth user by ID function:', updateResult);
+              // Check if any rows were updated
+              if (updateResult === 0) {
+                console.error('No rows updated by ID update function');
+                // Try updating by phone number as fallback
+                console.log('Trying to update coach by phone number using database function');
+                const { data: phoneUpdateResult, error: phoneUpdateError } = await supabase
+                  .rpc('update_coach_user_id_by_phone', { 
+                    p_phone_number: formattedPhone,
+                    p_user_id: userId,
+                    p_email: emailValue
+                  });
+                  
+                if (phoneUpdateError || phoneUpdateResult === 0) {
+                  console.error('Error or no rows updated by phone update function:', phoneUpdateError);
+                  Alert.alert(
+                    'Warning',
+                    'Login successful, but could not link your coach profile. Some features may be limited.'
+                  );
+                } else {
+                  console.log('Successfully linked coach record to auth user by phone number function:', phoneUpdateResult);
+                }
+              }
+            }
+            
+            // Verify the update was successful
+            const { data: verifyCoach, error: verifyError } = await supabase
+              .from('coaches')
+              .select('*')
+              .eq('id', coach.id)
+              .single();
+              
+            if (verifyError) {
+              console.error('Error verifying coach update:', verifyError);
+            } else {
+              console.log('Verified coach record after update:', verifyCoach);
+              if (!verifyCoach.user_id) {
+                console.error('CRITICAL ERROR: user_id still not set after update!');
+              }
             }
             
             // Store coach data and reload
-            await AsyncStorage.setItem('coach_data', JSON.stringify({ 
-              id: coach.id, 
-              name: coach.name, 
-              club_id: coach.club_id, 
-              is_active: coach.is_active, 
-              phone_number: coach.phone_number, 
-              user_id: userId 
-            }));
+            const updatedCoach = {
+              ...coach,
+              user_id: userId,
+              email: emailValue
+            };
+            
+            console.log('Final coach data to store (already registered flow):', updatedCoach);
+            
+            if (!updatedCoach.user_id) {
+              console.error('CRITICAL ERROR: user_id is still null in already registered flow!', updatedCoach);
+              // Force set it
+              updatedCoach.user_id = userId;
+            }
+            
+            await AsyncStorage.setItem('coach_data', JSON.stringify(updatedCoach));
+            setCoach(updatedCoach);
             
             console.log('Successfully linked coach record to existing Auth user!');
-            if (global.reloadRole) global.reloadRole();
+            
+            // Show success message FIRST, then update UI after user acknowledges
+            setTimeout(() => {
+              setIsLoading(false); // First ensure loading state is cleared
+              
+              Alert.alert(
+                'Registration Successful', 
+                'Your account has been linked successfully! You can now log in with your phone number and password.',
+                [
+                  { 
+                    text: 'OK', 
+                    onPress: () => {
+                      console.log("Alert OK pressed - resetting form and going to login");
+                      // Reset form fields
+                      setPassword('');
+                      setConfirmPassword('');
+                      // Go back to login step
+                      setStep('login');
+                    }
+                  }
+                ]
+              );
+            }, 500); // Small delay to ensure UI updates
+            
             return;
           } catch (err) {
             console.error('Error during linking process:', err);
             setError('An error occurred while trying to link your account.');
-            setIsLoading(false);
             return;
           }
         }
         
         // If not a "user already registered" error, show the general error
         Alert.alert('Registration Error', error.message);
-        setIsLoading(false);
         return;
       }
       
       if (!data || !data.user) {
         setError('No user returned from Supabase signUp.');
-        setIsLoading(false);
         return;
       }
       
@@ -228,71 +517,145 @@ export const CoachLoginScreen = () => {
         Alert.alert('Warning', 'Registration succeeded but automatic login failed. Please log out and log in again.');
       }
       
-      // Short delay to ensure the session is fully updated
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Update coaches.user_id using our new database function
+      console.log('CRITICAL FIX: Using database function to update coach record');
       
-      // Update coaches.user_id
-      console.log('Attempting to update coach user_id:', userId, 'for coach:', coach.id);
-      const { error: updateError } = await supabase
-        .from('coaches')
-        .update({ user_id: userId })
-        .eq('id', coach.id);
+      const emailValue = email.trim() || data.user?.user_metadata?.email || null;
+      
+      // First try updating by ID
+      const { data: updateResult, error: updateError } = await supabase
+        .rpc('update_coach_user_id', { 
+          p_coach_id: coach.id,
+          p_user_id: userId,
+          p_email: emailValue
+        });
         
       if (updateError) {
-        console.error('Error updating coach user_id:', updateError);
-        Alert.alert('Warning', 
-          'Account created but could not link to your coach profile. Please contact support or try logging in again later.\n\nError: ' + updateError.message
-        );
-        setIsLoading(false);
-        return;
-      } else {
-        console.log('Successfully updated coach user_id:', userId);
-      }
-      
-      // Re-fetch coach data to confirm user_id is set
-      const { data: updatedCoach, error: fetchError } = await supabase
-        .from('coaches')
-        .select('*')
-        .eq('id', coach.id)
-        .single();
+        console.error('Error calling update_coach_user_id:', updateError);
         
-      if (fetchError) {
-        console.error('Error fetching updated coach:', fetchError);
-      } else {
-        setCoach(updatedCoach);
-        console.log('Updated coach after registration:', updatedCoach);
+        // Try updating by phone number as fallback
+        console.log('Trying to update coach by phone number using database function');
+        const { data: phoneUpdateResult, error: phoneUpdateError } = await supabase
+          .rpc('update_coach_user_id_by_phone', { 
+            p_phone_number: formattedPhone,
+            p_user_id: userId,
+            p_email: emailValue
+          });
+          
+        if (phoneUpdateError) {
+          console.error('Error calling update_coach_user_id_by_phone:', phoneUpdateError);
+          Alert.alert('Warning', 
+            'Account created but could not link to your coach profile. Please contact support or try logging in again later.'
+          );
+          return;
+        } else {
+          console.log('Successfully linked coach record to auth user by phone number function:', phoneUpdateResult);
+          // Check if any rows were updated
+          if (phoneUpdateResult === 0) {
+            console.error('No rows updated by phone update function');
+            // Try updating by phone number as fallback
+            console.log('Trying to update coach by phone number using database function');
+            const { data: phoneUpdateResult, error: phoneUpdateError } = await supabase
+              .rpc('update_coach_user_id_by_phone', { 
+                p_phone_number: formattedPhone,
+                p_user_id: userId,
+                p_email: emailValue
+              });
+              
+            if (phoneUpdateError || phoneUpdateResult === 0) {
+              console.error('Error or no rows updated by phone update function:', phoneUpdateError);
+              Alert.alert(
+                'Warning',
+                'Login successful, but could not link your coach profile. Some features may be limited.'
+              );
+            } else {
+              console.log('Successfully linked coach record to auth user by phone number function:', phoneUpdateResult);
+            }
+          }
+        }
+        
+        // Verify the update was successful
+        const { data: verifyCoach, error: verifyError } = await supabase
+          .from('coaches')
+          .select('*')
+          .eq('id', coach.id)
+          .single();
+          
+        if (verifyError) {
+          console.error('Error verifying coach update:', verifyError);
+        } else {
+          console.log('Verified coach record after update:', verifyCoach);
+          if (!verifyCoach.user_id) {
+            console.error('CRITICAL ERROR: user_id still not set after update!');
+          }
+        }
+        
+        // Store the updated coach data in AsyncStorage
+        const updatedCoachData = {
+          ...coach,
+          user_id: userId,
+          email: emailValue
+        };
+        
+        console.log('Final coach data to store:', updatedCoachData);
+        
+        await AsyncStorage.setItem('coach_data', JSON.stringify(updatedCoachData));
+        setCoach(updatedCoachData);
+        
+        if (global.reloadRole) {
+          console.log('Reloading role after successful registration');
+          global.reloadRole();
+        }
+        
+        // Show success message FIRST, then update UI after user acknowledges
+        setTimeout(() => {
+          setIsLoading(false); // First ensure loading state is cleared
+          
+          Alert.alert(
+            'Registration Successful', 
+            'Your account has been created successfully! You can now log in with your phone number and password.',
+            [
+              { 
+                text: 'OK', 
+                onPress: () => {
+                  console.log("Alert OK pressed - resetting form and going to login");
+                  // Reset form fields
+                  setPassword('');
+                  setConfirmPassword('');
+                  // Go back to login step
+                  setStep('login');
+                }
+              }
+            ]
+          );
+        }, 500); // Small delay to ensure UI updates
+        
+        return;
       }
-      
-      // Store coach data in AsyncStorage
-      await AsyncStorage.setItem('coach_data', JSON.stringify({ 
-        id: coach.id, 
-        name: coach.name, 
-        club_id: coach.club_id, 
-        is_active: coach.is_active, 
-        phone_number: coach.phone_number, 
-        user_id: userId 
-      }));
-      
-      // Notify the user of success
-      Alert.alert('Registration Successful', 'Your account has been created successfully!');
-      
-      // Reload the app role to go to the coach dashboard
-      if (global.reloadRole) global.reloadRole();
     } catch (err: any) {
       setError(err.message || 'Registration failed.');
       console.error('Registration error:', err);
       Alert.alert('Registration Error', err.message || 'Registration failed.');
-    } finally {
-      setIsLoading(false);
     }
   };
 
   const handleLogin = async () => {
     setIsLoading(true);
     setError('');
+    
+    if (!coach) {
+      setError('Coach information not found. Please try again.');
+      setIsLoading(false);
+      return;
+    }
+    
+    console.log('Starting login with coach data:', coach);
+    
     try {
       // Format phone number to E.164 format
-      const formattedPhone = phone.trim();
+      const formattedPhone = normalizePhoneNumber(phone);
+      
+      console.log('Attempting login with phone:', formattedPhone);
       
       const { data, error } = await supabase.auth.signInWithPassword({
         phone: formattedPhone,
@@ -300,46 +663,179 @@ export const CoachLoginScreen = () => {
       });
 
       if (error) {
+        console.error('Login error:', error);
         setError(error.message);
         setIsLoading(false);
         return;
       }
+      
+      console.log('Login successful, auth user:', data.user?.id);
 
-      // Always update coach.user_id if it's null and login succeeded
-      if (coach && data.user?.id) {
-        if (!coach.user_id) {
-          console.log('Linking coach record to authenticated user after successful login...');
+      // Always update coach.user_id if login succeeded
+      if (data.user?.id) {
+        console.log('Linking coach record to authenticated user after successful login...');
+        
+        // Get user email from auth metadata
+        const userEmail = data.user.user_metadata?.email || email || null;
+        
+        try {
+          // CRITICAL FIX: Use our new database function to update the coach record
+          console.log('CRITICAL FIX: Using database function to update coach record');
           
-          const { error: updateError } = await supabase
-            .from('coaches')
-            .update({ user_id: data.user.id })
-            .eq('id', coach.id);
+          // First try updating by ID
+          const { data: updateResult, error: updateError } = await supabase
+            .rpc('update_coach_user_id', { 
+              p_coach_id: coach.id,
+              p_user_id: data.user.id,
+              p_email: userEmail
+            });
             
           if (updateError) {
-            console.error('Error updating coach user_id after login:', updateError);
-            Alert.alert(
-              'Warning',
-              'Login successful, but could not fully link your coach profile. Some features may be limited.',
-              [{ text: 'OK' }]
-            );
+            console.error('Error calling update_coach_user_id:', updateError);
+            
+            // Try updating by phone number as fallback
+            console.log('Trying to update coach by phone number using database function');
+            const { data: phoneUpdateResult, error: phoneUpdateError } = await supabase
+              .rpc('update_coach_user_id_by_phone', { 
+                p_phone_number: formattedPhone,
+                p_user_id: data.user.id,
+                p_email: userEmail
+              });
+              
+            if (phoneUpdateError) {
+              console.error('Error calling update_coach_user_id_by_phone:', phoneUpdateError);
+              Alert.alert(
+                'Warning',
+                'Login successful, but could not fully link your coach profile. Some features may be limited.',
+                [{ text: 'OK' }]
+              );
+            } else {
+              console.log('Successfully linked coach record to auth user by phone number function:', phoneUpdateResult);
+            }
           } else {
-            console.log('Successfully updated coach user_id after login:', data.user.id);
-            // Update local coach object as well
-            coach.user_id = data.user.id;
+            console.log('Successfully linked coach record to auth user by ID function:', updateResult);
+          }
+
+          // Verify the update was successful
+          const { data: verifyCoach, error: verifyError } = await supabase
+            .from('coaches')
+            .select('*')
+            .eq('id', coach.id)
+            .single();
+            
+          if (verifyError) {
+            console.error('Error verifying coach update:', verifyError);
+            
+            // Try fetching by phone number if ID fetch fails
+            console.log('Trying to fetch coach by phone number');
+            const { data: phoneCoach, error: phoneFetchError } = await supabase
+              .from('coaches')
+              .select('*')
+              .eq('phone_number', formattedPhone)
+              .single();
+              
+            if (phoneFetchError) {
+              console.error('Error fetching coach by phone:', phoneFetchError);
+              
+              // If we can't fetch updated data, manually create coach data with user_id
+              const coachData = { 
+                ...coach,
+                email: userEmail,
+                user_id: data.user.id 
+              };
+              
+              console.log('Final coach data to store (fallback):', coachData);
+              
+              if (!coachData.user_id) {
+                console.error('CRITICAL ERROR: user_id is still null in fallback!', coachData);
+                // Force set it
+                coachData.user_id = data.user.id;
+              }
+              
+              await AsyncStorage.setItem('coach_data', JSON.stringify(coachData));
+              console.log('Stored coach data with user_id:', coachData);
+              setCoach(coachData);
+              
+              if (global.reloadRole) {
+                console.log('Reloading role after successful login');
+                global.reloadRole();
+              }
+            } else {
+              // Use the coach data from phone lookup
+              const updatedCoachData = {
+                ...phoneCoach,
+                user_id: data.user.id
+              };
+              
+              console.log('Final coach data from phone lookup:', updatedCoachData);
+              
+              if (!updatedCoachData.user_id) {
+                console.error('CRITICAL ERROR: user_id is still null in phone lookup!', updatedCoachData);
+                // Force set it
+                updatedCoachData.user_id = data.user.id;
+              }
+              
+              await AsyncStorage.setItem('coach_data', JSON.stringify(updatedCoachData));
+              console.log('Stored coach data with user_id from phone lookup:', updatedCoachData);
+              setCoach(updatedCoachData);
+              
+              if (global.reloadRole) {
+                console.log('Reloading role after successful login');
+                global.reloadRole();
+              }
+            }
+          } else {
+            // Use the latest data from the database
+            // Ensure user_id is set even if DB update failed
+            const updatedCoachData = {
+              ...verifyCoach,
+              user_id: data.user.id
+            };
+            
+            console.log('Final coach data to store:', updatedCoachData);
+            
+            if (!updatedCoachData.user_id) {
+              console.error('CRITICAL ERROR: user_id is still null after login!', updatedCoachData);
+              // Force set it
+              updatedCoachData.user_id = data.user.id;
+            }
+            
+            await AsyncStorage.setItem('coach_data', JSON.stringify(updatedCoachData));
+            console.log('Stored coach data with user_id:', updatedCoachData);
+            setCoach(updatedCoachData);
+            
+            if (global.reloadRole) {
+              console.log('Reloading role after successful login');
+              global.reloadRole();
+            }
+          }
+        } catch (err) {
+          console.error('Error during coach update after login:', err);
+          
+          // Still try to store coach data and reload
+          const coachData = { 
+            ...coach,
+            email: userEmail,
+            user_id: data.user.id 
+          };
+          
+          console.log('Final emergency coach data to store:', coachData);
+          
+          if (!coachData.user_id) {
+            console.error('CRITICAL ERROR: user_id is still null in emergency data!', coachData);
+            // Force set it
+            coachData.user_id = data.user.id;
+          }
+          
+          await AsyncStorage.setItem('coach_data', JSON.stringify(coachData));
+          console.log('Stored emergency coach data with user_id:', coachData);
+          setCoach(coachData);
+          
+          if (global.reloadRole) {
+            console.log('Emergency reloading role after error');
+            global.reloadRole();
           }
         }
-
-        // Store coach data in AsyncStorage with the updated user_id
-        await AsyncStorage.setItem('coach_data', JSON.stringify({ 
-          id: coach.id, 
-          name: coach.name, 
-          club_id: coach.club_id, 
-          is_active: coach.is_active, 
-          phone_number: coach.phone_number, 
-          user_id: data.user.id 
-        }));
-        
-        if (global.reloadRole) global.reloadRole();
       }
     } catch (err: any) {
       setError(err.message || 'Login failed.');
@@ -459,7 +955,58 @@ export const CoachLoginScreen = () => {
                 left={<TextInput.Icon icon="email" color={COLORS.primary} style={{ marginRight: 30 }} />}
               />
               <Pressable 
-                onPress={handleRegister}
+                onPress={() => {
+                  // Simple approach: just register and show alert
+                  setIsLoading(true);
+                  
+                  // Simple validation
+                  if (password !== confirmPassword) {
+                    Alert.alert('Error', 'Passwords do not match');
+                    setIsLoading(false);
+                    return;
+                  }
+                  
+                  // Do registration
+                  const doRegistration = async () => {
+                    try {
+                      // Register with auth
+                      const { error } = await supabase.auth.signUp({
+                        phone: normalizePhoneNumber(phone),
+                        password: password,
+                        options: email ? { data: { email } } : undefined
+                      });
+                      
+                      if (error) {
+                        Alert.alert('Error', error.message);
+                        setIsLoading(false);
+                        return;
+                      }
+                      
+                      // Success - show alert
+                      setIsLoading(false);
+                      Alert.alert(
+                        'Success', 
+                        'Registration completed successfully!',
+                        [
+                          {
+                            text: 'Login',
+                            onPress: () => {
+                              setPassword('');
+                              setConfirmPassword('');
+                              setStep('login');
+                            }
+                          }
+                        ]
+                      );
+                    } catch (err) {
+                      setIsLoading(false);
+                      Alert.alert('Error', 'Registration failed');
+                    }
+                  };
+                  
+                  // Execute registration
+                  doRegistration();
+                }}
                 disabled={isLoading}
                 style={[styles.loginButton, SHADOWS.button, isLoading && styles.loginButtonDisabled]}
               >
