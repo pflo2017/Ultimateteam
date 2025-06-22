@@ -51,40 +51,154 @@ const Parents: React.FC = () => {
   const [selectedParent, setSelectedParent] = useState<Parent | null>(null);
   const [totalCount, setTotalCount] = useState(0);
   const itemsPerPage = 10;
+  
+  // Add user role and club ID state
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [clubId, setClubId] = useState<string | null>(null);
+  const [clubName, setClubName] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Get user role and club information
+    const role = localStorage.getItem('userRole');
+    const clubIdFromStorage = localStorage.getItem('clubId');
+    const clubNameFromStorage = localStorage.getItem('clubName');
+    
+    setUserRole(role);
+    setClubId(clubIdFromStorage);
+    setClubName(clubNameFromStorage);
+  }, []);
 
   const fetchParents = async () => {
     setLoading(true);
     try {
-      // First, get the total count
-      const { count, error: countError } = await supabase
-        .from('parents')
-        .select('*', { count: 'exact', head: true });
+      // If club admin, we need to get parents through their children's teams
+      if (userRole === 'clubAdmin' && clubId) {
+        await fetchParentsForClub(clubId);
+      } else if (userRole === 'masterAdmin') {
+        await fetchAllParents();
+      } else {
+        // If not a master admin or club admin with valid club ID, throw error
+        throw new Error('You do not have permission to view parents');
+      }
+    } catch (error) {
+      console.error('Error fetching parents:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchAllParents = async () => {
+    // First, get the total count
+    const { count, error: countError } = await supabase
+      .from('parents')
+      .select('*', { count: 'exact', head: true });
+    
+    if (countError) throw countError;
+    if (count !== null) {
+      setTotalCount(count);
+      setTotalPages(Math.ceil(count / itemsPerPage));
+    }
+    
+    // Fetch parents with pagination
+    const from = (activePage - 1) * itemsPerPage;
+    const to = from + itemsPerPage - 1;
+    
+    // Get parents data
+    let query = supabase
+      .from('parents')
+      .select('*')
+      .order('name', { ascending: true });
+    
+    // Apply search filter if provided
+    if (searchTerm) {
+      query = query.or(`name.ilike.%${searchTerm}%,phone_number.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`);
+    }
+    
+    // Apply pagination
+    query = query.range(from, to);
+    
+    const { data: parentsData, error: parentsError } = await query;
+    
+    if (parentsError) throw parentsError;
+    
+    if (parentsData) {
+      // Create a base array of parents with empty children arrays
+      const parentsWithEmptyChildren = parentsData.map(parent => ({
+        ...parent,
+        children_count: 0,
+        children: []
+      }));
       
-      if (countError) throw countError;
-      if (count !== null) {
-        setTotalCount(count);
-        setTotalPages(Math.ceil(count / itemsPerPage));
+      // Fetch children for each parent
+      const parentsWithChildren = await Promise.all(
+        parentsWithEmptyChildren.map(async (parent) => {
+          const children = await fetchChildrenForParent(parent.id);
+          return {
+            ...parent,
+            children_count: children.length,
+            children
+          };
+        })
+      );
+      
+      setParents(parentsWithChildren);
+    }
+  };
+
+  const fetchParentsForClub = async (clubId: string) => {
+    try {
+      // First, get all teams for this club
+      const { data: teams, error: teamsError } = await supabase
+        .from('teams')
+        .select('id')
+        .eq('club_id', clubId)
+        .eq('is_active', true);
+      
+      if (teamsError) throw teamsError;
+      
+      if (!teams || teams.length === 0) {
+        setParents([]);
+        setTotalCount(0);
+        setTotalPages(1);
+        return;
       }
       
-      // Fetch parents with pagination
+      const teamIds = teams.map(team => team.id);
+      
+      // Get all children that belong to teams in this club
+      const { data: children, error: childrenError } = await supabase
+        .from('parent_children')
+        .select('parent_id')
+        .in('team_id', teamIds)
+        .eq('is_active', true);
+      
+      if (childrenError) throw childrenError;
+      
+      if (!children || children.length === 0) {
+        setParents([]);
+        setTotalCount(0);
+        setTotalPages(1);
+        return;
+      }
+      
+      // Get unique parent IDs
+      const parentIds = Array.from(new Set(children.map(child => child.parent_id)));
+      
+      // Get total count for pagination
+      setTotalCount(parentIds.length);
+      setTotalPages(Math.ceil(parentIds.length / itemsPerPage));
+      
+      // Apply pagination to parent IDs
       const from = (activePage - 1) * itemsPerPage;
       const to = from + itemsPerPage - 1;
+      const paginatedParentIds = parentIds.slice(from, to + 1);
       
-      // Get parents data
-      let query = supabase
+      // Fetch parent details
+      const { data: parentsData, error: parentsError } = await supabase
         .from('parents')
         .select('*')
+        .in('id', paginatedParentIds)
         .order('name', { ascending: true });
-      
-      // Apply search filter if provided
-      if (searchTerm) {
-        query = query.or(`name.ilike.%${searchTerm}%,phone_number.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`);
-      }
-      
-      // Apply pagination
-      query = query.range(from, to);
-      
-      const { data: parentsData, error: parentsError } = await query;
       
       if (parentsError) throw parentsError;
       
@@ -96,10 +210,10 @@ const Parents: React.FC = () => {
           children: []
         }));
         
-        // Fetch children for each parent
+        // Fetch children for each parent (only for this club's teams)
         const parentsWithChildren = await Promise.all(
           parentsWithEmptyChildren.map(async (parent) => {
-            const children = await fetchChildrenForParent(parent.id);
+            const children = await fetchChildrenForParentInClub(parent.id, clubId);
             return {
               ...parent,
               children_count: children.length,
@@ -111,9 +225,8 @@ const Parents: React.FC = () => {
         setParents(parentsWithChildren);
       }
     } catch (error) {
-      console.error('Error fetching parents:', error);
-    } finally {
-      setLoading(false);
+      console.error('Error fetching parents for club:', error);
+      throw error;
     }
   };
 
@@ -181,9 +294,92 @@ const Parents: React.FC = () => {
     }
   };
 
+  const fetchChildrenForParentInClub = async (parentId: string, clubId: string): Promise<Child[]> => {
+    try {
+      // Get teams for this club
+      const { data: teams, error: teamsError } = await supabase
+        .from('teams')
+        .select('id, name')
+        .eq('club_id', clubId)
+        .eq('is_active', true);
+      
+      if (teamsError) throw teamsError;
+      
+      if (!teams || teams.length === 0) {
+        return [];
+      }
+      
+      const teamIds = teams.map(team => team.id);
+      
+      // Fetch parent_children records for this parent that belong to teams in this club
+      const { data: parentChildren, error: pcError } = await supabase
+        .from('parent_children')
+        .select('id, full_name, team_id')
+        .eq('parent_id', parentId)
+        .in('team_id', teamIds)
+        .eq('is_active', true);
+
+      if (pcError) throw pcError;
+      
+      if (!parentChildren || parentChildren.length === 0) {
+        return [];
+      }
+      
+      // For each child, get team and club information
+      const childrenWithTeams = await Promise.all(
+        parentChildren.map(async (child) => {
+          let teamName = null;
+          let clubName = null;
+          
+          if (child.team_id) {
+            // Get team info first
+            const { data: teamData } = await supabase
+              .from('teams')
+              .select('name, club_id')
+              .eq('id', child.team_id)
+              .single();
+              
+            if (teamData) {
+              teamName = teamData.name;
+              
+              // If we have a club_id, fetch the club name
+              if (teamData.club_id) {
+                const { data: clubData } = await supabase
+                  .from('clubs')
+                  .select('name')
+                  .eq('id', teamData.club_id)
+                  .single();
+                  
+                if (clubData) {
+                  clubName = clubData.name;
+                }
+              }
+            }
+          }
+          
+          return {
+            id: child.id,
+            full_name: child.full_name,
+            team_id: child.team_id,
+            team_name: teamName,
+            club_name: clubName
+          };
+        })
+      );
+      
+      return childrenWithTeams;
+    } catch (error) {
+      console.error('Error fetching children for parent in club:', error);
+      return [];
+    }
+  };
+
+  // Separate useEffect for fetching data when userRole and clubId are available
   useEffect(() => {
-    fetchParents();
-  }, [activePage, searchTerm]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (userRole) {
+      fetchParents();
+    }
+  }, [userRole, clubId, activePage, searchTerm]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSearch = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(event.currentTarget.value);
@@ -218,7 +414,9 @@ const Parents: React.FC = () => {
 
   return (
     <>
-      <Title order={2} mb="md">Parents</Title>
+      <Title order={2} mb="md">
+        {userRole === 'clubAdmin' && clubName ? `${clubName} Parents` : 'All Parents'}
+      </Title>
       
       <Group position="apart" mb="md">
         <Group>

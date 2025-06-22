@@ -11,7 +11,8 @@ import {
   LoadingOverlay,
   Tooltip,
   Button,
-  Paper
+  Paper,
+  Title
 } from '@mantine/core';
 import { IconSearch, IconFilter, IconBug } from '@tabler/icons-react';
 import { supabase } from '../lib/supabase';
@@ -50,18 +51,44 @@ export function PlayersPage() {
   const [error, setError] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<any>(null);
   const [showDebug, setShowDebug] = useState(false);
+  
+  // Add user role and club ID state
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [clubId, setClubId] = useState<string | null>(null);
+  const [clubName, setClubName] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchPlayers();
-    fetchTeams();
+    // Get user role and club information
+    const role = localStorage.getItem('userRole');
+    const clubIdFromStorage = localStorage.getItem('clubId');
+    const clubNameFromStorage = localStorage.getItem('clubName');
+    
+    setUserRole(role);
+    setClubId(clubIdFromStorage);
+    setClubName(clubNameFromStorage);
   }, []);
+
+  // Separate useEffect for fetching data when userRole and clubId are available
+  useEffect(() => {
+    if (userRole) {
+      fetchPlayers();
+      fetchTeams();
+    }
+  }, [userRole, clubId]);
 
   const fetchTeams = async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('teams')
         .select('id, name')
         .eq('is_active', true);
+
+      // If club admin, filter teams by club_id
+      if (userRole === 'clubAdmin' && clubId) {
+        query = query.eq('club_id', clubId);
+      }
+
+      const { data, error } = await query;
 
       if (error) {
         throw error;
@@ -90,7 +117,8 @@ export function PlayersPage() {
     try {
       // Get players with team, parent and club information
       debugData.queries.push({ name: 'players', startTime: new Date().toISOString() });
-      const { data, error } = await supabase
+      
+      let query = supabase
         .from('players')
         .select(`
           id, 
@@ -110,6 +138,18 @@ export function PlayersPage() {
           clubs:club_id (name)
         `)
         .eq('is_active', true);
+      
+      // If club admin, filter by club_id
+      if (userRole === 'clubAdmin' && clubId) {
+        query = query.eq('club_id', clubId);
+      } else if (userRole === 'masterAdmin') {
+        // For master admin, no additional filtering needed
+      } else {
+        // If not a master admin or club admin with valid club ID, throw error
+        throw new Error('You do not have permission to view players');
+      }
+      
+      const { data, error } = await query;
       
       debugData.queries[debugData.queries.length - 1].endTime = new Date().toISOString();
       debugData.players = { 
@@ -169,11 +209,28 @@ export function PlayersPage() {
         
         // Fetch current month payment statuses from monthly_payments table
         debugData.queries.push({ name: 'monthly_payments', startTime: new Date().toISOString() });
-        const { data: paymentsData, error: paymentsError } = await supabase
+        
+        let paymentsQuery = supabase
           .from('monthly_payments')
           .select('player_id, status')
           .eq('year', currentYear)
           .eq('month', currentMonth);
+        
+        // If club admin, filter payments by club_id (via player_id)
+        if (userRole === 'clubAdmin' && clubId) {
+          // Get player IDs for this club first
+          const { data: clubPlayerIds } = await supabase
+            .from('players')
+            .select('id')
+            .eq('club_id', clubId);
+          
+          if (clubPlayerIds && clubPlayerIds.length > 0) {
+            const playerIds = clubPlayerIds.map(p => p.id);
+            paymentsQuery = paymentsQuery.in('player_id', playerIds);
+          }
+        }
+        
+        const { data: paymentsData, error: paymentsError } = await paymentsQuery;
         
         debugData.queries[debugData.queries.length - 1].endTime = new Date().toISOString();
         debugData.payments = { 
@@ -314,6 +371,10 @@ export function PlayersPage() {
   return (
     <div style={{ position: 'relative' }}>
       <LoadingOverlay visible={loading} overlayBlur={2} />
+      
+      <Title order={2} mb="md">
+        {userRole === 'clubAdmin' && clubName ? `${clubName} Players` : 'All Players'}
+      </Title>
       
       <Group position="apart" mb="md">
         <Group>

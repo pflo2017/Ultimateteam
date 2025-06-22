@@ -23,6 +23,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { getCoachInternalId } from '../utils/coachUtils';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../types/navigation';
+import { JWTErrorHandler } from '../utils/jwtErrorHandler';
 
 type Player = {
   id: string;
@@ -335,24 +336,23 @@ export const AttendanceScreen = () => {
       setIsLoadingTeams(true);
       
       if (userRole === 'admin') {
-        // Get club_id using the reliable utility function
+        // Get club ID for proper data isolation
         const clubId = await getUserClubId();
-        
         if (!clubId) {
-          console.error('[AttendanceScreen] Error getting club for admin: No club ID found');
+          console.error('[AttendanceScreen] No club ID found for admin');
           setTeams([]);
           return;
         }
-        
-        console.log('[AttendanceScreen] Admin club_id:', clubId);
-        
-        // For admins, get teams filtered by club_id for data isolation
-        const { data, error } = await supabase
-          .from('teams')
-          .select('id, name')
-          .eq('club_id', clubId) // CRITICAL: Filter by club_id for data isolation
-          .eq('is_active', true)
-          .order('name');
+
+        // Use JWT error handling wrapper
+        const { data, error } = await JWTErrorHandler.withJWTHandling(async () => {
+          return await supabase
+            .from('teams')
+            .select('id, name')
+            .eq('club_id', clubId) // CRITICAL: Filter by club_id for data isolation
+            .eq('is_active', true)
+            .order('name');
+        });
           
         if (error) {
           console.error('[AttendanceScreen] Error fetching teams:', error);
@@ -379,10 +379,13 @@ export const AttendanceScreen = () => {
           return;
         }
 
-        const { data, error } = await supabase
-          .rpc('get_coach_teams', {
-            p_coach_id: coachId
-          });
+        // Use JWT error handling wrapper
+        const { data, error } = await JWTErrorHandler.withJWTHandling(async () => {
+          return await supabase
+            .rpc('get_coach_teams', {
+              p_coach_id: coachId
+            });
+        });
           
         if (error) throw error;
         

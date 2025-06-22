@@ -5,6 +5,7 @@ import { SplashScreen } from './src/components/SplashScreen';
 import { View, StatusBar, LogBox } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { supabase } from './src/lib/supabase';
+import { JWTErrorHandler } from './src/utils/jwtErrorHandler';
 
 const customTheme = {
   ...DefaultTheme,
@@ -39,6 +40,26 @@ export default function App() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         console.log('Supabase session at app start:', session);
+        
+        // If we have a session, check if it's expired and refresh if needed
+        if (session) {
+          const now = Math.floor(Date.now() / 1000);
+          const expiresAt = session.expires_at;
+          
+          if (expiresAt && now >= expiresAt) {
+            console.log('Session expired, attempting refresh...');
+            const refreshed = await JWTErrorHandler.handleJWTError({ 
+              message: 'JWT expired',
+              code: 'PGRST301'
+            });
+            
+            if (refreshed) {
+              console.log('Session refreshed successfully');
+            } else {
+              console.log('Session refresh failed, user will need to log in again');
+            }
+          }
+        }
       } catch (e) {
         console.log('Error restoring Supabase session:', e);
       } finally {
@@ -48,9 +69,25 @@ export default function App() {
     restoreSession();
 
     // Listen for auth state changes
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       console.log('Supabase auth state changed. New session:', session);
+      
+      // Handle specific auth events
+      switch (event) {
+        case 'TOKEN_REFRESHED':
+          console.log('JWT token was refreshed successfully');
+          break;
+        case 'SIGNED_OUT':
+          console.log('User signed out');
+          break;
+        case 'SIGNED_IN':
+          console.log('User signed in');
+          break;
+        default:
+          console.log('Auth event:', event);
+      }
     });
+    
     return () => {
       listener?.subscription?.unsubscribe();
     };
