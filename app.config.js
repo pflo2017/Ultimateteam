@@ -35,8 +35,8 @@ export default {
       favicon: "./assets/favicon.png"
     },
     extra: {
-      supabaseUrl: process.env.SUPABASE_URL || "https://ulltpjezntzgiawchmaj.supabase.co",
-      supabaseAnonKey: process.env.SUPABASE_ANON_KEY || "sb_publishable_k6gtnpe-RzS6RQ3EC8e5Jg_rVvZbqVm",
+      supabaseUrl: process.env.SUPABASE_URL,
+      supabaseAnonKey: process.env.SUPABASE_ANON_KEY,
       eas: {
         projectId: "f43e8b35-5e2a-4e5d-92bb-9cdc051ca72a"
       }

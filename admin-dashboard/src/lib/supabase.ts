@@ -1,9 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Get the Supabase URL and key from environment variables
-const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || 'https://ulltpjezntzgiawchmaj.supabase.co';
-const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY || 'sb_publishable_k6gtnpe-RzS6RQ3EC8e5Jg_rVvZbqVm';
+const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
+const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY;
 const supabaseServiceKey = process.env.REACT_APP_SUPABASE_SERVICE_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Supabase URL and Anon Key are required. Please check your .env file.');
+}
 
 console.log('Using Supabase URL:', supabaseUrl);
 console.log('Using service key:', supabaseServiceKey ? 'Yes' : 'No');
