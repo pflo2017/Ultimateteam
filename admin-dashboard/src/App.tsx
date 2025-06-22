@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { MantineProvider, ColorSchemeProvider, ColorScheme } from '@mantine/core';
-import { supabase } from './lib/supabase';
+import { supabase, refreshToken } from './lib/supabase';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { isMasterAdmin } from './lib/supabase';
 import DashboardLayout from './components/Layout/DashboardLayout';
@@ -20,6 +20,37 @@ import SuspendedClubBanner from './components/SuspendedClubBanner';
 import { Notifications } from '@mantine/notifications';
 import ScheduleManagement from './pages/ScheduleManagement';
 import TeamsPage from './pages/TeamsPage';
+
+// Add global error handler for 401 Unauthorized errors
+const setupGlobalErrorHandler = () => {
+  const originalFetch = window.fetch;
+  window.fetch = async function(input: RequestInfo | URL, init?: RequestInit) {
+    const response = await originalFetch.call(this, input as RequestInfo, init);
+    
+    // Check if we got a 401 Unauthorized error
+    if (response.status === 401) {
+      console.log('Received 401 Unauthorized response, attempting token refresh');
+      
+      // Try to refresh the token
+      const refreshed = await refreshToken();
+      
+      if (refreshed) {
+        // If token refresh was successful, retry the original request
+        console.log('Token refreshed successfully, retrying request');
+        return originalFetch.call(this, input as RequestInfo, init);
+      } else {
+        // If token refresh failed, redirect to login
+        console.log('Token refresh failed, redirecting to login');
+        window.location.href = '/login';
+      }
+    }
+    
+    return response;
+  };
+};
+
+// Call the setup function
+setupGlobalErrorHandler();
 
 // Placeholder for future components
 const Analytics = () => <div>Analytics</div>;

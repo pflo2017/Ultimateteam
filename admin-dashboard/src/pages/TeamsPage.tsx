@@ -36,6 +36,7 @@ interface Team {
   club_name?: string;
   player_count: number;
   coach_count: number;
+  coach_names?: string[];
   is_active: boolean;
   created_at: string;
 }
@@ -82,6 +83,7 @@ const TeamsPage: React.FC = () => {
           club_id,
           is_active,
           created_at,
+          coach_id,
           clubs:club_id (name)
         `)
         .eq('club_id', clubId);
@@ -96,7 +98,18 @@ const TeamsPage: React.FC = () => {
       // Execute query
       const { data, error } = await query;
       
-      if (error) throw error;
+      if (error) {
+        // Check if error is due to expired token
+        if (error.message.includes('JWT')) {
+          console.error('JWT token error:', error);
+          notifications.show({
+            title: 'Session Expired',
+            message: 'Your session has expired. Please refresh the page.',
+            color: 'yellow'
+          });
+        }
+        throw error;
+      }
       
       if (data) {
         // Get player counts for each team
@@ -111,13 +124,54 @@ const TeamsPage: React.FC = () => {
               
             if (playerError) console.error('Error fetching player count:', playerError);
             
-            // Get coach count
-            const { count: coachCount, error: coachError } = await supabase
+            // Initialize coach variables
+            let coachNames: string[] = [];
+            let coachCount = 0;
+            
+            // Check for direct coach assignment
+            if (team.coach_id) {
+              const { data: directCoach, error: directCoachError } = await supabase
+                .from('coaches')
+                .select('id, name')
+                .eq('id', team.coach_id)
+                .single();
+                
+              if (directCoachError) {
+                console.error('Error fetching direct coach:', directCoachError);
+              } else if (directCoach && directCoach.name) {
+                coachNames.push(directCoach.name);
+              }
+            }
+            
+            // Check for coaches in team_coaches table
+            const { data: teamCoachesData, error: teamCoachesError } = await supabase
               .from('team_coaches')
-              .select('*', { count: 'exact', head: true })
+              .select('coach_id')
               .eq('team_id', team.id);
-              
-            if (coachError) console.error('Error fetching coach count:', coachError);
+            
+            if (teamCoachesError) {
+              console.error('Error fetching team_coaches:', teamCoachesError);
+            }
+            
+            // Extract coach IDs
+            const coachIds = teamCoachesData?.map(item => item.coach_id) || [];
+            
+            // If we have coach IDs, fetch their names from coaches table
+            if (coachIds.length > 0) {
+              const { data: coachesData, error: coachesError } = await supabase
+                .from('coaches')
+                .select('id, name')
+                .in('id', coachIds);
+                
+              if (coachesError) {
+                console.error('Error fetching coach details:', coachesError);
+              } else if (coachesData) {
+                const names = coachesData.map(coach => coach.name);
+                coachNames = [...coachNames, ...names];
+              }
+            }
+            
+            coachCount = coachNames.length;
             
             // Fix: Access club name correctly - clubs might be an array or an object
             let clubName = 'Unknown';
@@ -136,7 +190,8 @@ const TeamsPage: React.FC = () => {
               ...team,
               club_name: clubName,
               player_count: playerCount || 0,
-              coach_count: coachCount || 0
+              coach_count: coachCount,
+              coach_names: coachNames
             };
           })
         );
@@ -294,35 +349,45 @@ const TeamsPage: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {filteredTeams.map((team) => (
-              <tr key={team.id}>
-                <td>{team.name}</td>
-                <td>{team.player_count}</td>
-                <td>{team.coach_count}</td>
-                <td>
-                  <Badge color={team.is_active ? 'green' : 'gray'}>
-                    {team.is_active ? 'Active' : 'Inactive'}
-                  </Badge>
-                </td>
-                <td>
-                  <Group spacing="xs">
-                    <Tooltip label="Edit Team">
-                      <ActionIcon color="blue">
-                        <IconEdit size={16} />
-                      </ActionIcon>
-                    </Tooltip>
-                    <Tooltip label={team.is_active ? 'Deactivate Team' : 'Activate Team'}>
-                      <ActionIcon 
-                        color={team.is_active ? 'red' : 'green'}
-                        onClick={() => handleToggleTeamStatus(team.id, team.is_active)}
-                      >
-                        <IconTrash size={16} />
-                      </ActionIcon>
-                    </Tooltip>
-                  </Group>
-                </td>
-              </tr>
-            ))}
+            {filteredTeams.map((team) => {
+              return (
+                <tr key={team.id}>
+                  <td>{team.name}</td>
+                  <td>{team.player_count}</td>
+                  <td>
+                    {team.coach_names && team.coach_names.length > 0 ? (
+                      <Tooltip label={team.coach_names.join(', ')}>
+                        <Text>{team.coach_names.map(name => name.replace(' (direct)', '')).join(', ')}</Text>
+                      </Tooltip>
+                    ) : (
+                      <Text color="dimmed">No coaches assigned</Text>
+                    )}
+                  </td>
+                  <td>
+                    <Badge color={team.is_active ? 'green' : 'gray'}>
+                      {team.is_active ? 'ACTIVE' : 'INACTIVE'}
+                    </Badge>
+                  </td>
+                  <td>
+                    <Group spacing="xs">
+                      <Tooltip label="Edit Team">
+                        <ActionIcon color="blue">
+                          <IconEdit size={16} />
+                        </ActionIcon>
+                      </Tooltip>
+                      <Tooltip label={team.is_active ? 'Deactivate Team' : 'Activate Team'}>
+                        <ActionIcon 
+                          color={team.is_active ? 'red' : 'green'}
+                          onClick={() => handleToggleTeamStatus(team.id, team.is_active)}
+                        >
+                          <IconTrash size={16} />
+                        </ActionIcon>
+                      </Tooltip>
+                    </Group>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </Table>
       )}

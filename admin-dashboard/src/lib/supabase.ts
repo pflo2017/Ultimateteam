@@ -2,14 +2,54 @@ import { createClient } from '@supabase/supabase-js';
 
 // Get the Supabase URL and key from environment variables
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || 'https://ulltpjezntzgiawchmaj.supabase.co';
-const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVsbHRwamV6bnR6Z2lhd2NobWFqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDUzMzczNDIsImV4cCI6MjA2MDkxMzM0Mn0.HZLgLWTSNEdTbE9HEaAQ92HkHe7k_gx4Pj2meQyZxfE';
+const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY || 'sb_publishable_k6gtnpe-RzS6RQ3EC8e5Jg_rVvZbqVm';
 const supabaseServiceKey = process.env.REACT_APP_SUPABASE_SERVICE_KEY;
 
 console.log('Using Supabase URL:', supabaseUrl);
 console.log('Using service key:', supabaseServiceKey ? 'Yes' : 'No');
 
-// Create the standard client with anon key
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Create the standard client with anon key and auto refresh token enabled
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true
+  }
+});
+
+// Set up auth state change listener to handle token refresh
+supabase.auth.onAuthStateChange((event, session) => {
+  console.log('Supabase auth state changed:', event);
+  
+  if (event === 'TOKEN_REFRESHED') {
+    console.log('JWT token was refreshed successfully');
+  }
+  
+  if (event === 'SIGNED_OUT') {
+    console.log('User signed out');
+    // Clear any local storage items related to the user
+    localStorage.removeItem('clubId');
+    localStorage.removeItem('clubName');
+  }
+});
+
+// Function to manually refresh the token if needed
+export const refreshToken = async () => {
+  try {
+    const { data, error } = await supabase.auth.refreshSession();
+    
+    if (error) {
+      console.error('Error refreshing token:', error);
+      return false;
+    }
+    
+    console.log('Token refreshed successfully:', data.session?.expires_at);
+    return true;
+  } catch (error) {
+    console.error('Exception during token refresh:', error);
+    return false;
+  }
+};
 
 // Create an admin client with service role key if available
 export const adminSupabase = supabaseServiceKey 
