@@ -38,11 +38,18 @@ const Login: React.FC<LoginProps> = ({ setHasExplicitLogin }) => {
       // Log for debugging
       console.log('Attempting login with:', email);
       
+      // Check Supabase client status
+      const { data: { session: existingSession } } = await supabase.auth.getSession();
+      console.log('Existing session before login attempt:', existingSession ? 'Yes' : 'No');
+      
+      // Try to sign in with email and password
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
       });
 
+      console.log('Login response:', { data, error });
+      
       if (error) throw error;
 
       if (data.user) {
@@ -124,6 +131,13 @@ const Login: React.FC<LoginProps> = ({ setHasExplicitLogin }) => {
       }
     } catch (error: any) {
       console.error('Error logging in:', error);
+      
+      // Enhanced error logging
+      if (error.message === 'Legacy API keys are disabled') {
+        console.error('Legacy API keys are disabled. This error occurs when using old API keys that have been deprecated.');
+        console.error('Please check your Supabase configuration and make sure you are using the latest API keys.');
+      }
+      
       setError(error.message || 'An error occurred during login');
     } finally {
       setLoading(false);
