@@ -1,25 +1,17 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Get the Supabase URL and key from environment variables
-const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
-const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY;
-const supabaseServiceKey = process.env.REACT_APP_SUPABASE_SERVICE_KEY;
+const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || "https://ulltpjezntzgiawchmaj.supabase.co";
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Supabase URL and Anon Key are required. Please check your .env file.');
-}
+// Using the new API keys format (sb_publishable_)
+const supabasePublishableKey = process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY || "";
 
+// For debugging
 console.log('Using Supabase URL:', supabaseUrl);
-console.log('Using service key:', supabaseServiceKey ? 'Yes' : 'No');
+console.log('Using new API keys:', !!supabasePublishableKey);
 
-// Create the standard client with anon key and auto refresh token enabled
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: true
-  }
-});
+// Create the standard client with publishable key
+export const supabase = createClient(supabaseUrl, supabasePublishableKey);
 
 // Set up auth state change listener to handle token refresh
 supabase.auth.onAuthStateChange((event, session) => {
@@ -55,15 +47,9 @@ export const refreshToken = async () => {
   }
 };
 
-// Create an admin client with service role key if available
-export const adminSupabase = supabaseServiceKey 
-  ? createClient(supabaseUrl, supabaseServiceKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false
-      }
-    })
-  : supabase; // Fall back to regular client if no service key
+// In browser environments, we can only use the publishable key
+// Secret keys should only be used in server-side code
+export const adminSupabase = supabase;
 
 // Helper function to get authenticated user
 export const getCurrentUser = async () => {
