@@ -40,7 +40,9 @@ import {
   IconSnowman,
   IconCertificate,
   IconCalendarStats,
-  IconActivity
+  IconActivity,
+  IconClock,
+  IconRepeat
 } from '@tabler/icons-react';
 import { supabase } from '../lib/supabase';
 import { getClubAdminClubId } from '../lib/supabase';
@@ -65,6 +67,7 @@ interface Activity {
   repeat_type?: 'daily' | 'weekly' | 'monthly';
   repeat_days?: number[];
   repeat_until?: string;
+  additional_info?: string;
 }
 
 interface Player {
@@ -109,6 +112,12 @@ const ScheduleManagement: React.FC = () => {
   const [allMonthActivities, setAllMonthActivities] = useState<Activity[]>([]);
   const [filteredActivities, setFilteredActivities] = useState<Activity[]>([]);
   const [weekActivities, setWeekActivities] = useState<Activity[]>([]);
+  
+  // First, add a state to track expanded card IDs
+  const [expandedCardIds, setExpandedCardIds] = useState<string[]>([]);
+  
+  // Add a new state to track button selection
+  const [selectedButton, setSelectedButton] = useState<'day' | 'today' | 'month'>('day');
   
   useEffect(() => {
     const fetchClubData = async () => {
@@ -191,7 +200,7 @@ const ScheduleManagement: React.FC = () => {
         .from('activities')
         .select(`
           id, title, location, start_time, end_time, duration, type,
-          team_id, teams(name), is_repeating, repeat_type, repeat_days, repeat_until
+          team_id, teams(name), is_repeating, repeat_type, repeat_days, repeat_until, additional_info
         `)
         // Get both:
         // 1. Activities with start_time within the current range
@@ -640,6 +649,34 @@ const ScheduleManagement: React.FC = () => {
     return daysInWeek;
   };
   
+  // Add a function to toggle card expansion
+  const toggleCardExpansion = (activityId: string) => {
+    if (expandedCardIds.includes(activityId)) {
+      setExpandedCardIds(expandedCardIds.filter(id => id !== activityId));
+    } else {
+      setExpandedCardIds([...expandedCardIds, activityId]);
+    }
+  };
+  
+  // Format date with time for the expanded view
+  const formatDateWithTime = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return `${format(date, 'EEE, MMM d, yyyy')} • ${format(date, 'h:mm a')}`;
+  };
+
+  // Format recurrence "until" date 
+  const formatRecurrenceUntil = (dateStr: string | undefined) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    return format(date, 'MMM d, yyyy');
+  };
+
+  // Get day name from day number
+  const getDayName = (dayNum: number): string => {
+    const days = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+    return days[dayNum];
+  };
+  
   return (
     <Container size="xl">
       <Title order={2} mb="md">Schedule Management</Title>
@@ -713,23 +750,39 @@ const ScheduleManagement: React.FC = () => {
               {activeTab === 'calendar' && (
                 <Button.Group>
                   <Button 
-                    variant={calendarViewMode === 'day' ? 'filled' : 'light'} 
+                    variant={selectedButton === 'day' ? 'filled' : 'light'} 
                     compact 
-                    onClick={() => setCalendarViewMode('day')}
+                    onClick={() => {
+                      setCalendarViewMode('day');
+                      setSelectedButton('day');
+                      setTimeout(() => fetchActivities(), 0);
+                    }}
                   >
                     Day
                   </Button>
                   <Button 
-                    variant={calendarViewMode === 'month' ? 'filled' : 'light'} 
+                    variant={selectedButton === 'today' ? 'filled' : 'light'} 
                     compact 
-                    onClick={() => setCalendarViewMode('month')}
+                    onClick={() => {
+                      setCalendarViewMode('month');
+                      setSelectedButton('today');
+                      setTimeout(() => fetchActivities(), 0);
+                    }}
                   >
-                    Month
+                    Today
                   </Button>
                 </Button.Group>
               )}
-              <Button variant="light" compact onClick={goToToday}>
-                Today
+              <Button 
+                variant={selectedButton === 'month' ? 'filled' : 'light'} 
+                compact 
+                onClick={() => {
+                  setSelectedDate(new Date());
+                  setSelectedButton('month');
+                  setTimeout(() => fetchActivities(), 0);
+                }}
+              >
+                Month
               </Button>
               
               <Button 
@@ -882,9 +935,10 @@ const ScheduleManagement: React.FC = () => {
                       <Grid gutter="xs">
                         {day.activities.map(activity => {
                           const isEnded = isActivityEnded(activity);
+                          const isExpanded = expandedCardIds.includes(activity.id);
                           
                           return (
-                            <Grid.Col key={activity.id} span={4}>
+                            <Grid.Col key={activity.id} span={isExpanded ? 12 : 4}>
                               <Box 
                                 sx={(theme) => ({
                                   borderRadius: theme.radius.md,
@@ -894,7 +948,13 @@ const ScheduleManagement: React.FC = () => {
                                   height: '100%',
                                   display: 'flex',
                                   flexDirection: 'column',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.2s ease',
+                                  ...(isExpanded && {
+                                    boxShadow: theme.shadows.md,
+                                  }),
                                 })}
+                                onClick={() => toggleCardExpansion(activity.id)}
                               >
                                 <Box p="xs">
                                   <Flex justify="space-between" align="center" mb="xs">
@@ -919,11 +979,11 @@ const ScheduleManagement: React.FC = () => {
                                     </Group>
                                   </Flex>
                                   
-                                  <Text fw={700} size="lg" mb="xs" lineClamp={1}>
+                                  <Text fw={700} size={isExpanded ? 'xl' : 'lg'} mb="xs" lineClamp={isExpanded ? undefined : 1}>
                                     {activity.title}
                                   </Text>
                                   
-                                  <Text size="sm" c="dimmed" lineClamp={1}>
+                                  <Text size="sm" c="dimmed" lineClamp={isExpanded ? undefined : 1}>
                                     {activity.team_name}
                                   </Text>
                                   
@@ -935,6 +995,96 @@ const ScheduleManagement: React.FC = () => {
                                     <Badge color="gray" size="xs">
                                       {getRecurringInfo(activity)}
                                     </Badge>
+                                  )}
+                                  
+                                  {isExpanded && (
+                                    <Box mt="md">
+                                      <Divider mb="md" />
+                                      
+                                      <Grid>
+                                        <Grid.Col span={12}>
+                                          <Text size="xs" fw={500} c="dimmed">LOCATION</Text>
+                                          <Group spacing="xs">
+                                            <IconMapPin size={16} />
+                                            <Text>{activity.location || 'Not specified'}</Text>
+                                          </Group>
+                                        </Grid.Col>
+                                        
+                                        <Grid.Col span={12} mt="sm">
+                                          <Text size="xs" fw={500} c="dimmed">DATE & TIME</Text>
+                                          <Group spacing="xs">
+                                            <IconCalendarTime size={16} />
+                                            <Text>{formatDateWithTime(activity.start_time)}</Text>
+                                          </Group>
+                                        </Grid.Col>
+                                        
+                                        <Grid.Col span={12} mt="sm">
+                                          <Text size="xs" fw={500} c="dimmed">DURATION</Text>
+                                          <Group spacing="xs">
+                                            <IconClock size={16} />
+                                            <Text>{activity.duration || '1h'}</Text>
+                                          </Group>
+                                        </Grid.Col>
+                                        
+                                        <Grid.Col span={12} mt="sm">
+                                          <Text size="xs" fw={500} c="dimmed">TEAM</Text>
+                                          <Group spacing="xs">
+                                            <IconUsers size={16} />
+                                            <Text>{activity.team_name}</Text>
+                                          </Group>
+                                        </Grid.Col>
+                                        
+                                        {activity.is_repeating && (
+                                          <Grid.Col span={12} mt="md">
+                                            <Paper p="md" radius="md" withBorder>
+                                              <Text size="lg" fw={600} mb="sm">Recurrence</Text>
+                                              
+                                              <Group spacing="xs" mb="md">
+                                                <IconRepeat size={16} />
+                                                <Text>
+                                                  Repeats {activity.repeat_type} until {formatRecurrenceUntil(activity.repeat_until)}
+                                                </Text>
+                                              </Group>
+                                              
+                                              {activity.repeat_type === 'weekly' && activity.repeat_days && (
+                                                <>
+                                                  <Text size="sm" c="dimmed" mb="xs">Repeats on:</Text>
+                                                  <Group spacing="md">
+                                                    {[0, 1, 2, 3, 4, 5, 6].map(day => {
+                                                      const isActive = activity.repeat_days?.includes(day);
+                                                      return (
+                                                        <Box 
+                                                          key={day}
+                                                          sx={(theme) => ({
+                                                            width: 36,
+                                                            height: 36,
+                                                            borderRadius: '50%',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            backgroundColor: isActive ? theme.colors.cyan[5] : theme.colors.gray[2],
+                                                            color: isActive ? theme.white : theme.colors.gray[7],
+                                                          })}
+                                                        >
+                                                          {getDayName(day)}
+                                                        </Box>
+                                                      );
+                                                    })}
+                                                  </Group>
+                                                </>
+                                              )}
+                                            </Paper>
+                                          </Grid.Col>
+                                        )}
+                                        
+                                        {activity.additional_info ? (
+                                          <Grid.Col span={12} mt="md">
+                                            <Text size="lg" fw={600} mb="sm">Additional Information</Text>
+                                            <Text size="sm">{activity.additional_info}</Text>
+                                          </Grid.Col>
+                                        ) : null}
+                                      </Grid>
+                                    </Box>
                                   )}
                                 </Box>
                               </Box>
@@ -979,9 +1129,10 @@ const ScheduleManagement: React.FC = () => {
           <Grid gutter="md">
             {filteredActivities.map(activity => {
               const isEnded = isActivityEnded(activity);
+              const isExpanded = expandedCardIds.includes(activity.id);
               
               return (
-                <Grid.Col key={activity.id} span={4}>
+                <Grid.Col key={activity.id} span={isExpanded ? 12 : 4}>
                   <Box 
                     sx={(theme) => ({
                       borderRadius: theme.radius.md,
@@ -991,7 +1142,13 @@ const ScheduleManagement: React.FC = () => {
                       height: '100%',
                       display: 'flex',
                       flexDirection: 'column',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      ...(isExpanded && {
+                        boxShadow: theme.shadows.md,
+                      }),
                     })}
+                    onClick={() => toggleCardExpansion(activity.id)}
                   >
                     <Box p="xs">
                       <Flex justify="space-between" align="center" mb="xs">
@@ -1016,11 +1173,11 @@ const ScheduleManagement: React.FC = () => {
                         </Group>
                       </Flex>
                       
-                      <Text fw={700} size="lg" mb="xs" lineClamp={1}>
+                      <Text fw={700} size={isExpanded ? 'xl' : 'lg'} mb="xs" lineClamp={isExpanded ? undefined : 1}>
                         {activity.title}
                       </Text>
                       
-                      <Text size="sm" c="dimmed" lineClamp={1}>
+                      <Text size="sm" c="dimmed" lineClamp={isExpanded ? undefined : 1}>
                         {activity.team_name}
                       </Text>
                       
@@ -1032,6 +1189,96 @@ const ScheduleManagement: React.FC = () => {
                         <Badge color="gray" mt="xs" size="xs">
                           {getRecurringInfo(activity)}
                         </Badge>
+                      )}
+                      
+                      {isExpanded && (
+                        <Box mt="md">
+                          <Divider mb="md" />
+                          
+                          <Grid>
+                            <Grid.Col span={12}>
+                              <Text size="xs" fw={500} c="dimmed">LOCATION</Text>
+                              <Group spacing="xs">
+                                <IconMapPin size={16} />
+                                <Text>{activity.location || 'Not specified'}</Text>
+                              </Group>
+                            </Grid.Col>
+                            
+                            <Grid.Col span={12} mt="sm">
+                              <Text size="xs" fw={500} c="dimmed">DATE & TIME</Text>
+                              <Group spacing="xs">
+                                <IconCalendarTime size={16} />
+                                <Text>{formatDateWithTime(activity.start_time)}</Text>
+                              </Group>
+                            </Grid.Col>
+                            
+                            <Grid.Col span={12} mt="sm">
+                              <Text size="xs" fw={500} c="dimmed">DURATION</Text>
+                              <Group spacing="xs">
+                                <IconClock size={16} />
+                                <Text>{activity.duration || '1h'}</Text>
+                              </Group>
+                            </Grid.Col>
+                            
+                            <Grid.Col span={12} mt="sm">
+                              <Text size="xs" fw={500} c="dimmed">TEAM</Text>
+                              <Group spacing="xs">
+                                <IconUsers size={16} />
+                                <Text>{activity.team_name}</Text>
+                              </Group>
+                            </Grid.Col>
+                            
+                            {activity.is_repeating && (
+                              <Grid.Col span={12} mt="md">
+                                <Paper p="md" radius="md" withBorder>
+                                  <Text size="lg" fw={600} mb="sm">Recurrence</Text>
+                                  
+                                  <Group spacing="xs" mb="md">
+                                    <IconRepeat size={16} />
+                                    <Text>
+                                      Repeats {activity.repeat_type} until {formatRecurrenceUntil(activity.repeat_until)}
+                                    </Text>
+                                  </Group>
+                                  
+                                  {activity.repeat_type === 'weekly' && activity.repeat_days && (
+                                    <>
+                                      <Text size="sm" c="dimmed" mb="xs">Repeats on:</Text>
+                                      <Group spacing="md">
+                                        {[0, 1, 2, 3, 4, 5, 6].map(day => {
+                                          const isActive = activity.repeat_days?.includes(day);
+                                          return (
+                                            <Box 
+                                              key={day}
+                                              sx={(theme) => ({
+                                                width: 36,
+                                                height: 36,
+                                                borderRadius: '50%',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                backgroundColor: isActive ? theme.colors.cyan[5] : theme.colors.gray[2],
+                                                color: isActive ? theme.white : theme.colors.gray[7],
+                                              })}
+                                            >
+                                              {getDayName(day)}
+                                            </Box>
+                                          );
+                                        })}
+                                      </Group>
+                                    </>
+                                  )}
+                                </Paper>
+                              </Grid.Col>
+                            )}
+                            
+                            {activity.additional_info ? (
+                              <Grid.Col span={12} mt="md">
+                                <Text size="lg" fw={600} mb="sm">Additional Information</Text>
+                                <Text size="sm">{activity.additional_info}</Text>
+                              </Grid.Col>
+                            ) : null}
+                          </Grid>
+                        </Box>
                       )}
                       
                       <Flex justify="flex-end" mt="xs">
