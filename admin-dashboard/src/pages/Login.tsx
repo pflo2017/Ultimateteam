@@ -16,7 +16,7 @@ import {
 import { supabase } from '../lib/supabase';
 
 interface LoginProps {
-  setHasExplicitLogin: React.Dispatch<React.SetStateAction<boolean>>;
+  setHasExplicitLogin?: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 const Login: React.FC<LoginProps> = ({ setHasExplicitLogin }) => {
@@ -87,10 +87,12 @@ const Login: React.FC<LoginProps> = ({ setHasExplicitLogin }) => {
           // Store the user role in localStorage
           localStorage.setItem('userRole', 'masterAdmin');
           
-          // Set explicit login flag
-          setHasExplicitLogin(true);
+          // Set explicit login flag if the prop is provided
+          if (setHasExplicitLogin) {
+            setHasExplicitLogin(true);
+          }
           
-          navigate('/dashboard');
+          navigate('/');
         } else {
           // Check if the user is a club admin
           const { data: clubData, error: clubError } = await supabase
@@ -123,10 +125,12 @@ const Login: React.FC<LoginProps> = ({ setHasExplicitLogin }) => {
           localStorage.setItem('clubId', clubData[0].id);
           localStorage.setItem('clubName', clubData[0].name);
           
-          // Set explicit login flag
-          setHasExplicitLogin(true);
+          // Set explicit login flag if the prop is provided
+          if (setHasExplicitLogin) {
+            setHasExplicitLogin(true);
+          }
           
-          navigate('/dashboard');
+          navigate('/');
         }
       }
     } catch (error: any) {

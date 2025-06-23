@@ -306,13 +306,41 @@ export const deleteActivity = async (id: string): Promise<{ error: Error | null 
     
     // 2. Delete presence responses (RSVP)
     console.log('Deleting presence responses (RSVPs from parents/players)');
-    const { error: presenceError } = await supabase
-      .from('activity_presence')
-      .delete()
-      .eq('activity_id', id); // Use the full ID here
-    
-    if (presenceError) {
-      console.error('Error deleting presence records:', presenceError);
+    try {
+      // For activity_presence table, we need to handle the ID differently
+      // since it expects a UUID in the activity_id column
+      if (isCompositeId) {
+        // If it's a composite ID, we need to check if there are any records with this ID
+        const { data: presenceData } = await supabase
+          .from('activity_presence')
+          .select('id')
+          .eq('activity_id', baseId) // Use baseId instead of composite ID
+          .filter('created_at', 'gte', id.substring(37)); // Filter by date if needed
+          
+        // If records exist, delete them
+        if (presenceData && presenceData.length > 0) {
+          const { error: presenceError } = await supabase
+            .from('activity_presence')
+            .delete()
+            .in('id', presenceData.map(record => record.id));
+            
+          if (presenceError) {
+            console.error('Error deleting filtered presence records:', presenceError);
+          }
+        }
+      } else {
+        // Standard deletion for non-composite IDs
+        const { error: presenceError } = await supabase
+          .from('activity_presence')
+          .delete()
+          .eq('activity_id', id);
+          
+        if (presenceError) {
+          console.error('Error deleting presence records:', presenceError);
+        }
+      }
+    } catch (error) {
+      console.error('Error processing presence records deletion:', error);
       // Continue with deletion even if presence deletion fails
     }
     
@@ -346,8 +374,8 @@ export const deleteActivity = async (id: string): Promise<{ error: Error | null 
           // Delete each instance individually
           for (const instance of recurringInstances) {
             const { error: deleteError } = await supabase
-        .from('activities')
-        .delete()
+              .from('activities')
+              .delete()
               .eq('id', instance.id);
       
             if (deleteError) {
@@ -448,7 +476,14 @@ const generateRecurringInstances = (activity: Activity, startDate: string, endDa
   const rangeStart = new Date(startDate);
   const rangeEnd = new Date(endDate);
   
-  let current: Date;
+  // Track generated dates to avoid duplicates
+  const generatedDates = new Set<string>();
+  
+  // Add the original activity date to the set to prevent duplicates
+  generatedDates.add(format(activityDate, 'yyyy-MM-dd'));
+  
+  // Initialize current here to avoid "used before being assigned" error
+  let current = new Date(activityDate);
   
   // Handle different repeat types
   switch (activity.repeat_type) {
@@ -456,8 +491,12 @@ const generateRecurringInstances = (activity: Activity, startDate: string, endDa
       current = new Date(activityDate);
       while (current <= repeatUntil && current <= rangeEnd) {
         if (current >= rangeStart) {
-          const instance = createRecurringInstance(baseActivity, current);
-          instances.push(instance);
+          const dateKey = format(current, 'yyyy-MM-dd');
+          if (!generatedDates.has(dateKey)) {
+            const instance = createRecurringInstance(baseActivity, current);
+            instances.push(instance);
+            generatedDates.add(dateKey);
+          }
         }
         current = addDays(current, 1);
       }
@@ -468,15 +507,20 @@ const generateRecurringInstances = (activity: Activity, startDate: string, endDa
         // Default to the day of the week of the original activity
         const dayOfWeek = getDay(activityDate);
         current = new Date(activityDate);
+        
+        // Skip the first occurrence since it's the original activity
+        current = addWeeks(current, 1);
+        
         while (current <= repeatUntil && current <= rangeEnd) {
-          if (current >= rangeStart) {
+          const dateKey = format(current, 'yyyy-MM-dd');
+          if (current >= rangeStart && !generatedDates.has(dateKey)) {
             const instance = createRecurringInstance(baseActivity, current);
             instances.push(instance);
+            generatedDates.add(dateKey);
           }
           current = addWeeks(current, 1);
         }
       } else {
-        // For each specified day of the week, generate instances
         const activityDayOfWeek = getDay(activityDate);
         const activityTime = activityDate.getTime() - new Date(
           activityDate.getFullYear(),
@@ -484,7 +528,31 @@ const generateRecurringInstances = (activity: Activity, startDate: string, endDa
           activityDate.getDate()
         ).getTime();
         
+        // First add the original activity date if in range and not already added
+        if (activityDate >= rangeStart && activityDate <= rangeEnd) {
+          // Original activity is already in the database, don't add it to instances
+          generatedDates.add(format(activityDate, 'yyyy-MM-dd'));
+        }
+        
+        // Generate weekly instances for the original activity day
+        current = addWeeks(new Date(activityDate), 1); // Start from next week
+        while (current <= repeatUntil && current <= rangeEnd) {
+          const dateKey = format(current, 'yyyy-MM-dd');
+          if (current >= rangeStart && !generatedDates.has(dateKey)) {
+            const instance = createRecurringInstance(baseActivity, current);
+            instances.push(instance);
+            generatedDates.add(dateKey);
+          }
+          current = addWeeks(current, 1);
+        }
+        
+        // For each specified day of the week (except the original day), generate instances
         activity.repeat_days.forEach(day => {
+          // Skip if this is the same day as the original activity to avoid duplicates
+          if (day === activityDayOfWeek) {
+            return; // Skip this day to avoid duplicates
+          }
+          
           // Get the first occurrence of this day of the week
           let dayDiff = day - activityDayOfWeek;
           if (dayDiff < 0) dayDiff += 7; // Wrap around to the next week
@@ -504,9 +572,13 @@ const generateRecurringInstances = (activity: Activity, startDate: string, endDa
           // Generate weekly instances for this day
           current = new Date(firstOccurrence);
           while (current <= repeatUntil && current <= rangeEnd) {
-            if (current >= rangeStart) {
+            const dateKey = format(current, 'yyyy-MM-dd');
+            
+            // Only add if we haven't generated this date already
+            if (current >= rangeStart && !generatedDates.has(dateKey)) {
               const instance = createRecurringInstance(baseActivity, current);
               instances.push(instance);
+              generatedDates.add(dateKey);
             }
             current = addWeeks(current, 1);
           }
@@ -516,10 +588,14 @@ const generateRecurringInstances = (activity: Activity, startDate: string, endDa
       
     case 'monthly':
       current = new Date(activityDate);
+      // Skip the first occurrence since it's the original activity
+      current = addMonths(current, 1);
       while (current <= repeatUntil && current <= rangeEnd) {
-        if (current >= rangeStart) {
+        const dateKey = format(current, 'yyyy-MM-dd');
+        if (current >= rangeStart && !generatedDates.has(dateKey)) {
           const instance = createRecurringInstance(baseActivity, current);
           instances.push(instance);
+          generatedDates.add(dateKey);
         }
         current = addMonths(current, 1);
       }
