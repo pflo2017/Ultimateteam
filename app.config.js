@@ -20,7 +20,10 @@ export default {
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.ultimateteam.app",
-      backgroundColor: "#ffffff"
+      backgroundColor: "#ffffff",
+      infoPlist: {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     android: {
       adaptiveIcon: {
@@ -35,7 +38,10 @@ export default {
     extra: {
       supabaseUrl: process.env.SUPABASE_URL,
       supabasePublishableKey: process.env.SUPABASE_PUBLISHABLE_KEY,
-      supabaseSecretKey: process.env.SUPABASE_SECRET_KEY
+      supabaseSecretKey: process.env.SUPABASE_SECRET_KEY,
+      eas: {
+        projectId: "f43e8b35-5e2a-4e5d-92bb-9cdc051ca72a"
+      }
     },
     plugins: [],
     experiments: {
