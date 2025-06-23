@@ -68,6 +68,11 @@ interface Activity {
   repeat_days?: number[];
   repeat_until?: string;
   additional_info?: string;
+  // Game specific fields
+  home_away?: 'home' | 'away';
+  home_score?: number;
+  away_score?: number;
+  lineup_players?: string[];
 }
 
 interface Player {
@@ -200,7 +205,8 @@ const ScheduleManagement: React.FC = () => {
         .from('activities')
         .select(`
           id, title, location, start_time, end_time, duration, type,
-          team_id, teams(name), is_repeating, repeat_type, repeat_days, repeat_until, additional_info
+          team_id, teams(name), is_repeating, repeat_type, repeat_days, repeat_until, additional_info,
+          home_away, home_score, away_score, lineup_players
         `)
         // Get both:
         // 1. Activities with start_time within the current range
@@ -656,6 +662,7 @@ const ScheduleManagement: React.FC = () => {
     } else {
       setExpandedCardIds([...expandedCardIds, activityId]);
     }
+    console.log('Card expanded:', activityId, 'Current expanded cards:', [...expandedCardIds, activityId]);
   };
   
   // Format date with time for the expanded view
@@ -992,7 +999,7 @@ const ScheduleManagement: React.FC = () => {
                                   </Text>
                                   
                                   {(activity.is_repeating || isRecurringInstance(activity.id)) && (
-                                    <Badge color="gray" size="xs">
+                                    <Badge color="gray" mt="xs" size="xs">
                                       {getRecurringInfo(activity)}
                                     </Badge>
                                   )}
@@ -1077,6 +1084,49 @@ const ScheduleManagement: React.FC = () => {
                                           </Grid.Col>
                                         )}
                                         
+                                        {activity.type === 'game' && (
+                                          <Grid.Col span={12} mt="md">
+                                            <Paper p="md" radius="md" withBorder>
+                                              <Text size="lg" fw={600} mb="sm">Game Details</Text>
+                                              
+                                              {activity.home_away && (
+                                                <Group spacing="xs" mb="md">
+                                                  <IconMapPin size={16} />
+                                                  <Text>
+                                                    {activity.home_away === 'home' ? 'Home Game' : 'Away Game'}
+                                                  </Text>
+                                                </Group>
+                                              )}
+                                              
+                                              {(activity.home_score !== undefined || activity.away_score !== undefined) && (
+                                                <Box mb="md">
+                                                  <Text size="sm" c="dimmed" mb="xs">Score</Text>
+                                                  <Flex align="center" justify="center" gap="md">
+                                                    <Box style={{ textAlign: 'center', flex: 1 }}>
+                                                      <Text size="sm" c="dimmed">Home</Text>
+                                                      <Text size="xl" fw={700}>{activity.home_score ?? '-'}</Text>
+                                                      <Text size="xs" c="dimmed">{activity.home_away === 'home' ? 'Our team' : 'Opponent'}</Text>
+                                                    </Box>
+                                                    <Text size="xl" fw={700}>-</Text>
+                                                    <Box style={{ textAlign: 'center', flex: 1 }}>
+                                                      <Text size="sm" c="dimmed">Away</Text>
+                                                      <Text size="xl" fw={700}>{activity.away_score ?? '-'}</Text>
+                                                      <Text size="xs" c="dimmed">{activity.home_away === 'away' ? 'Our team' : 'Opponent'}</Text>
+                                                    </Box>
+                                                  </Flex>
+                                                </Box>
+                                              )}
+                                              
+                                              {activity.lineup_players && activity.lineup_players.length > 0 && (
+                                                <Box>
+                                                  <Text size="sm" c="dimmed" mb="xs">Game Lineup</Text>
+                                                  <Text size="sm">{activity.lineup_players.length} players selected</Text>
+                                                </Box>
+                                              )}
+                                            </Paper>
+                                          </Grid.Col>
+                                        )}
+                                        
                                         {activity.additional_info ? (
                                           <Grid.Col span={12} mt="md">
                                             <Text size="lg" fw={600} mb="sm">Additional Information</Text>
@@ -1085,6 +1135,19 @@ const ScheduleManagement: React.FC = () => {
                                         ) : null}
                                       </Grid>
                                     </Box>
+                                  )}
+                                  
+                                  {isExpanded && (
+                                    <Flex justify="flex-end" mt="xs">
+                                      <Group spacing="xs">
+                                        <Button variant="light" color="blue" compact size="xs" leftIcon={<IconEdit size={14} />}>
+                                          Edit
+                                        </Button>
+                                        <Button variant="light" color="red" compact size="xs" leftIcon={<IconTrash size={14} />}>
+                                          Delete
+                                        </Button>
+                                      </Group>
+                                    </Flex>
                                   )}
                                 </Box>
                               </Box>
@@ -1271,6 +1334,49 @@ const ScheduleManagement: React.FC = () => {
                               </Grid.Col>
                             )}
                             
+                            {activity.type === 'game' && (
+                              <Grid.Col span={12} mt="md">
+                                <Paper p="md" radius="md" withBorder>
+                                  <Text size="lg" fw={600} mb="sm">Game Details</Text>
+                                  
+                                  {activity.home_away && (
+                                    <Group spacing="xs" mb="md">
+                                      <IconMapPin size={16} />
+                                      <Text>
+                                        {activity.home_away === 'home' ? 'Home Game' : 'Away Game'}
+                                      </Text>
+                                    </Group>
+                                  )}
+                                  
+                                  {(activity.home_score !== undefined || activity.away_score !== undefined) && (
+                                    <Box mb="md">
+                                      <Text size="sm" c="dimmed" mb="xs">Score</Text>
+                                      <Flex align="center" justify="center" gap="md">
+                                        <Box style={{ textAlign: 'center', flex: 1 }}>
+                                          <Text size="sm" c="dimmed">Home</Text>
+                                          <Text size="xl" fw={700}>{activity.home_score ?? '-'}</Text>
+                                          <Text size="xs" c="dimmed">{activity.home_away === 'home' ? 'Our team' : 'Opponent'}</Text>
+                                        </Box>
+                                        <Text size="xl" fw={700}>-</Text>
+                                        <Box style={{ textAlign: 'center', flex: 1 }}>
+                                          <Text size="sm" c="dimmed">Away</Text>
+                                          <Text size="xl" fw={700}>{activity.away_score ?? '-'}</Text>
+                                          <Text size="xs" c="dimmed">{activity.home_away === 'away' ? 'Our team' : 'Opponent'}</Text>
+                                        </Box>
+                                      </Flex>
+                                    </Box>
+                                  )}
+                                  
+                                  {activity.lineup_players && activity.lineup_players.length > 0 && (
+                                    <Box>
+                                      <Text size="sm" c="dimmed" mb="xs">Game Lineup</Text>
+                                      <Text size="sm">{activity.lineup_players.length} players selected</Text>
+                                    </Box>
+                                  )}
+                                </Paper>
+                              </Grid.Col>
+                            )}
+                            
                             {activity.additional_info ? (
                               <Grid.Col span={12} mt="md">
                                 <Text size="lg" fw={600} mb="sm">Additional Information</Text>
@@ -1281,16 +1387,18 @@ const ScheduleManagement: React.FC = () => {
                         </Box>
                       )}
                       
-                      <Flex justify="flex-end" mt="xs">
-                        <Group spacing="xs">
-                          <Button variant="light" color="blue" compact size="xs" leftIcon={<IconEdit size={14} />}>
-                            Edit
-                          </Button>
-                          <Button variant="light" color="red" compact size="xs" leftIcon={<IconTrash size={14} />}>
-                            Delete
-                          </Button>
-                        </Group>
-                      </Flex>
+                      {isExpanded && (
+                        <Flex justify="flex-end" mt="xs">
+                          <Group spacing="xs">
+                            <Button variant="light" color="blue" compact size="xs" leftIcon={<IconEdit size={14} />}>
+                              Edit
+                            </Button>
+                            <Button variant="light" color="red" compact size="xs" leftIcon={<IconTrash size={14} />}>
+                              Delete
+                            </Button>
+                          </Group>
+                        </Flex>
+                      )}
                     </Box>
                   </Box>
                 </Grid.Col>
