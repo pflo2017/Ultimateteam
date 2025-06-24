@@ -691,8 +691,6 @@ const ScheduleManagement: React.FC = () => {
       <Paper p="md" mb="md" radius="md" withBorder>
         <Tabs value={activeTab} onTabChange={(tab) => {
           setActiveTab(tab);
-          // Refresh activities when switching tabs to apply proper filtering
-          setTimeout(() => fetchActivities(), 0);
         }}>
           <Tabs.List>
             <Tabs.Tab value="calendar" icon={<IconCalendarEvent size={16} />}>
@@ -762,7 +760,6 @@ const ScheduleManagement: React.FC = () => {
                     onClick={() => {
                       setCalendarViewMode('day');
                       setSelectedButton('day');
-                      setTimeout(() => fetchActivities(), 0);
                     }}
                   >
                     Day
@@ -771,22 +768,37 @@ const ScheduleManagement: React.FC = () => {
                     variant={selectedButton === 'today' ? 'filled' : 'light'} 
                     compact 
                     onClick={() => {
-                      setCalendarViewMode('month');
+                      setSelectedDate(new Date());
+                      setCalendarViewMode('day');
                       setSelectedButton('today');
-                      setTimeout(() => fetchActivities(), 0);
                     }}
                   >
                 Today
                   </Button>
                 </Button.Group>
               )}
+              
+              {/* Today button for both calendar and week views */}
+              {activeTab === 'week' && (
+                <Button 
+                  variant={selectedButton === 'today' ? 'filled' : 'light'} 
+                  compact 
+                  onClick={() => {
+                    setSelectedDate(new Date());
+                    setSelectedButton('today');
+                  }}
+                >
+                  Today
+                </Button>
+              )}
+              
               <Button 
                 variant={selectedButton === 'month' ? 'filled' : 'light'} 
                 compact 
                 onClick={() => {
                   setSelectedDate(new Date());
+                  setCalendarViewMode('month');
                   setSelectedButton('month');
-                  setTimeout(() => fetchActivities(), 0);
                 }}
               >
                 Month
