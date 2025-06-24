@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Modal } from 'react-native';
+import { View, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Modal, Alert } from 'react-native';
 import { Text, TextInput, ActivityIndicator, Button } from 'react-native-paper';
 import { COLORS, SPACING } from '../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../types/navigation';
-import { supabase } from '../lib/supabase';
 import { Activity, getActivitiesByDateRange, getUserClubId, generateActivityIdForDate } from '../services/activitiesService';
+import { supabase } from '../lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
@@ -455,8 +455,10 @@ export default function AddAttendanceScreen() {
       }
       
       alert('Attendance saved successfully');
+      
+      // Navigate back - the parent screen will detect the focus change and refresh
       if (navigation.canGoBack()) {
-        navigation.pop(2);
+        navigation.goBack();
       }
     } catch (e) { 
       alert('Failed to save attendance'); 
@@ -466,6 +468,15 @@ export default function AddAttendanceScreen() {
   };
   const filteredPlayers = players.filter(player => 
     player.name?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Add focus effect to refresh attendance when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      if (selectedActivity) {
+        loadAttendance();
+      }
+    }, [selectedActivity])
   );
 
   return (

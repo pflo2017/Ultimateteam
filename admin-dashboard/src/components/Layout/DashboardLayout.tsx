@@ -33,7 +33,8 @@ import {
   IconCreditCard,
   IconUserCircle,
   IconCash,
-  IconChartBar
+  IconChartBar,
+  IconUserCheck
 } from '@tabler/icons-react';
 import { supabase } from '../../lib/supabase';
 import { useColorScheme } from '@mantine/hooks';
@@ -105,6 +106,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
       { label: 'Players', icon: <IconUsers size={20} />, link: '/players' },
       { label: 'Parents', icon: <IconUsers size={20} />, link: '/parents' },
       { label: 'Schedule', icon: <IconCalendarEvent size={20} />, link: '/schedule' },
+      { label: 'Attendance', icon: <IconUserCheck size={20} />, link: '/attendance' },
       { label: 'Payments', icon: <IconCash size={20} />, link: '/payments' },
       { label: 'Analytics', icon: <IconChartBar size={20} />, link: '/analytics' },
     ];
@@ -142,6 +144,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
     { label: 'Players', icon: <IconUsers size={20} />, path: '/players' },
     { label: 'Parents', icon: <IconUsers size={20} />, path: '/parents' },
     { label: 'Schedule', icon: <IconCalendarEvent size={20} />, path: '/schedule' },
+    { label: 'Attendance', icon: <IconUserCheck size={20} />, path: '/attendance' },
     { label: 'Payments', icon: <IconCreditCard size={20} />, path: '/payments' },
     { label: 'Settings', icon: <IconSettings size={20} />, path: '/settings' },
   ];

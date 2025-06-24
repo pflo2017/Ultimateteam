@@ -17,6 +17,7 @@ import PaymentsPage from './pages/PaymentsPage';
 import AdminPasswordReset from './pages/AdminPasswordReset';
 import ResetPasswordConfirmation from './pages/ResetPasswordConfirmation';
 import Analytics from './pages/Analytics';
+import AttendanceStatistics from './pages/AttendanceStatistics';
 import { isMasterAdmin } from './lib/supabase';
 import { supabase, refreshToken } from './lib/supabase';
 
@@ -150,6 +151,11 @@ function App() {
               <Route path="analytics" element={
                 <ProtectedRoute requiredRole="clubAdmin">
                   <Analytics />
+                </ProtectedRoute>
+              } />
+              <Route path="attendance" element={
+                <ProtectedRoute requiredRole="clubAdmin">
+                  <AttendanceStatistics />
                 </ProtectedRoute>
               } />
             </Route>
