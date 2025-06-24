@@ -26,7 +26,8 @@ import {
   IconUserCheck,
   IconChartPie,
   IconCalendarTime,
-  IconActivity
+  IconActivity,
+  IconTrophy
 } from '@tabler/icons-react';
 import { supabase } from '../lib/supabase';
 import { Line, Bar, Doughnut, Pie } from 'react-chartjs-2';
@@ -67,6 +68,32 @@ interface AnalyticsData {
   medicalVisaStatus: { valid: number; pending: number; expired: number };
   playerGrowth: { [month: string]: number };
   teamPerformance: { [teamName: string]: { attendance: number; payment: number } };
+  gameAnalytics: GameAnalytics;
+}
+
+interface GameAnalytics {
+  summary: {
+    totalGames: number;
+    totalWins: number;
+    totalLosses: number;
+    totalDraws: number;
+    winRate: number;
+  };
+  games: GameResult[];
+  gamesByTeam: { [teamName: string]: GameAnalytics };
+}
+
+interface GameResult {
+  id: string;
+  title: string;
+  date: string;
+  teamName: string;
+  homeScore: number;
+  awayScore: number;
+  homeAway: 'home' | 'away';
+  outcome: 'Win' | 'Loss' | 'Draw';
+  clubScore: number;
+  opponentScore: number;
 }
 
 interface Team {
@@ -377,6 +404,24 @@ const Analytics: React.FC = () => {
       if (paymentsError) throw paymentsError;
       console.log('Payments data fetched:', paymentsData?.length || 0);
 
+      // 5. Fetch game activities with scores for game analytics
+      const { data: gamesData, error: gamesError } = await supabase
+        .from('activities')
+        .select(`
+          id, title, start_time, team_id, home_away, home_score, away_score,
+          teams(name)
+        `)
+        .eq('club_id', clubId)
+        .eq('type', 'game')
+        .not('home_score', 'is', null)
+        .not('away_score', 'is', null)
+        .gte('start_time', formattedStartDate)
+        .lte('start_time', formattedEndDate)
+        .order('start_time', { ascending: false });
+
+      if (gamesError) throw gamesError;
+      console.log('Games data fetched:', gamesData?.length || 0);
+
       // Create a list of activity IDs for matching attendance records
       const activityIds = filteredActivities.map((activity: any) => activity.id);
       console.log('Activity IDs for attendance matching:', activityIds.length);
@@ -565,6 +610,114 @@ const Analytics: React.FC = () => {
         };
       });
       
+      // 6. Process game analytics
+      const gameResults: GameResult[] = [];
+      const gamesByTeam: { [teamName: string]: GameAnalytics } = {};
+      
+      // Initialize team-specific analytics
+      teams.forEach(team => {
+        gamesByTeam[team.name] = {
+          summary: { totalGames: 0, totalWins: 0, totalLosses: 0, totalDraws: 0, winRate: 0 },
+          games: [],
+          gamesByTeam: {}
+        };
+      });
+      
+      // Process each game
+      gamesData.forEach((game: any) => {
+        const homeScore = game.home_score || 0;
+        const awayScore = game.away_score || 0;
+        const homeAway = game.home_away || 'home';
+        const teamName = game.teams?.name || 'Unknown Team';
+        
+        // Determine club's score and opponent's score based on home/away
+        let clubScore: number;
+        let opponentScore: number;
+        let outcome: 'Win' | 'Loss' | 'Draw';
+        
+        if (homeAway === 'home') {
+          clubScore = homeScore;
+          opponentScore = awayScore;
+          if (homeScore > awayScore) outcome = 'Win';
+          else if (homeScore < awayScore) outcome = 'Loss';
+          else outcome = 'Draw';
+        } else {
+          clubScore = awayScore;
+          opponentScore = homeScore;
+          if (awayScore > homeScore) outcome = 'Win';
+          else if (awayScore < homeScore) outcome = 'Loss';
+          else outcome = 'Draw';
+        }
+        
+        const gameResult: GameResult = {
+          id: game.id,
+          title: game.title,
+          date: game.start_time,
+          teamName,
+          homeScore,
+          awayScore,
+          homeAway,
+          outcome,
+          clubScore,
+          opponentScore
+        };
+        
+        gameResults.push(gameResult);
+        
+        // Update team-specific analytics
+        if (gamesByTeam[teamName]) {
+          gamesByTeam[teamName].games.push(gameResult);
+          gamesByTeam[teamName].summary.totalGames++;
+          
+          switch (outcome) {
+            case 'Win':
+              gamesByTeam[teamName].summary.totalWins++;
+              break;
+            case 'Loss':
+              gamesByTeam[teamName].summary.totalLosses++;
+              break;
+            case 'Draw':
+              gamesByTeam[teamName].summary.totalDraws++;
+              break;
+          }
+        }
+      });
+      
+      // Calculate overall summary
+      const totalGames = gameResults.length;
+      const totalWins = gameResults.filter(game => game.outcome === 'Win').length;
+      const totalLosses = gameResults.filter(game => game.outcome === 'Loss').length;
+      const totalDraws = gameResults.filter(game => game.outcome === 'Draw').length;
+      const winRate = totalGames > 0 ? (totalWins / totalGames) * 100 : 0;
+      
+      // Calculate win rates for each team
+      Object.keys(gamesByTeam).forEach(teamName => {
+        const teamData = gamesByTeam[teamName];
+        if (teamData.summary.totalGames > 0) {
+          teamData.summary.winRate = (teamData.summary.totalWins / teamData.summary.totalGames) * 100;
+        }
+      });
+      
+      const gameAnalytics: GameAnalytics = {
+        summary: {
+          totalGames,
+          totalWins,
+          totalLosses,
+          totalDraws,
+          winRate
+        },
+        games: gameResults,
+        gamesByTeam
+      };
+      
+      console.log('Game analytics processed:', {
+        totalGames,
+        totalWins,
+        totalLosses,
+        totalDraws,
+        winRate: winRate.toFixed(1) + '%'
+      });
+      
       // Set analytics data
       setAnalyticsData({
         attendanceRate,
@@ -575,7 +728,8 @@ const Analytics: React.FC = () => {
         activityDistribution,
         medicalVisaStatus,
         playerGrowth,
-        teamPerformance
+        teamPerformance,
+        gameAnalytics
       });
       
       // Update statistics display
@@ -735,18 +889,32 @@ const Analytics: React.FC = () => {
           <Group position="apart">
             <div>
               <Text color="dimmed" size="xs" transform="uppercase" weight={700}>
-                Activities
+                {analyticsData && analyticsData.gameAnalytics.summary.totalGames > 0 ? 'Win Rate' : 'Activities'}
               </Text>
               <Text weight={700} size="xl">
-                {stats.totalActivities}
+                {analyticsData && analyticsData.gameAnalytics.summary.totalGames > 0 
+                  ? `${analyticsData.gameAnalytics.summary.winRate.toFixed(1)}%`
+                  : stats.totalActivities
+                }
               </Text>
             </div>
-            <ThemeIcon color="violet" variant="light" size={38} radius="md">
-              <IconCalendarStats size={22} />
+            <ThemeIcon 
+              color={analyticsData && analyticsData.gameAnalytics.summary.totalGames > 0 ? "green" : "violet"} 
+              variant="light" 
+              size={38} 
+              radius="md"
+            >
+              {analyticsData && analyticsData.gameAnalytics.summary.totalGames > 0 
+                ? <IconTrophy size={22} />
+                : <IconCalendarStats size={22} />
+              }
             </ThemeIcon>
           </Group>
           <Text size="xs" color="dimmed" mt="xs">
-            Total activities in selected period (including recurring)
+            {analyticsData && analyticsData.gameAnalytics.summary.totalGames > 0 
+              ? `${analyticsData.gameAnalytics.summary.totalGames} games played`
+              : 'Total activities in selected period (including recurring)'
+            }
           </Text>
         </Paper>
       </SimpleGrid>
@@ -1059,6 +1227,226 @@ const Analytics: React.FC = () => {
           )}
         </div>
       </Card>
+
+      <SimpleGrid cols={2} spacing="md" mb={20}>
+        <StatsCard
+          title="Activities"
+          value={stats.totalActivities.toString()}
+          description={`${stats.totalTrainings} Trainings, ${stats.totalGames} Games (including recurring)`}
+          icon={<IconActivity size={24} />}
+          color="blue"
+        />
+        <StatsCard
+          title="Attendance"
+          value={`${Math.round(stats.attendanceRate)}%`}
+          description={`${stats.totalPresences} Presences, ${stats.totalAbsences} Absences`}
+          icon={<IconUsers size={24} />}
+          color="green"
+        />
+      </SimpleGrid>
+
+      {/* Game Analytics Section */}
+      {analyticsData && analyticsData.gameAnalytics.summary.totalGames > 0 && (
+        <>
+          {/* Game Performance Summary */}
+          <Card withBorder p="md" radius="md" mb="md">
+            <Card.Section withBorder inheritPadding py="xs">
+              <Group position="apart">
+                <Text weight={500}>Game Performance Summary</Text>
+                <Badge color="blue" size="lg">
+                  {analyticsData.gameAnalytics.summary.totalGames} Games
+                </Badge>
+              </Group>
+            </Card.Section>
+            
+            <SimpleGrid cols={4} spacing="md" mt="md">
+              <Paper withBorder p="md" radius="md">
+                <Group position="apart">
+                  <div>
+                    <Text color="dimmed" size="xs" transform="uppercase" weight={700}>
+                      Total Wins
+                    </Text>
+                    <Text weight={700} size="xl" color="green">
+                      {analyticsData.gameAnalytics.summary.totalWins}
+                    </Text>
+                  </div>
+                  <ThemeIcon color="green" variant="light" size={38} radius="md">
+                    <IconTrophy size={22} />
+                  </ThemeIcon>
+                </Group>
+              </Paper>
+
+              <Paper withBorder p="md" radius="md">
+                <Group position="apart">
+                  <div>
+                    <Text color="dimmed" size="xs" transform="uppercase" weight={700}>
+                      Total Losses
+                    </Text>
+                    <Text weight={700} size="xl" color="red">
+                      {analyticsData.gameAnalytics.summary.totalLosses}
+                    </Text>
+                  </div>
+                  <ThemeIcon color="red" variant="light" size={38} radius="md">
+                    <IconChartBar size={22} />
+                  </ThemeIcon>
+                </Group>
+              </Paper>
+
+              <Paper withBorder p="md" radius="md">
+                <Group position="apart">
+                  <div>
+                    <Text color="dimmed" size="xs" transform="uppercase" weight={700}>
+                      Total Draws
+                    </Text>
+                    <Text weight={700} size="xl" color="yellow">
+                      {analyticsData.gameAnalytics.summary.totalDraws}
+                    </Text>
+                  </div>
+                  <ThemeIcon color="yellow" variant="light" size={38} radius="md">
+                    <IconChartPie size={22} />
+                  </ThemeIcon>
+                </Group>
+              </Paper>
+
+              <Paper withBorder p="md" radius="md">
+                <Group position="apart">
+                  <div>
+                    <Text color="dimmed" size="xs" transform="uppercase" weight={700}>
+                      Win Rate
+                    </Text>
+                    <Text weight={700} size="xl" color="blue">
+                      {analyticsData.gameAnalytics.summary.winRate.toFixed(1)}%
+                    </Text>
+                  </div>
+                  <ThemeIcon color="blue" variant="light" size={38} radius="md">
+                    <IconChartBar size={22} />
+                  </ThemeIcon>
+                </Group>
+              </Paper>
+            </SimpleGrid>
+          </Card>
+
+          {/* Game Results List */}
+          <Card withBorder p="md" radius="md" mb="md">
+            <Card.Section withBorder inheritPadding py="xs">
+              <Group position="apart">
+                <Text weight={500}>Game Results</Text>
+                <Text size="sm" color="dimmed">
+                  {analyticsData.gameAnalytics.games.length} games in selected period
+                </Text>
+              </Group>
+            </Card.Section>
+            
+            <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+              {analyticsData.gameAnalytics.games.map((game) => (
+                <Paper 
+                  key={game.id} 
+                  withBorder 
+                  p="md" 
+                  radius="md" 
+                  mb="xs"
+                  sx={(theme) => ({
+                    borderLeft: `4px solid ${
+                      game.outcome === 'Win' 
+                        ? theme.colors.green[6] 
+                        : game.outcome === 'Loss' 
+                        ? theme.colors.red[6] 
+                        : theme.colors.yellow[6]
+                    }`
+                  })}
+                >
+                  <Group position="apart" align="flex-start">
+                    <div style={{ flex: 1 }}>
+                      <Text weight={600} size="sm" mb="xs">
+                        {game.title}
+                      </Text>
+                      <Group spacing="md" mb="xs">
+                        <Text size="xs" color="dimmed">
+                          {new Date(game.date).toLocaleDateString()}
+                        </Text>
+                        <Text size="xs" color="dimmed">
+                          {game.teamName}
+                        </Text>
+                        <Badge 
+                          size="xs" 
+                          color={game.homeAway === 'home' ? 'blue' : 'orange'}
+                        >
+                          {game.homeAway === 'home' ? 'Home Game' : 'Away Game'}
+                        </Badge>
+                      </Group>
+                      <Text size="lg" weight={700}>
+                        {game.clubScore} - {game.opponentScore}
+                      </Text>
+                    </div>
+                    
+                    <Badge 
+                      size="lg"
+                      color={
+                        game.outcome === 'Win' 
+                          ? 'green' 
+                          : game.outcome === 'Loss' 
+                          ? 'red' 
+                          : 'yellow'
+                      }
+                      variant="filled"
+                    >
+                      {game.outcome}
+                    </Badge>
+                  </Group>
+                </Paper>
+              ))}
+            </div>
+          </Card>
+
+          {/* Team Performance by Games */}
+          {Object.keys(analyticsData.gameAnalytics.gamesByTeam).length > 0 && (
+            <Card withBorder p="md" radius="md" mb="md">
+              <Card.Section withBorder inheritPadding py="xs">
+                <Text weight={500}>Team Performance by Games</Text>
+              </Card.Section>
+              
+              <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                {Object.entries(analyticsData.gameAnalytics.gamesByTeam)
+                  .filter(([teamName, data]) => data.summary.totalGames > 0)
+                  .map(([teamName, data]) => (
+                    <Paper key={teamName} withBorder p="md" radius="md" mb="xs">
+                      <Group position="apart" align="center">
+                        <div>
+                          <Text weight={600} size="sm" mb="xs">
+                            {teamName}
+                          </Text>
+                          <Group spacing="lg">
+                            <Text size="xs" color="dimmed">
+                              Games: {data.summary.totalGames}
+                            </Text>
+                            <Text size="xs" color="green">
+                              Wins: {data.summary.totalWins}
+                            </Text>
+                            <Text size="xs" color="red">
+                              Losses: {data.summary.totalLosses}
+                            </Text>
+                            <Text size="xs" color="yellow">
+                              Draws: {data.summary.totalDraws}
+                            </Text>
+                          </Group>
+                        </div>
+                        
+                        <div style={{ textAlign: 'right' }}>
+                          <Text weight={700} size="lg" color="blue">
+                            {data.summary.winRate.toFixed(1)}%
+                          </Text>
+                          <Text size="xs" color="dimmed">
+                            Win Rate
+                          </Text>
+                        </div>
+                      </Group>
+                    </Paper>
+                  ))}
+              </div>
+            </Card>
+          )}
+        </>
+      )}
 
       <SimpleGrid cols={2} spacing="md" mb={20}>
         <StatsCard
