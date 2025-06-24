@@ -35,6 +35,7 @@ import { supabase } from '../lib/supabase';
 import { getClubAdminClubId } from '../lib/supabase';
 import { Line, Bar, Doughnut } from 'react-chartjs-2';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, PointElement, LineElement, Title as ChartTitle, Filler } from 'chart.js';
+import { eachDayOfInterval, isWithinInterval, parseISO } from 'date-fns';
 
 // Register Chart.js components
 ChartJS.register(
@@ -144,6 +145,37 @@ const chartColors = {
   gray: '#adb5bd'
 };
 
+const generateRecurringInstances = (
+  activity: any, // Use your Activity type if available
+  dateRange: [Date | null, Date | null]
+): any[] => {
+  // Only generate for recurring activities (if you have a flag, use it; otherwise, generate for all)
+  const start = dateRange[0];
+  const end = dateRange[1];
+  if (!start || !end) return [];
+  const days = eachDayOfInterval({ start, end });
+  return days.map(day => {
+    // Compose composite ID: UUID-YYYYMMDD
+    const y = day.getFullYear();
+    const m = String(day.getMonth() + 1).padStart(2, '0');
+    const d = String(day.getDate()).padStart(2, '0');
+    const datePart = `${y}${m}${d}`;
+    const compositeId = `${activity.id}-${datePart}`;
+    // Set the start_time to this day, but keep the time from base activity
+    const baseStart = new Date(activity.start_time);
+    const instanceDate = new Date(day);
+    instanceDate.setHours(baseStart.getHours(), baseStart.getMinutes(), baseStart.getSeconds());
+    return {
+      ...activity,
+      id: compositeId,
+      start_time: instanceDate.toISOString(),
+      is_recurring_instance: true,
+      base_activity_id: activity.id,
+      composite_date: datePart
+    };
+  });
+};
+
 const AttendanceStatistics: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string | null>('overview');
   const [selectedTeam, setSelectedTeam] = useState<string | null>('all');
@@ -158,11 +190,7 @@ const AttendanceStatistics: React.FC = () => {
   const [clubId, setClubId] = useState<string | null>(null);
   
   // Statistics state
-  const [overallStats, setOverallStats] = useState<AttendanceSummary | null>(null);
-  const [teamStats, setTeamStats] = useState<TeamAttendanceSummary[]>([]);
-  const [playerStats, setPlayerStats] = useState<PlayerAttendanceSummary[]>([]);
-  const [activityTypeStats, setActivityTypeStats] = useState<{[key: string]: number}>({});
-  const [monthlyTrendsData, setMonthlyTrendsData] = useState<{[key: string]: MonthlyTrendData}>({});
+  const [attendanceData, setAttendanceData] = useState<AttendanceData | null>(null);
   
   // Activity types
   const activityTypes: ActivityType[] = [
@@ -173,113 +201,84 @@ const AttendanceStatistics: React.FC = () => {
     { value: 'other', label: 'Other' }
   ];
 
-  const [attendanceData, setAttendanceData] = useState<AttendanceData | null>(null);
-
   const fetchAttendanceData = useCallback(async () => {
     try {
       setLoading(true);
-      
-      // Format dates properly for API calls
+      setError(null);
+
+      // Format dates for filtering
       const startDate = dateRange[0] ? dateRange[0].toISOString() : undefined;
       const endDate = dateRange[1] ? dateRange[1].toISOString() : undefined;
-      
-      // Fetch activities for the selected team or all teams in the club
+
+      console.log('Fetching attendance data with filters:', {
+        startDate,
+        endDate,
+        selectedTeam,
+        selectedActivityType,
+        clubId
+      });
+
+      // Step 1: Fetch all activities for the club (for enrichment)
       let activitiesQuery = supabase
         .from('activities')
-        .select('id, title, type, start_time, team_id, teams(name)')
-        .eq('club_id', clubId)
-        .order('start_time', { ascending: false });
-      
-      // Add date range filters only if dates are defined
-      if (startDate) {
-        activitiesQuery = activitiesQuery.gte('start_time', startDate);
-      }
-      
-      if (endDate) {
-        activitiesQuery = activitiesQuery.lte('start_time', endDate);
-      }
-      
-      // Add team filter if a team is selected
-      if (selectedTeam) {
-        activitiesQuery = activitiesQuery.eq('team_id', selectedTeam);
-      }
-      
+        .select('id, title, type, start_time, team_id')
+        .eq('club_id', clubId);
+
       const { data: activities, error: activitiesError } = await activitiesQuery;
-      
       if (activitiesError) {
         console.error('Error fetching activities:', activitiesError);
         setError('Failed to fetch activities');
         setLoading(false);
         return;
       }
-      
-      // Fetch all players for the club or specific team
-      let playersQuery = supabase
-        .from('players')
-        .select('id, first_name, last_name, team_id, teams(name)')
+      console.log('DASHBOARD RAW ACTIVITIES:', activities);
+
+      // Step 2: Fetch ALL attendance records for the club and date range
+      let attendanceQuery = supabase
+        .from('activity_attendance')
+        .select('*, player:player_id (id, name)')
         .eq('club_id', clubId);
-      
-      if (selectedTeam) {
-        playersQuery = playersQuery.eq('team_id', selectedTeam);
-      }
-      
-      const { data: players, error: playersError } = await playersQuery;
-      
-      if (playersError) {
-        console.error('Error fetching players:', playersError);
-        setError('Failed to fetch players');
-        setLoading(false);
-        return;
-      }
-      
-      // Get ALL attendance records for the club without filtering
-      // We'll filter them client-side to handle date mismatches
-      const { data: attendanceRecords, error: attendanceError } = await supabase
-        .from('attendance_with_correct_dates')
-        .select('*')
-        .eq('club_id', clubId);
-      
+
+      if (startDate) attendanceQuery = attendanceQuery.gte('actual_activity_date', startDate);
+      if (endDate) attendanceQuery = attendanceQuery.lte('actual_activity_date', endDate);
+
+      const { data: attendanceRecords, error: attendanceError } = await attendanceQuery;
       if (attendanceError) {
         console.error('Error fetching attendance:', attendanceError);
         setError('Failed to fetch attendance');
         setLoading(false);
         return;
       }
+      console.log('DASHBOARD RAW ATTENDANCE:', attendanceRecords);
 
-      // Log data for debugging
-      console.log(`Fetched ${activities?.length || 0} activities and ${attendanceRecords?.length || 0} attendance records`);
-      
-      if (activities && activities.length > 0) {
-        // Log sample activity IDs for debugging
-        const activityIds = activities.slice(0, 3).map(a => a.id).join(', ');
-        console.log(`Activity IDs: ${activityIds}...`);
-        
-        // Extract base IDs for debugging
-        const baseIds = activities.slice(0, 3).map(a => {
-          const baseId = a.id.includes('-') ? a.id.split('-')[0] : a.id;
-          return baseId.substring(0, 8);
-        }).join(', ');
-        console.log(`Base IDs: ${baseIds}...`);
+      // Step 3: Fetch teams for enrichment
+      const { data: teamsData, error: teamsError } = await supabase
+        .from('teams')
+        .select('id, name')
+        .eq('club_id', clubId);
+      if (teamsError) {
+        console.error('Error fetching teams:', teamsError);
+        setError('Failed to fetch teams');
+        setLoading(false);
+        return;
       }
-      
-      if (attendanceRecords && attendanceRecords.length > 0) {
-        // Log sample attendance record for debugging
-        console.log(`Sample attendance record: ${JSON.stringify(attendanceRecords[0])}`);
-      }
-      
-      // Process the data
-      if (activities && players && attendanceRecords) {
-        const result = processAttendanceData(activities, players, attendanceRecords);
-        setAttendanceData(result);
-      }
-      
+
+      // Step 4: Process the data following mobile app pattern, applying team/type filters after reconstructing activities
+      const result = processAttendanceData(
+        activities,
+        attendanceRecords || [],
+        teamsData || [],
+        selectedTeam,
+        selectedActivityType
+      );
+      setAttendanceData(result);
       setLoading(false);
     } catch (error) {
       console.error('Error in fetchAttendanceData:', error);
       setError('An unexpected error occurred');
       setLoading(false);
     }
-  }, [clubId, dateRange, selectedTeam, supabase]);
+  }, [dateRange, selectedTeam, selectedActivityType, clubId]);
 
   useEffect(() => {
     const fetchClubData = async () => {
@@ -292,21 +291,21 @@ const AttendanceStatistics: React.FC = () => {
         
         if (id) {
           // Fetch teams for this club
-          const { data: teamsData, error: teamsError } = await supabase
+          const { data: clubTeamsData, error: clubTeamsError } = await supabase
             .from('teams')
             .select('id, name')
             .eq('club_id', id)
             .eq('is_active', true)
             .order('name');
             
-          if (teamsError) throw teamsError;
+          if (clubTeamsError) throw clubTeamsError;
           
-          if (teamsData) {
-            setTeams(teamsData);
+          if (clubTeamsData) {
+            setTeams(clubTeamsData);
             
             // If there's only one team, select it by default
-            if (teamsData.length === 1) {
-              setSelectedTeam(teamsData[0].id);
+            if (clubTeamsData.length === 1) {
+              setSelectedTeam(clubTeamsData[0].id);
             }
           }
         }
@@ -326,31 +325,93 @@ const AttendanceStatistics: React.FC = () => {
     }
   }, [clubId, fetchAttendanceData]);
   
-  const processAttendanceData = (activities: any[], players: any[], attendanceRecords: any[]) => {
-    // Initialize counters
+  const processAttendanceData = (
+    activities: any[] = [],
+    attendanceRecords: any[] = [],
+    teams: any[] = [],
+    selectedTeam?: string | null,
+    selectedActivityType?: string | null
+  ) => {
+    // Build team map
+    const teamMap = new Map<string, string>();
+    teams.forEach(team => teamMap.set(team.id, team.name));
+    // Build activity map for quick lookup
+    const activityMap = new Map<string, any>();
+    activities.forEach(activity => {
+      activityMap.set(activity.id, activity);
+    });
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     let totalAttendance = 0;
     let totalPresent = 0;
     let totalAbsent = 0;
-    
-    // Create maps for team and player stats
     const teamStatsMap = new Map<string, TeamAttendanceSummary>();
     const playerStatsMap = new Map<string, PlayerAttendanceSummary>();
-    
-    // Initialize activity type stats
     const activityTypeStats: {[key: string]: number} = {};
-    
-    // Initialize monthly trends
     const monthlyTrendsData: {[key: string]: MonthlyTrendData} = {};
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    
-    // Initialize team stats for all teams
-    const teamMap = new Map<string, string>();
-    players.forEach(player => {
-      const teamId = player.team_id;
-      const teamName = player.teams?.name || 'Unknown Team';
-      
-      teamMap.set(teamId, teamName);
-      
+
+    // Generate all possible recurring instances for the date range and team
+    let allInstances: any[] = [];
+    activities.forEach(activity => {
+      // Only include activities for the selected team
+      if (selectedTeam && selectedTeam !== 'all' && activity.team_id !== selectedTeam) return;
+      // Only include activities for the selected type
+      if (selectedActivityType && selectedActivityType !== 'all' && activity.type !== selectedActivityType) return;
+      // Generate recurring instances for the date range
+      allInstances = allInstances.concat(generateRecurringInstances(activity, dateRange));
+    });
+    // Also include base activities (for non-recurring or single-instance activities)
+    allInstances = allInstances.concat(activities);
+    // Build a map of all possible activity instances by ID
+    const instanceMap = new Map<string, any>();
+    allInstances.forEach(instance => {
+      instanceMap.set(instance.id, instance);
+    });
+
+    attendanceRecords.forEach(record => {
+      // Match attendance to the correct activity instance
+      let activity = instanceMap.get(record.activity_id);
+      if (!activity && record.activity_id && record.activity_id.includes('-')) {
+        // Try to match base activity if composite not found
+        const baseActivityId = record.activity_id.split('-')[0];
+        activity = activityMap.get(baseActivityId);
+      }
+      if (!activity) {
+        // Skip if we can't reconstruct
+        return;
+      }
+      const teamId = activity.team_id;
+      const teamName = teamMap.get(teamId) || 'Unknown Team';
+      const activityType = activity.type || 'unknown';
+      const activityDate = activity.start_time;
+      // Apply team/type filters in-memory, after reconstructing the activity
+      if (selectedTeam && selectedTeam !== 'all' && teamId !== selectedTeam) return;
+      if (selectedActivityType && selectedActivityType !== 'all' && activityType !== selectedActivityType) return;
+      const playerId = record.player_id;
+      const playerName = record.player?.name || `Player ${playerId.substring(0, 8)}`;
+      const status = record.status;
+      // Player stats
+      if (!playerStatsMap.has(playerId)) {
+        playerStatsMap.set(playerId, {
+          player_id: playerId,
+          player_name: playerName,
+          team_id: teamId,
+          team_name: teamName,
+          total_attendance: 0,
+          present_count: 0,
+          absent_count: 0,
+          attendance_rate: 0
+        });
+      }
+      const playerStats = playerStatsMap.get(playerId)!;
+      playerStats.total_attendance++;
+      if (status === 'present') {
+        playerStats.present_count++;
+        totalPresent++;
+      } else if (status === 'absent') {
+        playerStats.absent_count++;
+        totalAbsent++;
+      }
+      // Team stats
       if (!teamStatsMap.has(teamId)) {
         teamStatsMap.set(teamId, {
           team_id: teamId,
@@ -361,112 +422,19 @@ const AttendanceStatistics: React.FC = () => {
           attendance_rate: 0
         });
       }
-    });
-    
-    // Initialize player stats for all players
-    players.forEach(player => {
-      const playerId = player.id;
-      const playerName = `${player.first_name} ${player.last_name}`;
-      const teamId = player.team_id;
-      const teamName = player.teams?.name || 'Unknown Team';
-      
-      playerStatsMap.set(playerId, {
-        player_id: playerId,
-        player_name: playerName,
-        team_id: teamId,
-        team_name: teamName,
-        total_attendance: 0,
-        present_count: 0,
-        absent_count: 0,
-        attendance_rate: 0
-      });
-    });
-    
-    // Create a map of activity IDs to their details for efficient lookup
-    // This will help us handle both regular and composite IDs
-    const activityMap = new Map<string, any>();
-    activities.forEach(activity => {
-      // Store the full activity object with both the full ID and the base ID
-      activityMap.set(activity.id, activity);
-      
-      // If it's a composite ID, also store it by the base ID for easier lookup
-      if (activity.id.includes('-')) {
-        const baseId = activity.id.split('-')[0];
-        // Only store if not already present (prioritize non-composite IDs)
-        if (!activityMap.has(baseId)) {
-          activityMap.set(baseId, activity);
-        }
-      }
-    });
-    
-    console.log(`Created activity map with ${activityMap.size} entries`);
-    
-    // Create a map of player attendance by activity
-    // Structure: Map<playerId, Map<activityBaseId, status>>
-    const playerActivityMap = new Map<string, Map<string, string>>();
-
-    // Process all attendance records first
-    attendanceRecords.forEach(record => {
-      const playerId = record.player_id;
-      const recordActivityId = record.activity_id;
-      const status = record.status;
-      const actualDate = record.actual_activity_date;
-      
-      // Skip if player not in our filtered set
-      if (!playerStatsMap.has(playerId)) {
-        return;
-      }
-      
-      // Get the base activity ID (without date suffix if present)
-      const baseActivityId = recordActivityId.includes('-') 
-        ? recordActivityId.split('-')[0] 
-        : recordActivityId;
-      
-      // Initialize player's activity map if needed
-      if (!playerActivityMap.has(playerId)) {
-        playerActivityMap.set(playerId, new Map<string, string>());
-      }
-      
-      // Store attendance status by base activity ID
-      const playerActivities = playerActivityMap.get(playerId)!;
-      playerActivities.set(baseActivityId, status);
-      
-      // Update player statistics
-      const playerStats = playerStatsMap.get(playerId)!;
-      playerStats.total_attendance++;
-      
+      const teamStats = teamStatsMap.get(teamId)!;
+      teamStats.total_attendance++;
       if (status === 'present') {
-        playerStats.present_count++;
-        totalPresent++;
+        teamStats.present_count++;
       } else if (status === 'absent') {
-        playerStats.absent_count++;
-        totalAbsent++;
+        teamStats.absent_count++;
       }
-      
-      // Update team statistics
-      const teamId = playerStats.team_id;
-      if (teamStatsMap.has(teamId)) {
-        const teamStats = teamStatsMap.get(teamId)!;
-        teamStats.total_attendance++;
-        
-        if (status === 'present') {
-          teamStats.present_count++;
-        } else if (status === 'absent') {
-          teamStats.absent_count++;
-        }
-      }
-      
-      totalAttendance++;
-      
-      // Update activity type stats if available
-      const activityType = record.activity_type || 'unknown';
+      // Activity type stats
       activityTypeStats[activityType] = (activityTypeStats[activityType] || 0) + 1;
-      
-      // Update monthly trends based on actual_activity_date
-      if (actualDate) {
-        const date = new Date(actualDate);
+      // Monthly trends
+      if (activityDate) {
+        const date = new Date(activityDate);
         const monthKey = `${months[date.getMonth()]} ${date.getFullYear()}`;
-        
         if (!monthlyTrendsData[monthKey]) {
           monthlyTrendsData[monthKey] = {
             month: monthKey,
@@ -475,60 +443,40 @@ const AttendanceStatistics: React.FC = () => {
             total: 0
           };
         }
-        
         monthlyTrendsData[monthKey].total++;
-        
         if (status === 'present') {
           monthlyTrendsData[monthKey].present++;
         } else if (status === 'absent') {
           monthlyTrendsData[monthKey].absent++;
         }
       }
+      totalAttendance++;
     });
-    
-    // Calculate attendance rates for players
+    // Calculate attendance rates
     playerStatsMap.forEach(player => {
       if (player.total_attendance > 0) {
         player.attendance_rate = (player.present_count / player.total_attendance) * 100;
       }
     });
-    
-    // Calculate attendance rates for teams
     teamStatsMap.forEach(team => {
       if (team.total_attendance > 0) {
         team.attendance_rate = (team.present_count / team.total_attendance) * 100;
       }
     });
-    
-    // Convert maps to arrays for easier rendering
+    // Convert maps to arrays
     const teamStats = Array.from(teamStatsMap.values());
     const playerStats = Array.from(playerStatsMap.values());
-    
-    // Sort teams by attendance rate (descending)
     teamStats.sort((a, b) => b.attendance_rate - a.attendance_rate);
-    
-    // Sort players by attendance rate (descending)
     playerStats.sort((a, b) => b.attendance_rate - a.attendance_rate);
-    
-    // Convert monthly trends to array and sort by date
     const monthlyTrends = Object.values(monthlyTrendsData);
     monthlyTrends.sort((a, b) => {
       const [aMonth, aYear] = a.month.split(' ');
       const [bMonth, bYear] = b.month.split(' ');
-      
       if (aYear !== bYear) {
         return parseInt(aYear) - parseInt(bYear);
       }
-      
       return months.indexOf(aMonth) - months.indexOf(bMonth);
     });
-    
-    // Log player statistics for debugging
-    console.log('Player statistics:');
-    playerStats.slice(0, 10).forEach(player => {
-      console.log(`Player ${player.player_name}: ${player.present_count} present, ${player.absent_count} absent, ${player.total_attendance} total, ${player.attendance_rate.toFixed(0)}%`);
-    });
-    
     return {
       totalAttendance,
       totalPresent,
@@ -627,7 +575,7 @@ const AttendanceStatistics: React.FC = () => {
                         Attendance Rate
                       </Text>
                       <Text weight={700} size="xl">
-                        {overallStats?.attendanceRate || 0}%
+                        {attendanceData?.attendanceRate.toFixed(1) || 0}%
                       </Text>
                     </div>
                     <ThemeIcon color="green" variant="light" size={38} radius="md">
@@ -646,7 +594,7 @@ const AttendanceStatistics: React.FC = () => {
                         Present
                       </Text>
                       <Text weight={700} size="xl">
-                        {overallStats?.present || 0}
+                        {attendanceData?.totalPresent || 0}
                       </Text>
                     </div>
                     <ThemeIcon color="blue" variant="light" size={38} radius="md">
@@ -665,7 +613,7 @@ const AttendanceStatistics: React.FC = () => {
                         Absent
                       </Text>
                       <Text weight={700} size="xl">
-                        {overallStats?.absent || 0}
+                        {attendanceData?.totalAbsent || 0}
                       </Text>
                     </div>
                     <ThemeIcon color="red" variant="light" size={38} radius="md">
@@ -688,15 +636,15 @@ const AttendanceStatistics: React.FC = () => {
                   </Card.Section>
                   
                   <div style={{ height: 300, position: 'relative', marginTop: 20 }}>
-                    {Object.keys(monthlyTrendsData).length > 0 ? (
+                    {attendanceData?.monthlyTrends && attendanceData.monthlyTrends.length > 0 ? (
                       <Line
                         data={{
-                          labels: Object.keys(monthlyTrendsData),
+                          labels: attendanceData.monthlyTrends.map(trend => trend.month),
                           datasets: [
                             {
                               label: 'Attendance Rate (%)',
-                              data: Object.entries(monthlyTrendsData).map(([_, data]) => {
-                                return data.total > 0 ? Math.round((data.present / data.total) * 100) : 0;
+                              data: attendanceData.monthlyTrends.map(trend => {
+                                return trend.total > 0 ? Math.round((trend.present / trend.total) * 100) : 0;
                               }),
                               borderColor: chartColors.blue,
                               backgroundColor: `${chartColors.blue}33`,
@@ -746,15 +694,15 @@ const AttendanceStatistics: React.FC = () => {
                   </Card.Section>
                   
                   <div style={{ height: 300, position: 'relative', marginTop: 20 }}>
-                    {Object.keys(activityTypeStats).length > 0 ? (
+                    {attendanceData?.activityTypeStats && Object.keys(attendanceData.activityTypeStats).length > 0 ? (
                       <Doughnut
                         data={{
-                          labels: Object.keys(activityTypeStats).map(
+                          labels: Object.keys(attendanceData.activityTypeStats).map(
                             type => type.charAt(0).toUpperCase() + type.slice(1)
                           ),
                           datasets: [
                             {
-                              data: Object.values(activityTypeStats),
+                              data: Object.values(attendanceData.activityTypeStats),
                               backgroundColor: [
                                 chartColors.blue,
                                 chartColors.orange,
@@ -805,8 +753,8 @@ const AttendanceStatistics: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {teamStats.length > 0 ? (
-                    teamStats.map((team) => (
+                  {attendanceData?.teamStats && attendanceData.teamStats.length > 0 ? (
+                    attendanceData.teamStats.map((team) => (
                       <tr key={team.team_id}>
                         <td>{team.team_name}</td>
                         <td>{team.present_count}</td>
@@ -818,7 +766,7 @@ const AttendanceStatistics: React.FC = () => {
                               thickness={3}
                               sections={[{ value: team.attendance_rate, color: getAttendanceRateColor(team.attendance_rate) }]}
                             />
-                            <Text>{team.attendance_rate}%</Text>
+                            <Text>{team.attendance_rate.toFixed(1)}%</Text>
                           </Group>
                         </td>
                       </tr>
@@ -856,8 +804,8 @@ const AttendanceStatistics: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {playerStats.length > 0 ? (
-                    playerStats.map((player) => (
+                  {attendanceData?.playerStats && attendanceData.playerStats.length > 0 ? (
+                    attendanceData.playerStats.map((player) => (
                       <tr key={player.player_id}>
                         <td>{player.player_name}</td>
                         <td>{player.team_name}</td>
@@ -871,7 +819,7 @@ const AttendanceStatistics: React.FC = () => {
                               thickness={3}
                               sections={[{ value: player.attendance_rate, color: getAttendanceRateColor(player.attendance_rate) }]}
                             />
-                            <Text>{player.attendance_rate.toFixed(0)}%</Text>
+                            <Text>{player.attendance_rate.toFixed(1)}%</Text>
                           </Group>
                         </td>
                         <td>
