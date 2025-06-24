@@ -4,9 +4,9 @@ import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const supabaseUrl = Constants.expoConfig?.extra?.supabaseUrl;
-const supabaseKey = Constants.expoConfig?.extra?.supabaseAnonKey;
+const supabasePublishableKey = Constants.expoConfig?.extra?.supabasePublishableKey;
 
-if (!supabaseUrl || !supabaseKey) {
+if (!supabaseUrl || !supabasePublishableKey) {
   throw new Error('Missing Supabase configuration. Please check your app.config.js');
 }
 
@@ -16,7 +16,7 @@ const customFetch = global.fetch;
 const dummyWs = { on: () => {}, send: () => {}, close: () => {} };
 const supabaseOptions = { global: { fetch: customFetch, WebSocket: dummyWs } };
 
-export const supabase = createClient(supabaseUrl, supabaseKey, {
+export const supabase = createClient(supabaseUrl, supabasePublishableKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,

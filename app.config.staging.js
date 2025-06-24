@@ -2,8 +2,8 @@ require('dotenv').config();
 
 export default {
   expo: {
-    name: "Ultimate Team",
-    slug: "ultimateteam",
+    name: "Ultimate Team (Staging)",
+    slug: "ultimateteam-staging",
     owner: "p.florin",
     version: "1.0.0",
     orientation: "portrait",
@@ -19,26 +19,24 @@ export default {
     },
     ios: {
       supportsTablet: true,
-      bundleIdentifier: "com.ultimateteam.app",
-      backgroundColor: "#ffffff",
-      infoPlist: {
-        "ITSAppUsesNonExemptEncryption": false
-      }
+      bundleIdentifier: "com.ultimateteam.app.staging",
+      backgroundColor: "#ffffff"
     },
     android: {
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",
         backgroundColor: "#ffffff"
       },
-      package: "com.ultimateteam.app"
+      package: "com.ultimateteam.app.staging"
     },
     web: {
       favicon: "./assets/favicon.png"
     },
     extra: {
-      supabaseUrl: process.env.SUPABASE_URL,
-      supabasePublishableKey: process.env.SUPABASE_PUBLISHABLE_KEY,
-      supabaseSecretKey: process.env.SUPABASE_SECRET_KEY,
+      // These will be replaced with staging credentials
+      supabaseUrl: process.env.STAGING_SUPABASE_URL || "YOUR_STAGING_SUPABASE_URL",
+      supabasePublishableKey: process.env.STAGING_SUPABASE_PUBLISHABLE_KEY || "YOUR_STAGING_SUPABASE_PUBLISHABLE_KEY",
+      supabaseSecretKey: process.env.STAGING_SUPABASE_SECRET_KEY || "YOUR_STAGING_SUPABASE_SECRET_KEY",
       eas: {
         projectId: "f43e8b35-5e2a-4e5d-92bb-9cdc051ca72a"
       }
@@ -55,4 +53,4 @@ export default {
     },
     privacy: "unlisted"
   }
-};
+}; 

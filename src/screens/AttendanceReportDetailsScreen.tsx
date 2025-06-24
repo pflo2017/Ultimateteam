@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, SafeAreaView } from 'react-native';
+import { View, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, SafeAreaView } from 'react-native';
 import { Text, Divider, Button } from 'react-native-paper';
 import { COLORS, SPACING } from '@/constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -78,6 +78,13 @@ type AttendanceReportDetailsRouteParams = {
   selectedDate?: string;
 };
 
+const extractBaseActivityId = (id: string): string => {
+  if (id.includes('-2025') || id.includes('-2024')) {
+    return id.substring(0, 36);
+  }
+  return id;
+};
+
 export const AttendanceReportDetailsScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<{ params: AttendanceReportDetailsRouteParams }, 'params'>>();
@@ -90,6 +97,7 @@ export const AttendanceReportDetailsScreen = () => {
   const [team, setTeam] = useState<TeamInfo | null>(null);
   const [playerMap, setPlayerMap] = useState<{ [id: string]: string }>({});
   const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     const loadUserRole = async () => {
@@ -104,26 +112,27 @@ export const AttendanceReportDetailsScreen = () => {
       setIsLoading(true);
       setError(null);
       try {
-        // Fetch attendance records using the FULL activity ID
-        console.log(`[AttendanceReportDetailsScreen] Fetching attendance records for activity ID: ${activityId}`);
+        const activityIdFromRoute = activityId;
+        const selectedDate = (route.params as any)?.selectedDate;
+
+        if (!selectedDate) {
+          throw new Error("No date was provided to fetch attendance.");
+        }
+        
+        console.log(`[AttendanceReportDetailsScreen] Fetching attendance for full, unique activity ID: ${activityIdFromRoute}`);
+
         const { data: attendanceData, error: attendanceError } = await supabase
           .from('attendance_with_correct_dates')
           .select('*')
-          .eq('activity_id', activityId);
+          .eq('activity_id', activityIdFromRoute);
         
         if (attendanceError) throw attendanceError;
         
         console.log(`[AttendanceReportDetailsScreen] Attendance data:`, JSON.stringify(attendanceData, null, 2));
         
-        // Fetch activity details - use the full activity ID
-        console.log(`[AttendanceReportDetailsScreen] Getting activity details for ID: ${activityId}`);
         const { data: activityData, error: activityError } = await getActivityById(activityId);
-        
         if (activityError) throw activityError;
         
-        console.log(`[AttendanceReportDetailsScreen] Activity data:`, JSON.stringify(activityData, null, 2));
-        
-        // Fetch team details if we have a team_id
         let teamData = null;
         if (activityData?.team_id) {
           const { data, error: teamError } = await supabase
@@ -131,111 +140,139 @@ export const AttendanceReportDetailsScreen = () => {
             .select('id, name')
             .eq('id', activityData.team_id)
             .single();
-          
           if (!teamError) teamData = data;
         }
-        
-        // Create a map of player IDs to names
-        const playerIds = attendanceData.map(record => record.player_id);
-        const { data: playersData, error: playersError } = await supabase
-          .from('players')
-          .select('id, name')
-          .in('id', playerIds);
-        
-        if (playersError) throw playersError;
-        
-        const playerNameMap: { [key: string]: string } = {};
-        if (playersData) {
-          playersData.forEach(player => {
-            playerNameMap[player.id] = player.name;
-          });
-        }
-        
-        // Determine activity type using multiple fallback methods
-        const determineActivityType = (record: any, activityData: any) => {
-          // Try to get type from various sources with fallbacks
-          let activityType = null;
-          
-          // Method 1: From joined activity data
-          if (record.activity?.type) {
-            activityType = record.activity.type;
-            console.log(`[AttendanceReportDetailsScreen] Found type from activity join: ${activityType}`);
-          }
-          // Method 2: From activity_type field
-          else if (record.activity_type) {
-            activityType = record.activity_type;
-            console.log(`[AttendanceReportDetailsScreen] Found type from activity_type field: ${activityType}`);
-          }
-          // Method 3: From activityData
-          else if (activityData?.type) {
-            activityType = activityData.type;
-            console.log(`[AttendanceReportDetailsScreen] Found type from activityData: ${activityType}`);
-          }
-          // Method 4: Try to infer from activity ID pattern
-          else {
-            // Check for common patterns in activity IDs
-            const actId = record.activity_id || '';
-            if (actId.includes('training') || actId.includes('train')) {
-              activityType = 'training';
-              console.log(`[AttendanceReportDetailsScreen] Inferred type from ID pattern: ${activityType}`);
-            } else if (actId.includes('game') || actId.includes('match')) {
-              activityType = 'game';
-              console.log(`[AttendanceReportDetailsScreen] Inferred type from ID pattern: ${activityType}`);
-            } else if (actId.includes('tournament') || actId.includes('cup')) {
-              activityType = 'tournament';
-              console.log(`[AttendanceReportDetailsScreen] Inferred type from ID pattern: ${activityType}`);
-            } else {
-              // Default fallback based on icon in the screenshot
-              // The screenshot shows the first activity with a calendar icon (other)
-              // The next three with a whistle icon (training)
-              // The last one with a trophy icon (game)
-              
-              // For recurring activities with date suffix, try to determine type
-              if (actId.includes('-202')) {
-                const baseId = actId.substring(0, 36);
-                if (baseId === '25b127e6-0402-4ae3-b520-9f6a14823c55') {
-                  activityType = 'training'; // Based on the logs showing this ID is for training
-                  console.log(`[AttendanceReportDetailsScreen] Set type based on known recurring ID: ${activityType}`);
-                }
-              } else {
-                activityType = 'other';
-                console.log(`[AttendanceReportDetailsScreen] Using default fallback type: ${activityType}`);
-              }
-            }
-          }
-          
-          return activityType || 'other';
-        };
-        
-        // Process attendance data to ensure activity type is available
-        const processedAttendance = attendanceData.map(record => {
-          const activityType = determineActivityType(record, activityData);
-          return {
-            ...record,
-            activity_type: activityType
-          };
+
+        const teamPlayers = await getTeamPlayers(activityData?.team_id || '');
+        const playerNameToIdMap: { [name: string]: string } = {};
+        const playerIdToNameMap: { [id: string]: string } = {};
+        teamPlayers.forEach(p => {
+            playerNameToIdMap[p.name] = p.id;
+            playerIdToNameMap[p.id] = p.name;
         });
-        
-        setAttendance(processedAttendance);
+
+        const initialAttendance = attendanceData.length > 0
+            ? attendanceData
+            : teamPlayers.map(p => ({ player_id: p.id, status: 'absent' }));
+
+        setAttendance(initialAttendance);
         setActivity(activityData ? {
           id: activityData.id || '',
           title: activityData.title || '',
-          type: activityData.type || (processedAttendance[0]?.activity_type || 'other'),
+          type: activityData.type || 'other',
           start_time: activityData.start_time || '',
           team_id: activityData.team_id
         } : null);
         setTeam(teamData);
-        setPlayerMap(playerNameMap);
+        setPlayerMap(playerIdToNameMap);
+        
       } catch (err) {
-        console.error('Failed to load attendance details:', err);
-        setError('Failed to load attendance details.');
+        console.error("Error fetching attendance details:", err);
+        setError(err instanceof Error ? err.message : 'An unknown error occurred.');
       } finally {
         setIsLoading(false);
       }
     };
-    
-    if (activityId) fetchAll();
-  }, [activityId]);
+
+    fetchAll();
+  }, [activityId, route.params]);
+
+  const getTeamPlayers = async (teamId: string) => {
+    if (!teamId) return [];
+    const { data, error } = await supabase
+      .from('players')
+      .select('id, name')
+      .eq('team_id', teamId)
+      .eq('is_active', true);
+    if (error) {
+        console.error("Failed to fetch team players", error);
+        return [];
+    }
+    return data;
+  };
+  
+  const handleSetStatus = (playerId: string, newStatus: 'present' | 'absent') => {
+    setAttendance(currentAttendance => {
+      return currentAttendance.map(record => {
+        if (record.player_id === playerId) {
+          return { ...record, status: newStatus };
+        }
+        return record;
+      });
+    });
+  };
+
+  const handleSave = async () => {
+    if (!activity) return;
+    setIsSaving(true);
+    try {
+        const activityIdToSave = activity.id;
+        const { data: { user } } = await supabase.auth.getUser();
+
+        const recordsToUpsert = attendance.map(record => ({
+            activity_id: activityIdToSave,
+            player_id: record.player_id,
+            status: record.status,
+            actual_activity_date: activity.start_time,
+            recorded_by: user?.id
+        }));
+
+        const { error } = await supabase
+            .from('activity_attendance')
+            .upsert(recordsToUpsert, { onConflict: 'activity_id, player_id' });
+
+        if (error) throw error;
+        
+        console.log('Attendance saved successfully!');
+        
+        if (userRole === 'admin') {
+          navigation.dispatch(
+            CommonActions.reset({
+              index: 0,
+              routes: [
+                {
+                  name: 'AdminRoot',
+                  params: {
+                    screen: 'Attendance',
+                    params: {
+                      restoreDate: activity.start_time,
+                      activityId: activity.id,
+                      refresh: true,
+                    },
+                  },
+                },
+              ],
+            })
+          );
+        } else if (userRole === 'coach') {
+          navigation.dispatch(
+            CommonActions.reset({
+              index: 0,
+              routes: [
+                {
+                  name: 'Coach',
+                  params: {
+                    screen: 'Attendance',
+                    params: {
+                      restoreDate: activity.start_time,
+                      activityId: activity.id,
+                      refresh: true,
+                    },
+                  },
+                },
+              ],
+            })
+          );
+        } else {
+          navigation.goBack();
+        }
+    } catch (error) {
+        console.error('Failed to save attendance', error);
+        // Add alert here
+    } finally {
+        setIsSaving(false);
+    }
+  };
 
   const presentCount = attendance.filter((r) => r.status === 'present').length;
   const absentCount = attendance.filter((r) => r.status === 'absent').length;
@@ -306,7 +343,7 @@ export const AttendanceReportDetailsScreen = () => {
           <Text style={styles.errorText}>{error}</Text>
         </View>
       ) : (
-        <ScrollView style={styles.content}>
+        <View style={styles.content}>
           <Text style={styles.title}>{activity?.title || attendance[0]?.activity_title || 'Activity'}</Text>
           <View style={styles.detailRow}>
             <MaterialCommunityIcons name="calendar" size={20} color={COLORS.grey[700]} />
@@ -331,46 +368,97 @@ export const AttendanceReportDetailsScreen = () => {
           </View>
           <Divider style={styles.divider} />
           <Text style={styles.sectionTitle}>Player Attendance</Text>
-          {attendance.map((record, idx) => (
-            <View key={`player-${idx}`} style={styles.playerRow}>
-              <Text style={styles.playerName}>
-                {playerMap[record.player_id] || record.player_id || 'Unknown'}
-              </Text>
-              <Text style={[styles.playerStatus, { fontWeight: '400' }, record.status === 'present' ? styles.present : styles.absent]}>
-                {capitalize(record.status)}
-              </Text>
-            </View>
-          ))}
-          {/* Show recorded by and at if available */}
-          {attendance[0]?.coach_name && (
-            <View style={{ marginTop: SPACING.md, backgroundColor: COLORS.grey[100], borderRadius: 6, padding: SPACING.sm }}>
-              <Text style={{ fontSize: 12, color: COLORS.grey[700] }}>
-                Recorded by: {attendance[0]?.coach_name}
-              </Text>
-              <Text style={{ fontSize: 12, color: COLORS.grey[500], marginTop: 2 }}>
-                {attendance[0]?.recorded_at ? format(new Date(attendance[0]?.recorded_at), 'MMM d, yyyy h:mm a') : ''}
-              </Text>
-            </View>
-          )}
-          {/* Show Create Attendance button if no attendance is marked */}
-          {attendance.length === 0 && (
-            <Button
-              mode="contained"
-              style={styles.createAttendanceButton}
-              onPress={() => {
-                if (activity) {
-                  navigation.navigate('AddAttendance', { 
-                    activityId: activity.id, 
-                    teamId: activity.team_id 
-                  });
-                }
-              }}
-            >
-              Create Attendance
-            </Button>
-          )}
-        </ScrollView>
+          <FlatList
+            data={Object.entries(playerMap)}
+            keyExtractor={([playerId]) => playerId}
+            renderItem={({ item }) => {
+              const [playerId, playerName] = item;
+              const record = attendance.find(a => a.player_id === playerId);
+              const status = record?.status || 'absent';
+              return (
+                <View key={playerId} style={styles.playerRow}>
+                  <Text style={styles.playerName}>{playerName}</Text>
+                  <View style={styles.statusButtonsContainer}>
+                    <TouchableOpacity
+                      style={[
+                        styles.statusButton,
+                        styles.presentButton,
+                        status === 'present' && styles.presentButtonSelected,
+                      ]}
+                      onPress={() => handleSetStatus(playerId, 'present')}>
+                      <Text
+                        style={[
+                          styles.statusButtonText,
+                          status === 'present' && styles.selectedButtonText,
+                        ]}>
+                        Present
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.statusButton,
+                        styles.absentButton,
+                        status === 'absent' && styles.absentButtonSelected,
+                      ]}
+                      onPress={() => handleSetStatus(playerId, 'absent')}>
+                      <Text
+                        style={[
+                          styles.statusButtonText,
+                          status === 'absent' && styles.selectedButtonText,
+                        ]}>
+                        Absent
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            }}
+            ListFooterComponent={
+              <>
+                {/* Show recorded by and at if available */}
+                {attendance[0]?.coach_name && (
+                  <View style={{ marginTop: SPACING.md, backgroundColor: COLORS.grey[100], borderRadius: 6, padding: SPACING.sm }}>
+                    <Text style={{ fontSize: 12, color: COLORS.grey[700] }}>
+                      Recorded by: {attendance[0]?.coach_name}
+                    </Text>
+                    <Text style={{ fontSize: 12, color: COLORS.grey[500], marginTop: 2 }}>
+                      {attendance[0]?.recorded_at ? format(new Date(attendance[0]?.recorded_at), 'MMM d, yyyy h:mm a') : ''}
+                    </Text>
+                  </View>
+                )}
+                {/* Show Create Attendance button if no attendance is marked */}
+                {attendance.length === 0 && (
+                  <Button
+                    mode="contained"
+                    style={styles.createAttendanceButton}
+                    onPress={() => {
+                      if (activity) {
+                        navigation.navigate('AddAttendance', { 
+                          activityId: activity.id, 
+                          teamId: activity.team_id 
+                        });
+                      }
+                    }}
+                  >
+                    Create Attendance
+                  </Button>
+                )}
+              </>
+            }
+          />
+        </View>
       )}
+      <SafeAreaView style={{ marginHorizontal: SPACING.md }}>
+        <Button
+          mode="contained"
+          onPress={handleSave}
+          loading={isSaving}
+          disabled={isSaving}
+          style={{ marginBottom: SPACING.md }}
+        >
+            Save Attendance
+        </Button>
+      </SafeAreaView>
     </SafeAreaView>
   );
 };
@@ -393,9 +481,39 @@ const styles = StyleSheet.create({
   divider: { marginVertical: SPACING.md },
   sectionTitle: { fontSize: 16, fontWeight: '600', marginBottom: 8 },
   playerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: COLORS.grey[200] },
-  playerName: { fontSize: 15, color: COLORS.text },
+  playerName: { fontSize: 15, color: COLORS.text, flex: 1 },
   playerStatus: { fontSize: 15, fontWeight: '600' },
   present: { color: COLORS.primary },
   absent: { color: COLORS.error },
   createAttendanceButton: { marginTop: 32, alignSelf: 'center', borderRadius: 8, paddingHorizontal: 24, paddingVertical: 8 },
+  statusButtonsContainer: {
+    flexDirection: 'row',
+  },
+  statusButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    marginLeft: 8,
+    borderWidth: 1,
+  },
+  presentButton: {
+    borderColor: COLORS.success,
+  },
+  presentButtonSelected: {
+    backgroundColor: COLORS.success,
+  },
+  absentButton: {
+    borderColor: COLORS.error,
+  },
+  absentButtonSelected: {
+    backgroundColor: COLORS.error,
+  },
+  statusButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+  selectedButtonText: {
+    color: COLORS.white,
+  },
 }); 

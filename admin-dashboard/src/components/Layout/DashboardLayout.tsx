@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import {
   AppShell,
   Navbar,
@@ -17,6 +17,7 @@ import {
   Avatar,
   Menu,
   UnstyledButton,
+  ColorScheme,
 } from '@mantine/core';
 import { 
   IconDashboard, 
@@ -30,29 +31,49 @@ import {
   IconSun,
   IconMoonStars,
   IconCreditCard,
-  IconUserCircle
+  IconUserCircle,
+  IconCash,
+  IconChartBar,
+  IconUserCheck
 } from '@tabler/icons-react';
 import { supabase } from '../../lib/supabase';
+import { useColorScheme } from '@mantine/hooks';
 
 interface DashboardLayoutProps {
-  children: React.ReactNode;
-  colorScheme: 'light' | 'dark';
-  toggleColorScheme: () => void;
+  children?: React.ReactNode;
+  colorScheme?: ColorScheme;
+  toggleColorScheme?: () => void;
 }
 
 const DashboardLayout: React.FC<DashboardLayoutProps> = ({ 
   children, 
-  colorScheme, 
-  toggleColorScheme 
+  colorScheme: propColorScheme, 
+  toggleColorScheme: propToggleColorScheme 
 }) => {
   const theme = useMantineTheme();
+  const preferredColorScheme = useColorScheme();
   const [opened, setOpened] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [userMenuOpened, setUserMenuOpened] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [clubName, setClubName] = useState<string | null>(null);
+  
+  // Local state for colorScheme if not provided via props
+  const [localColorScheme, setLocalColorScheme] = useState<ColorScheme>(
+    propColorScheme || preferredColorScheme || 'light'
+  );
+  
+  // Use props if available, otherwise use local state
+  const colorScheme = propColorScheme || localColorScheme;
+  
+  // Local toggle function if not provided via props
+  const toggleLocalColorScheme = () => {
+    setLocalColorScheme(prev => prev === 'dark' ? 'light' : 'dark');
+  };
+  
+  // Use props if available, otherwise use local function
+  const toggleColorScheme = propToggleColorScheme || toggleLocalColorScheme;
   
   // Get user role from localStorage on component mount
   useEffect(() => {
@@ -64,6 +85,42 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
       setClubName(name);
     }
   }, []);
+  
+  // Define sidebar links based on user role
+  const getSidebarLinks = (userRole: string | null) => {
+    // Common links for all users
+    const commonLinks = [
+      { label: 'Dashboard', icon: <IconDashboard size={20} />, link: '/' },
+    ];
+
+    // Links specific to master admin
+    const masterAdminLinks = [
+      { label: 'Clubs', icon: <IconBuildingCommunity size={20} />, link: '/clubs' },
+      { label: 'Users', icon: <IconUsers size={20} />, link: '/users' },
+    ];
+
+    // Links specific to club admin
+    const clubAdminLinks = [
+      { label: 'Teams', icon: <IconUsers size={20} />, link: '/teams' },
+      { label: 'Coaches', icon: <IconUserCircle size={20} />, link: '/coaches' },
+      { label: 'Players', icon: <IconUsers size={20} />, link: '/players' },
+      { label: 'Parents', icon: <IconUsers size={20} />, link: '/parents' },
+      { label: 'Schedule', icon: <IconCalendarEvent size={20} />, link: '/schedule' },
+      { label: 'Attendance', icon: <IconUserCheck size={20} />, link: '/attendance' },
+      { label: 'Payments', icon: <IconCash size={20} />, link: '/payments' },
+      { label: 'Analytics', icon: <IconChartBar size={20} />, link: '/analytics' },
+    ];
+
+    // Return links based on user role
+    if (userRole === 'masterAdmin') {
+      return [...commonLinks, ...masterAdminLinks];
+    } else if (userRole === 'clubAdmin') {
+      return [...commonLinks, ...clubAdminLinks];
+    }
+
+    // Default to common links only
+    return commonLinks;
+  };
   
   // Navigation items for master admin
   const masterAdminNavItems = [
@@ -87,6 +144,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
     { label: 'Players', icon: <IconUsers size={20} />, path: '/players' },
     { label: 'Parents', icon: <IconUsers size={20} />, path: '/parents' },
     { label: 'Schedule', icon: <IconCalendarEvent size={20} />, path: '/schedule' },
+    { label: 'Attendance', icon: <IconUserCheck size={20} />, path: '/attendance' },
     { label: 'Payments', icon: <IconCreditCard size={20} />, path: '/payments' },
     { label: 'Settings', icon: <IconSettings size={20} />, path: '/settings' },
   ];
@@ -115,14 +173,14 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
           width={{ sm: 250, lg: 300 }}
         >
           <Navbar.Section grow>
-            {navItems.map((item) => (
+            {getSidebarLinks(userRole).map((item) => (
               <NavLink
-                key={item.path}
+                key={item.link}
                 label={item.label}
                 icon={item.icon}
-                active={location.pathname === item.path}
+                active={location.pathname === item.link}
                 onClick={() => {
-                  navigate(item.path);
+                  navigate(item.link);
                   setOpened(false);
                 }}
                 mb={8}
@@ -201,7 +259,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
         },
       })}
     >
-      {children}
+      {children || <Outlet />}
     </AppShell>
   );
 };

@@ -16,7 +16,7 @@ import {
   getPlayersByTeamId,
   getUserClubId
 } from '../services/activitiesService';
-import { format, addWeeks, subWeeks, startOfWeek, endOfWeek, isSameDay } from 'date-fns';
+import { format, addWeeks, subWeeks, startOfWeek, endOfWeek, isSameDay, startOfDay, endOfDay } from 'date-fns';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -43,8 +43,6 @@ type AttendanceRecord = {
 };
 
 // Utility function to extract the base UUID from a recurring activity ID
-// NOTE: We're keeping this function for reference, but we'll now use the FULL activity ID
-// to ensure each recurring instance has its own independent attendance data
 const extractBaseActivityId = (id: string): string => {
   // Check if the ID has a date suffix (format: uuid-date)
   if (id.includes('-2025') || id.includes('-2024')) {
@@ -59,6 +57,61 @@ interface WeekRange {
   start: string;
   end: string;
 }
+
+// Add a function to get attendance records for an activity, handling both base and composite IDs
+const getAttendanceRecordsForActivity = async (activityId: string) => {
+  try {
+    // First try with the exact activity ID
+    const { data: exactMatches, error: exactError } = await supabase
+      .from('activity_attendance')
+      .select('*')
+      .eq('activity_id', activityId);
+      
+    if (exactError) throw exactError;
+    
+    if (exactMatches && exactMatches.length > 0) {
+      console.log(`[AttendanceScreen] Found ${exactMatches.length} exact attendance matches for activity ${activityId}`);
+      return exactMatches;
+    }
+    
+    // If no exact matches and this is a composite ID, try with the base ID
+    if (activityId.includes('-')) {
+      const baseId = extractBaseActivityId(activityId);
+      
+      const { data: baseMatches, error: baseError } = await supabase
+        .from('activity_attendance')
+        .select('*')
+        .eq('activity_id', baseId);
+        
+      if (baseError) throw baseError;
+      
+      if (baseMatches && baseMatches.length > 0) {
+        console.log(`[AttendanceScreen] Found ${baseMatches.length} base ID attendance matches for activity ${activityId} using base ID ${baseId}`);
+        return baseMatches;
+      }
+    }
+    
+    // If this is a base ID, try to find any composite IDs that match
+    const { data: compositeMatches, error: compositeError } = await supabase
+      .from('activity_attendance')
+      .select('*')
+      .like('activity_id', `${activityId}-%`);
+      
+    if (compositeError) throw compositeError;
+    
+    if (compositeMatches && compositeMatches.length > 0) {
+      console.log(`[AttendanceScreen] Found ${compositeMatches.length} composite attendance matches for base activity ${activityId}`);
+      return compositeMatches;
+    }
+    
+    // No matches found
+    console.log(`[AttendanceScreen] No attendance records found for activity ${activityId}`);
+    return [];
+  } catch (error) {
+    console.error(`[AttendanceScreen] Error fetching attendance for activity ${activityId}:`, error);
+    return [];
+  }
+};
 
 export const AttendanceScreen = () => {
   // Date and week state
@@ -108,6 +161,7 @@ export const AttendanceScreen = () => {
   // Add at the top of the component, after useState hooks
   const [attendanceRecords, setAttendanceRecords] = useState<{ activity: Activity, records: any[] }[]>([]);
   const [isLoadingAttendanceRecords, setIsLoadingAttendanceRecords] = useState(false);
+  const [datesWithAttendance, setDatesWithAttendance] = useState<string[]>([]);
 
   // Add a ref to track the last fetch time
   const lastFetchRef = useRef<number>(0);
@@ -145,16 +199,42 @@ export const AttendanceScreen = () => {
     loadUserRole();
   }, []);
 
-  // Refresh data when screen comes into focus
   useFocusEffect(
     useCallback(() => {
+      // Standard focus actions
       if (userRole) {
-        console.log('[AttendanceScreen] Screen focused, loading teams only');
+        console.log('[AttendanceScreen] Screen focused, loading teams.');
         loadTeams();
-        // Don't call loadActivities here - it will be called by the useEffect hook
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [userRole, userId])
+
+      // Check for refresh request from another screen
+      const params = (route.params as any) || {};
+      if (params.refresh) {
+        console.log('[AttendanceScreen] Refresh requested.');
+
+        // Restore date if provided, to ensure calendar stays on the right day
+        if (params.restoreDate) {
+          const restoreDate = new Date(params.restoreDate);
+          // Only update if the date is different to avoid unnecessary re-renders
+          if (!isSameDay(restoreDate, selectedDate)) {
+            console.log('[AttendanceScreen] Restoring date to:', restoreDate);
+            setSelectedDate(restoreDate);
+          }
+        }
+        
+        // Force a re-fetch of attendance data
+        console.log('[AttendanceScreen] Forcing attendance records refresh.');
+        fetchAttendanceRecords();
+
+        // Clear the refresh param to prevent loops
+        navigation.setParams({ refresh: undefined, restoreDate: undefined });
+      } else {
+        // Always refresh attendance records when screen comes into focus
+        // This ensures that when we return from AddAttendanceScreen, the data is updated
+        console.log('[AttendanceScreen] Screen focused - refreshing attendance records.');
+        fetchAttendanceRecords();
+      }
+    }, [userRole, route.params]) // Rerun when role or params change
   );
 
   // Load activities for date range and type
@@ -197,7 +277,7 @@ export const AttendanceScreen = () => {
   }, [selectedActivity]);
 
   // Modified fetchAttendanceRecords function with debounce mechanism
-  const fetchAttendanceRecords = async (activityId?: string) => {
+  const fetchAttendanceRecords = async () => {
     // Debounce mechanism to prevent multiple calls within 500ms
     const now = Date.now();
     if (now - lastFetchRef.current < 500) {
@@ -229,92 +309,109 @@ export const AttendanceScreen = () => {
         setIsLoadingAttendanceRecords(false);
         return;
       }
-      console.log('[AttendanceScreen] Raw activities found:', activitiesData.map(a => ({
-        id: a.id,
-        title: a.title,
-        type: a.type,
-        date: a.start_time.split('T')[0]
-      })));
-      // Filter by type
-      const filteredActivities = selectedType === 'all'
-        ? activitiesData
-        : activitiesData.filter(a => a.type === selectedType);
-      console.log('[AttendanceScreen] After type filter:', filteredActivities.map(a => ({
-        id: a.id,
-        title: a.title,
-        type: a.type,
-        date: a.start_time.split('T')[0]
-      })));
+      
       // Filter by selected date
       const selectedDateStr = format(selectedDate, 'yyyy-MM-dd');
       console.log('[AttendanceScreen] Filtering for date:', selectedDateStr);
-      const activitiesForDate = filteredActivities.filter(activity => {
+      const activitiesForDate = activitiesData.filter(activity => {
         const activityDateStr = activity.start_time.split('T')[0];
-        const matches = activityDateStr === selectedDateStr;
-        console.log('[AttendanceScreen] Activity date check:', {
-          activityId: activity.id,
-          activityDate: activityDateStr,
-          selectedDate: selectedDateStr,
-          matches
-        });
         return activityDateStr === selectedDateStr;
       });
-      console.log('[AttendanceScreen] Final filtered activities:', activitiesForDate.map(a => ({
+      
+      // Filter by type if needed
+      const filteredActivities = selectedType === 'all'
+        ? activitiesForDate
+        : activitiesForDate.filter(a => a.type === selectedType);
+      
+      console.log('[AttendanceScreen] Final filtered activities:', filteredActivities.map(a => ({
         id: a.id,
         title: a.title,
         type: a.type,
         date: a.start_time.split('T')[0]
       })));
-      if (activitiesForDate.length === 0) {
+      
+      if (filteredActivities.length === 0) {
         setAttendanceRecords([]);
+        setDatesWithAttendance([]); // Clear attendance dots if no activities
         setIsLoadingAttendanceRecords(false);
         return;
       }
       
-      // 2. Get all attendance records for these activities - use the FULL activity IDs
-      const activityIds = activitiesForDate.map(a => a.id);
-      console.log('[AttendanceScreen] Fetching attendance for activity IDs:', activityIds);
+      // 2. Get all attendance records for these activities, but ONLY for the selected date range
+      const dayStart = startOfDay(selectedDate).toISOString();
+      const dayEnd = endOfDay(selectedDate).toISOString();
       
-      // Use the full activity IDs to ensure each instance has its own attendance data
+      // For recurring activities, we need to query using the full composite IDs
+      // For regular activities, we use the base ID
+      const activityIdsToQuery = filteredActivities.map(activity => activity.id);
+      
+      console.log(`[AttendanceScreen] Searching for attendance for activity IDs:`, activityIdsToQuery, `on ${selectedDateStr}`);
+      
       const { data: attendanceData, error: attendanceError } = await supabase
         .from('activity_attendance')
         .select('*, player:player_id (id, name)')
-        .in('activity_id', activityIds);
-        
+        .in('activity_id', activityIdsToQuery);
+
       if (attendanceError) {
-        console.error('[AttendanceScreen] Error fetching attendance records:', attendanceError);
-        console.error('[AttendanceScreen] Error details:', JSON.stringify(attendanceError, null, 2));
+        console.error('[AttendanceScreen] Error fetching attendance:', attendanceError);
         throw attendanceError;
       }
       
+      // NEW LOGIC: Determine which dates have marked attendance to show dots on the calendar
+      if (attendanceData && attendanceData.length > 0) {
+        const datesWithRecords = attendanceData.map(rec => {
+          // For recurring activities, extract date from the composite ID
+          if (rec.activity_id.includes('-')) {
+            const datePart = rec.activity_id.split('-')[1];
+            if (datePart && datePart.length === 8) {
+              const year = datePart.substring(0, 4);
+              const month = datePart.substring(4, 6);
+              const day = datePart.substring(6, 8);
+              return `${year}-${month}-${day}`;
+            }
+          }
+          // Fallback to created_at date
+          return new Date(rec.created_at).toISOString().split('T')[0];
+        });
+        const uniqueDates = [...new Set(datesWithRecords)];
+        setDatesWithAttendance(uniqueDates);
+        console.log('[AttendanceScreen] Dates with actual attendance:', uniqueDates);
+      } else {
+        setDatesWithAttendance([]);
+      }
+      
       // 3. Group attendance records by activity
-      const grouped: Record<string, { activity: Activity, records: any[] }> = {};
-      activitiesForDate.forEach(activity => {
-        grouped[activity.id] = {
+      const groupedRecords: Record<string, { activity: Activity, records: any[] }> = {};
+      
+      // Initialize the grouped records structure
+      filteredActivities.forEach(activity => {
+        groupedRecords[activity.id] = {
           activity,
           records: []
         };
       });
       
+      // Process the attendance records - match by exact activity_id
       (attendanceData || []).forEach(record => {
-        const activityId = record.activity_id;
-        // Find the exact activity that matches this record
-        const activity = activitiesForDate.find(a => a.id === activityId);
-        if (activity && grouped[activity.id]) {
-          grouped[activity.id].records.push(record);
+        // Find the activity that matches this attendance record
+        const targetActivity = filteredActivities.find(a => a.id === record.activity_id);
+        
+        if (targetActivity) {
+          groupedRecords[targetActivity.id].records.push(record);
         }
       });
       
-      console.log('[AttendanceScreen] Final grouped records:', Object.entries(grouped).map(([id, data]) => ({
-        activityId: id,
-        activityTitle: data.activity.title,
-        activityType: data.activity.type,
-        recordCount: data.records.length
-      })));
+      console.log('[AttendanceScreen] Grouped attendance records:', 
+        Object.entries(groupedRecords).map(([id, data]) => ({
+          activityId: id,
+          activityTitle: data.activity.title,
+          recordCount: data.records.length
+        }))
+      );
       
-      setAttendanceRecords(Object.values(grouped));
+      setAttendanceRecords(Object.values(groupedRecords));
     } catch (error) {
-      console.error('[AttendanceScreen] Error fetching attendance records:', error);
+      console.error('[AttendanceScreen] Error in fetchAttendanceRecords:', error);
       setAttendanceRecords([]);
     } finally {
       setIsLoadingAttendanceRecords(false);
@@ -477,26 +574,17 @@ export const AttendanceScreen = () => {
         if (type && type !== 'all') {
           filteredActivities = filteredActivities.filter(activity => activity.type === type);
         }
-        console.log('[AttendanceScreen] Activities after type filtering:', filteredActivities.length);
         
-        // Filter for selected date
+        // CORRECTED DATE FILTERING
+        const selectedDateStr = format(selectedDate, 'yyyy-MM-dd');
+        console.log(`[AttendanceScreen] Filtering activities for date: ${selectedDateStr}`);
+        
         const selectedDateActivities = filteredActivities.filter(activity => {
           const activityDate = activity.start_time.split('T')[0];
-          const matches = activityDate === selectedDate;
-          console.log('[AttendanceScreen] Activity date check:', { 
-            activityId: activity.id, 
-            activityDate, 
-            selectedDate, 
-            matches 
-          });
-          return matches;
+          return activityDate === selectedDateStr;
         });
         
         console.log('[AttendanceScreen] Activities for selected date:', selectedDateActivities.length);
-        console.log('[AttendanceScreen] Raw activities found:', filteredActivities);
-        console.log('[AttendanceScreen] After type filter:', filteredActivities);
-        console.log('[AttendanceScreen] Filtering for date:', selectedDate);
-        
         setActivities(selectedDateActivities);
       }
     } catch (error) {
@@ -605,24 +693,16 @@ export const AttendanceScreen = () => {
     try {
       setIsLoadingPlayers(true);
       
-      // Use the FULL activity ID to ensure we're loading attendance for this specific instance
-      const activityIdToUse = selectedActivity.id;
+      // Get attendance records using the helper function that handles all ID formats
+      const attendanceRecords = await getAttendanceRecordsForActivity(selectedActivity.id);
       
-      const { data, error } = await supabase
-        .from('activity_attendance')
-        .select('*')
-        .eq('activity_id', activityIdToUse);
-        
-      if (error) throw error;
+      // Convert the array of attendance records to an object keyed by player_id
+      const attendanceMap = attendanceRecords.reduce((acc: AttendanceRecord, record) => {
+        acc[record.player_id] = record.status;
+        return acc;
+      }, {});
       
-      if (data) {
-        // Convert the array of attendance records to an object keyed by player_id
-        const attendanceMap = data.reduce((acc: AttendanceRecord, record) => {
-          acc[record.player_id] = record.status;
-          return acc;
-        }, {});
-        setAttendance(attendanceMap);
-      }
+      setAttendance(attendanceMap);
     } catch (error) {
       console.error('Error loading attendance:', error);
     } finally {
@@ -640,7 +720,7 @@ export const AttendanceScreen = () => {
     player.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Update the handleSave function to use verify_coach_access instead of set_coach_access_code.
+  // Update the handleSave function to ensure the actual_activity_date matches the activity's start_time
   const handleSave = async () => {
     if (!selectedActivity?.id) {
       Alert.alert('Error', 'Please select an activity first');
@@ -649,54 +729,80 @@ export const AttendanceScreen = () => {
     try {
       setIsSaving(true);
       
-      // Use the FULL activity ID to ensure each instance has its own attendance data
-      const activityIdToUse = selectedActivity.id;
-      console.log('[AttendanceScreen] Using full activity ID for attendance:', activityIdToUse);
+      const baseActivityId = extractBaseActivityId(selectedActivity.id);
+      console.log('[AttendanceScreen] Using BASE activity ID for attendance:', baseActivityId);
 
-      // Get the auth user's ID
       const { data: { user } } = await supabase.auth.getUser();
-      console.log('[AttendanceScreen] Auth user ID:', user?.id);
+      console.log('[AttendanceScreen] Auth user:', user?.id);
 
-      // Use auth user's ID for recorded_by as required by the database schema
-      const attendanceRecorderId = user?.id;
+      // Fetch the club_id. This is the correct way.
+      const clubId = await getUserClubId();
+      if (!clubId) {
+        throw new Error("Could not determine the user's club.");
+      }
+
+      const coachId = await getCoachInternalId();
+      console.log('[AttendanceScreen] Coach ID:', coachId);
       
-      // Prepare data for upsert
-      const attendanceRecords = Object.entries(attendance)
-        .filter(([_, status]) => status !== null) // Only include players with a status
-        .map(([playerId, status]) => ({
-          activity_id: activityIdToUse,
-          player_id: playerId,
-          status: status,
-          recorded_by: attendanceRecorderId, // Use auth user's ID as required by DB schema
-          recorded_at: new Date().toISOString()
-        }));
-
-      console.log('[AttendanceScreen] Attendance records to save:', JSON.stringify(attendanceRecords, null, 2));
+      const adminData = await AsyncStorage.getItem('admin_data');
+      let recordedBy = coachId;
       
-      if (attendanceRecords.length > 0) {
-        const { error } = await supabase
-          .from('activity_attendance')
-          .upsert(attendanceRecords, { 
-            onConflict: 'activity_id,player_id', 
-            ignoreDuplicates: false
-          });
-
-        if (error) {
-          console.error('[AttendanceScreen] Error saving attendance:', error);
-          console.error('[AttendanceScreen] Full error details:', JSON.stringify(error, null, 2));
-          throw error;
-        }
-        
-        console.log('[AttendanceScreen] Attendance records successfully upserted');
-      } else {
-        console.log('[AttendanceScreen] No attendance records to save');
+      if (userRole === 'admin' && adminData) {
+          const admin = JSON.parse(adminData);
+          recordedBy = admin.id;
+          console.log('[AttendanceScreen] User is admin, recorded_by:', recordedBy);
       }
       
-      Alert.alert('Success', 'Attendance saved successfully');
+      const { data: coachDetails } = await supabase
+        .from('coaches')
+        .select('name')
+        .eq('id', coachId)
+        .single();
+
+      const coachName = coachDetails?.name || 'Unknown Coach';
+
+      const scheduledActivityDate = selectedActivity.start_time;
+
+      const attendanceData = Object.entries(attendance).map(([playerId, status]) => ({
+        player_id: playerId,
+        activity_id: baseActivityId,
+        status: status,
+        recorded_by: recordedBy,
+        club_id: clubId, // Use the fetched clubId here.
+        team_id: selectedActivity.team_id,
+        coach_name: coachName,
+        actual_activity_date: scheduledActivityDate
+      }));
+      
+      if (attendanceData.length === 0) {
+        Alert.alert('No Changes', 'No attendance data has been modified.');
+        setIsSaving(false);
+        return;
+      }
+
+      console.log('[AttendanceScreen] Saving attendance data:', JSON.stringify(attendanceData, null, 2));
+
+      const { data, error } = await supabase
+        .from('activity_attendance')
+        .upsert(attendanceData, {
+          onConflict: 'player_id, activity_id',
+        });
+
+      if (error) {
+        console.error('Error saving attendance:', error);
+        throw error;
+      }
+
+      console.log('Attendance saved successfully:', data);
+      Alert.alert('Success', 'Attendance has been saved successfully.');
+      
+      // Refresh attendance records after saving. This call takes no arguments.
+      fetchAttendanceRecords();
+
     } catch (error) {
-      console.error('[AttendanceScreen] Error saving attendance:', error);
-      console.error('[AttendanceScreen] Full error details:', JSON.stringify(error, null, 2));
-      Alert.alert('Error', `Failed to save attendance: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      const typedError = error as { message?: string };
+      console.error('An unexpected error occurred:', typedError.message);
+      Alert.alert('Error', `Failed to save attendance: ${typedError.message || 'Unknown error'}`);
     } finally {
       setIsSaving(false);
     }
@@ -748,53 +854,17 @@ export const AttendanceScreen = () => {
     }
   };
 
-  // Add a useEffect (after the other useEffects) to restore selectedDate from route params.
-  useEffect(() => {
-    const params = (route as any).params;
-    if (params?.restoreDate && !isLoadingActivities) {
-      console.log('[AttendanceScreen] Restoring date from route params:', params.restoreDate);
-      const restoreDate = new Date(params.restoreDate);
-      setSelectedDate(restoreDate);
-      
-      // If we have an activityId, find and select that activity
-      if (params.activityId && activities.length > 0) {
-        const activity = activities.find(a => a.id === params.activityId);
-        if (activity) {
-          console.log('[AttendanceScreen] Setting selected activity from route params:', activity.id);
-          setSelectedActivity(activity);
-          // Don't call fetchAttendanceRecords here - it will be called by the useEffect
-        }
-      }
-      
-      // Clear the params after restoring
-      (route as any).params = undefined;
-    }
-  }, [route, isLoadingActivities, activities]); // Include activities in dependencies
-
   return (
     <SafeAreaView style={styles.container}>
       {/* Calculate weekDates and eventDates for event dots */}
-      {(() => {
-        const weekStart = startOfWeek(currentWeek, { weekStartsOn: 1 });
-        const weekEnd = endOfWeek(currentWeek, { weekStartsOn: 1 });
-        let d = new Date(weekStart);
-        const weekDates: string[] = [];
-        while (d <= weekEnd) {
-          weekDates.push(format(new Date(d), 'yyyy-MM-dd'));
-          d.setDate(d.getDate() + 1);
-        }
-        const eventDates = activities.map(a => a.start_time.split('T')[0]).filter((date, i, arr) => arr.indexOf(date) === i && weekDates.includes(date));
-        return (
-          <WeeklyCalendarCard
-            currentDate={currentWeek}
-            selectedDate={selectedDate}
-            onDateSelect={setSelectedDate}
-            onPrevWeek={handlePrevWeek}
-            onNextWeek={handleNextWeek}
-            eventDates={eventDates}
-          />
-        );
-      })()}
+      <WeeklyCalendarCard
+        currentDate={currentWeek}
+        selectedDate={selectedDate}
+        onDateSelect={setSelectedDate}
+        onPrevWeek={handlePrevWeek}
+        onNextWeek={handleNextWeek}
+        eventDates={datesWithAttendance}
+      />
 
       {/* Header row with Attendance title and filter icon */}
       <View style={styles.headerRow}>
