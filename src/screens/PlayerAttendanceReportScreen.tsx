@@ -233,26 +233,8 @@ const PlayerAttendanceReportScreen = () => {
   
   // Helper to determine activity type for summary grouping
   const getActivityTypeForSummary = (record: AttendanceRecord): string => {
-    // First check if we have a defined activity type
-    if (record.activity_type) {
-      return record.activity_type;
-    }
-    
-    // If we have a recurring activity with date suffix
-    const activityId = record.activity_id || '';
-    if (activityId.includes('-202')) {
-      const baseId = activityId.substring(0, 36);
-      if (baseId === '25b127e6-0402-4ae3-b520-9f6a14823c55') {
-        return 'training';
-      }
-    }
-    
-    // Use icon type as fallback
-    const iconName = getActivityTypeIcon(record.activity_type);
-    if (iconName === 'whistle') return 'training';
-    if (iconName === 'trophy-outline' || iconName === 'trophy') return 'game';
-    
-    return 'other';
+    // Always use the activity_type from the view
+    return record.activity_type || 'other';
   };
 
   // Helper for activity type icon
@@ -271,7 +253,6 @@ const PlayerAttendanceReportScreen = () => {
   // Helper to get activity type name
   const getActivityTypeName = (type?: string): string => {
     if (!type) return 'Other';
-    
     switch (type.toLowerCase()) {
       case 'training': return 'Training';
       case 'game': return 'Game';
@@ -283,30 +264,13 @@ const PlayerAttendanceReportScreen = () => {
   
   // Helper to determine activity title
   const getActivityTitle = (record: AttendanceRecord): string => {
-    // First try to use the activity title if available
+    // Always use the activity_title from the view, fallback to type name
     if (record.activity_title) {
       return record.activity_title;
     }
-    
-    // If no title, use the activity type
     if (record.activity_type) {
       return getActivityTypeName(record.activity_type);
     }
-    
-    // If we have a recurring activity with date suffix
-    const activityId = record.activity_id || '';
-    if (activityId.includes('-202')) {
-      const baseId = activityId.substring(0, 36);
-      if (baseId === '25b127e6-0402-4ae3-b520-9f6a14823c55') {
-        return 'Training';
-      }
-    }
-    
-    // Last resort - check the icon type to determine a title
-    const iconName = getActivityTypeIcon(record.activity_type);
-    if (iconName === 'whistle') return 'Training';
-    if (iconName === 'trophy-outline' || iconName === 'trophy') return 'Game';
-    
     return 'Activity';
   };
 

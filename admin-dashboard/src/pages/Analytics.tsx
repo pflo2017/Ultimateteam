@@ -771,7 +771,7 @@ const Analytics: React.FC = () => {
         totalPlayers: filteredPlayers.length,
         totalPresences: presentCount,
         totalAbsences: totalAttendanceRecords - presentCount,
-        attendanceRate: attendanceRate
+        attendanceRate: attendanceRate // Use the same attendance rate calculated above
       });
       
     } catch (error) {
@@ -1473,22 +1473,6 @@ const Analytics: React.FC = () => {
         )
       )}
 
-      <SimpleGrid cols={2} spacing="md" mb={20}>
-        <StatsCard
-          title="Activities"
-          value={stats.totalActivities.toString()}
-          description={`${stats.totalTrainings} Trainings, ${stats.totalGames} Games (including recurring)`}
-          icon={<IconActivity size={24} />}
-          color="blue"
-        />
-        <StatsCard
-          title="Attendance"
-          value={`${Math.round(stats.attendanceRate)}%`}
-          description={`${stats.totalPresences} Presences, ${stats.totalAbsences} Absences`}
-          icon={<IconUsers size={24} />}
-          color="green"
-        />
-      </SimpleGrid>
     </>
   );
 };
