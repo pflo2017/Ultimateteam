@@ -553,6 +553,11 @@ export const CoachPaymentsScreen = () => {
         };
       });
       setPlayers(transformedPlayers);
+      // Always update stats right after setting players
+      const totalPlayers = transformedPlayers.length;
+      const paidPlayers = transformedPlayers.filter(p => p.payment_status === 'paid').length;
+      const unpaidPlayers = totalPlayers - paidPlayers;
+      setStats({ totalPlayers, paidPlayers, unpaidPlayers });
       
       // Build a map: { 'YYYY-M': { paid: X, total: Y } }
       const statusMap: { [key: string]: { paid: number; total: number } } = {};
@@ -1501,20 +1506,12 @@ export const CoachPaymentsScreen = () => {
           payment_method: paymentInfo.payment_method ?? undefined
         };
       });
-      
-      console.log("[DEBUG] fetchAllTeamsPayments - Setting players state with transformed data:", transformedPlayers.length);
       setPlayers(transformedPlayers);
-      
-      // Calculate stats
+      // Always update stats right after setting players
       const totalPlayers = transformedPlayers.length;
       const paidPlayers = transformedPlayers.filter(p => p.payment_status === 'paid').length;
       const unpaidPlayers = totalPlayers - paidPlayers;
-      
-      setStats({
-        totalPlayers,
-        paidPlayers,
-        unpaidPlayers
-      });
+      setStats({ totalPlayers, paidPlayers, unpaidPlayers });
       
       // Now fetch attendance data for all teams
       await fetchAttendanceDataForAllTeams(year, month, teamIds, transformedPlayers);
@@ -1735,8 +1732,9 @@ export const CoachPaymentsScreen = () => {
           )}
           
           {/* Stats Summary */}
-          {selectedTeamId && (
+          {players.length > 0 && (
             <>
+              {console.log('[DEBUG][RENDER] Stats summary:', stats)}
               <View style={styles.statsContainer}>
                 <View style={styles.statItem}>
                   <MaterialCommunityIcons name="check-circle" size={24} color={COLORS.success} />
