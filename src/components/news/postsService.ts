@@ -1,6 +1,16 @@
 import { Post } from './types';
 import { supabase } from '../../lib/supabase';
 
+// Helper to fetch comment count for a post
+async function fetchCommentCount(postId: string): Promise<number> {
+  const { count } = await supabase
+    .from('post_comments')
+    .select('id', { count: 'exact', head: true })
+    .eq('post_id', postId)
+    .eq('is_active', true);
+  return count || 0;
+}
+
 export const fetchPosts = async (filters?: { team_ids?: string[]; club_id?: string }) : Promise<Post[]> => {
   // If no filters, fetch all general posts and all team posts for the user's teams
   let teamIds = filters?.team_ids || [];
@@ -217,19 +227,23 @@ export const fetchPosts = async (filters?: { team_ids?: string[]; club_id?: stri
   console.log('Total posts after removing duplicates:', uniquePosts.length);
   
   // Format posts to match the Post type
-  return uniquePosts.map(post => ({
-    id: post.id,
-    title: post.title,
-    content: post.content,
-    author_id: post.author_id,
-    author_name: post.author_name,
-    author_role: post.author_role,
-    created_at: post.created_at,
-    is_general: post.is_general,
-    club_id: post.club_id,
-    media_urls: post.media_urls,
-    teams: post.post_teams?.map((pt: any) => pt.team) || []
-  }));
+  const postsWithCounts = await Promise.all(
+    uniquePosts.map(async post => ({
+      id: post.id,
+      title: post.title,
+      content: post.content,
+      author_id: post.author_id,
+      author_name: post.author_name,
+      author_role: post.author_role,
+      created_at: post.created_at,
+      is_general: post.is_general,
+      club_id: post.club_id,
+      media_urls: post.media_urls,
+      teams: post.post_teams?.map((pt: any) => pt.team) || [],
+      comment_count: await fetchCommentCount(post.id),
+    }))
+  );
+  return postsWithCounts;
 };
 
 export const updatePost = async (postId: string, updates: { title?: string; content?: string }) => {

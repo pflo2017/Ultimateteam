@@ -1,45 +1,18 @@
 require('dotenv').config();
 
-export default {
-  expo: {
-    name: "Ultimate Team",
-    slug: "ultimateteam",
-    owner: "p.florin",
-    version: "1.0.0",
-    orientation: "portrait",
-    icon: "./assets/icon.png",
-    userInterfaceStyle: "light",
-    assetBundlePatterns: [
-      "**/*"
-    ],
-    splash: {
-      image: "./assets/splash.png",
-      resizeMode: "contain",
-      backgroundColor: "#ffffff"
-    },
-    ios: {
-      supportsTablet: true,
-      bundleIdentifier: "com.ultimateteam.app",
-      backgroundColor: "#ffffff"
-    },
-    android: {
-      adaptiveIcon: {
-        foregroundImage: "./assets/adaptive-icon.png",
-        backgroundColor: "#ffffff"
-      },
-      package: "com.ultimateteam.app"
-    },
-    web: {
-      favicon: "./assets/favicon.png"
-    },
-    extra: {
-      supabaseUrl: process.env.SUPABASE_URL,
-      supabaseAnonKey: process.env.SUPABASE_ANON_KEY
-    },
-    plugins: [],
-    experiments: {
-      tsconfigPaths: true
-    },
-    privacy: "unlisted"
+export default ({ config }) => ({
+  ...config,
+  updates: {
+    ...config.updates,
+    url: "https://u.expo.dev/f43e8b35-5e2a-4e5d-92bb-9cdc051ca72a"
+  },
+  runtimeVersion: {
+    policy: "appVersion"
+  },
+  extra: {
+    ...config.extra,
+    supabaseUrl: process.env.SUPABASE_URL || "https://ulltpjezntzgiawchmaj.supabase.co",
+    supabasePublishableKey: process.env.SUPABASE_PUBLISHABLE_KEY || "sb_publishable_k6gtnpe-RzS6RQ3EC8e5Jg_rVvZbqVm",
+    supabaseSecretKey: process.env.SUPABASE_SECRET_KEY || "sb_secret_Rh0p39XrweFbVGozkaflhQ_-pOLol5-"
   }
-};
+}); 
