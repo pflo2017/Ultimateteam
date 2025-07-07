@@ -1029,7 +1029,7 @@ export const AdminPaymentsScreen = () => {
                           <View style={styles.paymentUpdateContainer}>
                             <MaterialCommunityIcons name="clock-outline" size={16} color={COLORS.grey[600]} />
                             <Text style={styles.paymentUpdateText}>
-                              Marked as paid on {formatDate(player.payment_updated_at)}
+                              Paid on {formatDate(player.payment_updated_at)}
                             </Text>
                             {player.payment_method && (
                               <View style={{
