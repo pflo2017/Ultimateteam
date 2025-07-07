@@ -22,6 +22,7 @@ interface Player {
     total: number;
     percentage: number;
   };
+  payment_method?: string | null;
 }
 
 interface Team {
@@ -402,7 +403,8 @@ export const AdminPaymentsScreen = () => {
           team_name: player.teams?.name || 'Unknown Team',
           payment_status: paymentInfo.status as 'paid' | 'unpaid',
           payment_updated_at: paymentInfo.updated_at,
-          payment_updated_by: paymentInfo.updated_by
+          payment_updated_by: paymentInfo.updated_by,
+          payment_method: paymentInfo.payment_method ?? undefined
         };
       });
       
@@ -569,7 +571,8 @@ export const AdminPaymentsScreen = () => {
           team_name: player.teams?.name || 'Unknown Team',
           payment_status: paymentInfo.status as 'paid' | 'unpaid',
           payment_updated_at: paymentInfo.updated_at,
-          payment_updated_by: paymentInfo.updated_by
+          payment_updated_by: paymentInfo.updated_by,
+          payment_method: paymentInfo.payment_method ?? undefined
         };
       });
       
@@ -1028,28 +1031,24 @@ export const AdminPaymentsScreen = () => {
                             <Text style={styles.paymentUpdateText}>
                               Marked as paid on {formatDate(player.payment_updated_at)}
                             </Text>
-                          </View>
-                        )}
-                        
-                        {/* Attendance Info */}
-                        {player.attendance && (
-                          <View style={styles.attendanceContainer}>
-                            {/* Training label */}
-                            <MaterialCommunityIcons name="whistle" size={16} color={COLORS.primary} style={{ marginRight: 4 }} />
-                            <Text style={[styles.attendanceLabel, { marginRight: 8 }]}>Training:</Text>
-                            
-                            {/* Present icon */}
-                            <MaterialCommunityIcons name="check-circle" size={16} color={COLORS.success} style={{ marginRight: 2 }} />
-                            <Text style={styles.attendanceText}>{player.attendance.present}</Text>
-                            
-                            {/* Absent icon */}
-                            <MaterialCommunityIcons name="close-circle" size={16} color={COLORS.error} style={{ marginLeft: 8, marginRight: 2 }} />
-                            <Text style={styles.attendanceText}>{player.attendance.absent}</Text>
-                            
-                            {/* Total and percentage */}
-                            <Text style={{ marginHorizontal: 8, color: COLORS.grey[400], fontWeight: 'bold', fontSize: 16 }}>|</Text>
-                            <Text style={styles.attendanceText}>{player.attendance.total} total</Text>
-                            <Text style={[styles.attendanceText, { marginLeft: 4 }]}>({player.attendance.percentage}%)</Text>
+                            {player.payment_method && (
+                              <View style={{
+                                alignSelf: 'flex-start',
+                                backgroundColor: COLORS.primary + '15',
+                                borderRadius: 8,
+                                paddingHorizontal: 8,
+                                paddingVertical: 2,
+                                marginTop: 2,
+                                marginBottom: 2,
+                              }}>
+                                <Text style={{ fontSize: 13, color: COLORS.primary }}>
+                                  {player.payment_method === 'cash' && 'Cash'}
+                                  {player.payment_method === 'voucher_cash' && 'Voucher & cash'}
+                                  {player.payment_method === 'bank_transfer' && 'Bank transfer'}
+                                  {!['cash','voucher_cash','bank_transfer'].includes(player.payment_method) && player.payment_method}
+                                </Text>
+                              </View>
+                            )}
                           </View>
                         )}
                       </View>

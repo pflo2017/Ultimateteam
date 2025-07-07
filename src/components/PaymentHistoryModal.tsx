@@ -116,7 +116,8 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({ visibl
               year: record.year,
               month: record.month,
               status: record.status,
-              updated_at: record.updated_at
+              updated_at: record.updated_at,
+              payment_method: record.payment_method ?? undefined
             };
           });
         }
@@ -202,6 +203,24 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({ visibl
                         {payment.monthName} {payment.year}
                       </Text>
                       <StatusPill status={payment.status} />
+                      {payment.status === 'paid' && payment.payment_method && (
+                        <View style={{
+                          alignSelf: 'flex-start',
+                          backgroundColor: COLORS.primary + '15',
+                          borderRadius: 8,
+                          paddingHorizontal: 8,
+                          paddingVertical: 2,
+                          marginTop: 2,
+                          marginBottom: 2,
+                        }}>
+                          <Text style={{ fontSize: 13, color: COLORS.primary }}>
+                            {payment.payment_method === 'cash' && 'Cash'}
+                            {payment.payment_method === 'voucher_cash' && 'Voucher & cash'}
+                            {payment.payment_method === 'bank_transfer' && 'Bank transfer'}
+                            {!['cash','voucher_cash','bank_transfer'].includes(payment.payment_method) && payment.payment_method}
+                          </Text>
+                        </View>
+                      )}
                     </View>
                     {payment.updated_at ? (
                       <Text style={styles.paymentDate}>

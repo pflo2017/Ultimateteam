@@ -42,6 +42,7 @@ type Player = {
   medical_visa_status: string;
   medical_visa_issue_date?: string;
   parent_id?: string;
+  payment_method?: string;
 };
 
 type Parent = {
@@ -148,24 +149,29 @@ export const PlayerDetailsScreen = () => {
           }
         }
 
-        // Fetch fresh payment status
-        const now = new Date();
-        const year = now.getFullYear();
-        const month = now.getMonth() + 1;
-        
-        const { data: paymentData, error: paymentError } = await supabase
+        // Fetch ALL payment records for this player, order by year/month desc
+        const { data: allPayments, error: allPaymentsError } = await supabase
           .from('monthly_payments')
-          .select('status, updated_at')
+          .select('*')
           .eq('player_id', playerId)
-          .eq('year', year)
-          .eq('month', month)
-          .single();
-          
-        if (!paymentError && paymentData) {
-          playerData.payment_status = paymentData.status;
-          if (paymentData.status === 'paid' && paymentData.updated_at) {
-            playerData.last_payment_date = paymentData.updated_at;
-          }
+          .order('year', { ascending: false })
+          .order('month', { ascending: false });
+        if (allPaymentsError) throw allPaymentsError;
+
+        // Find the most recent paid record
+        let latestPaid = null;
+        let latestPaymentMethod = null;
+        if (allPayments && allPayments.length > 0) {
+          latestPaid = allPayments.find(p => p.status === 'paid');
+        }
+        if (latestPaid) {
+          playerData.payment_status = latestPaid.status;
+          playerData.last_payment_date = latestPaid.updated_at;
+          latestPaymentMethod = latestPaid.payment_method;
+        } else {
+          playerData.payment_status = allPayments && allPayments.length > 0 ? allPayments[0].status : 'not_paid';
+          playerData.last_payment_date = allPayments && allPayments.length > 0 ? allPayments[0].updated_at : null;
+          latestPaymentMethod = allPayments && allPayments.length > 0 ? allPayments[0].payment_method : null;
         }
 
         // Fetch parent data if available
@@ -221,13 +227,14 @@ export const PlayerDetailsScreen = () => {
           });
         }
 
-        // Set the player data with team name
+        // Set the player data with team name and payment_method if present
         const playerWithTeam: Player = {
           ...playerData,
-          teams: Array.isArray(playerData.teams) && playerData.teams.length > 0 
-            ? { name: playerData.teams[0].name }
-            : null,
-          team_name: teamName
+          teams: playerData.teams && Array.isArray(playerData.teams)
+            ? (playerData.teams.length > 0 ? { name: playerData.teams[0].name } : null)
+            : playerData.teams,
+          team_name: teamName,
+          ...(latestPaymentMethod ? { payment_method: latestPaymentMethod } : {})
         };
 
         console.log('Player data with team:', playerWithTeam);
@@ -291,18 +298,8 @@ export const PlayerDetailsScreen = () => {
         const key = `${year}-${month}`;
         if (recordsByMonth[key]) {
           return recordsByMonth[key];
-        } else if (month === currentMonth) {
-          // Only for current month, use player's current status if no DB record
-          return {
-            id: `virtual-${year}-${month}`,
-            player_id: playerId,
-            year,
-            month,
-            status: player?.payment_status || 'not_paid',
-            updated_at: new Date().toISOString()
-          };
         } else {
-          // For previous months, always show Not Paid if missing
+          // For any month with no record, always show Not Paid
           return {
             id: `virtual-${year}-${month}`,
             player_id: playerId,
@@ -605,6 +602,24 @@ export const PlayerDetailsScreen = () => {
                           {new Date(payment.year, payment.month - 1).toLocaleString('default', { month: 'long' })} {payment.year}
                         </Text>
                         <StatusPill status={payment.status} />
+                        {payment.status === 'paid' && payment.payment_method && (
+                          <View style={{
+                            alignSelf: 'flex-start',
+                            backgroundColor: COLORS.primary + '15',
+                            borderRadius: 8,
+                            paddingHorizontal: 8,
+                            paddingVertical: 2,
+                            marginTop: 2,
+                            marginBottom: 2,
+                          }}>
+                            <Text style={{ fontSize: 13, color: COLORS.primary }}>
+                              {payment.payment_method === 'cash' && 'Cash'}
+                              {payment.payment_method === 'voucher_cash' && 'Voucher & cash'}
+                              {payment.payment_method === 'bank_transfer' && 'Bank transfer'}
+                              {!['cash','voucher_cash','bank_transfer'].includes(payment.payment_method) && payment.payment_method}
+                            </Text>
+                          </View>
+                        )}
                       </View>
                       {payment.updated_at && (
                         <Text style={styles.paymentDate}>

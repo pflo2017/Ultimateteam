@@ -24,6 +24,7 @@ import { useDataRefresh } from '../../utils/useDataRefresh';
 import { RouteProp, useRoute } from '@react-navigation/native';
 import { CoachTabParamList } from '../../navigation/CoachNavigator';
 import { getPaymentStatusText, getPaymentStatusColor, updatePlayerPaymentStatus } from '../../services/paymentStatusService';
+import { RadioButton } from 'react-native-paper';
 
 interface Player {
   id: string;
@@ -44,6 +45,7 @@ interface Player {
   payment_updated_at?: string | null; // When the payment status was last updated
   payment_updated_by?: string | null; // Who updated the payment status
   payment_updated_by_name?: string | null; // Name of the person who updated the payment status
+  payment_method?: string; // Optional payment method
 }
 
 interface Team {
@@ -62,6 +64,7 @@ interface MonthlyPayment {
   year: number;
   month: number;
   status: string;
+  payment_method?: string; // Optional payment method
 }
 
 interface HistoryMonth { 
@@ -148,6 +151,18 @@ export const CoachPaymentsScreen = () => {
 
   // Add state for modal
   const [isMonthPickerVisible, setIsMonthPickerVisible] = useState(false);
+
+  // Add state for payment method modal
+  const [isPaymentMethodModalVisible, setIsPaymentMethodModalVisible] = useState(false);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string | null>(null);
+  const [pendingPaymentPlayer, setPendingPaymentPlayer] = useState<Player | null>(null);
+
+  // Payment method options
+  const paymentMethodOptions = [
+    { value: 'cash', label: 'Cash' },
+    { value: 'voucher_cash', label: 'Voucher & cash' },
+    { value: 'bank_transfer', label: 'Bank transfer' },
+  ];
 
   useEffect(() => {
     console.log("[DEBUG] Initial useEffect - Starting data fetch");
@@ -478,6 +493,25 @@ export const CoachPaymentsScreen = () => {
           unpaidPlayers: transformedPlayers.length
         });
         
+        // Build statusMap for future months (all unpaid)
+        const statusMap: { [key: string]: { paid: number; total: number } } = {};
+        playersData.forEach((player: any) => {
+          for (let m = 1; m <= 12; m++) {
+            const key = `${year}-${m}`;
+            if (!statusMap[key]) statusMap[key] = { paid: 0, total: 0 };
+            statusMap[key].total++;
+          }
+        });
+        
+        // Build monthStatusMap for future months (all not_all_paid)
+        const newMonthStatusMap: { [key: string]: 'all_paid' | 'not_all_paid' } = {};
+        Object.entries(statusMap).forEach(([key, val]) => {
+          if (val.total > 0) {
+            newMonthStatusMap[key] = 'not_all_paid';
+          }
+        });
+        setMonthStatusMap(newMonthStatusMap);
+        
         // Now fetch attendance data for these players
         await fetchAttendanceDataForTeam(year, month, teamId, transformedPlayers);
         setIsLoading(false);
@@ -502,21 +536,10 @@ export const CoachPaymentsScreen = () => {
       
       console.log(`Found ${paymentsData?.length || 0} payment records`);
       
-      // Create a map of payment statuses and update information
-      const paymentMap = new Map();
-      (paymentsData || []).forEach((payment: any) => {
-        paymentMap.set(payment.player_id, {
-          status: payment.status,
-          updated_at: payment.updated_at,
-          updated_by: payment.updated_by
-        });
-      });
-      
-      // Transform player data with payment status
+      // Transform player data with last paid status and date
       const transformedPlayers = (playersData || []).map((player: any) => {
-        // Default to 'unpaid' if no payment record exists
-        const paymentInfo = paymentMap.get(player.id) || { status: 'unpaid' };
-        
+        // Find payment record for this player for the selected month
+        const paymentInfo = (paymentsData || []).find((p: any) => p.player_id === player.id) || { status: 'unpaid', updated_at: null, updated_by: null };
         return {
           id: player.id,
           player_id: player.id,
@@ -526,35 +549,11 @@ export const CoachPaymentsScreen = () => {
           payment_status: paymentInfo.status,
           payment_updated_at: paymentInfo.updated_at,
           payment_updated_by: paymentInfo.updated_by,
-          // We don't have the user email, but we can display the timestamp
-          payment_updated_by_name: 'Coach'
+          payment_method: paymentInfo.payment_method ?? undefined,
         };
       });
-      
-      console.log("Setting players state with transformed data:", transformedPlayers.length);
       setPlayers(transformedPlayers);
       
-      // Calculate stats
-      const totalPlayers = transformedPlayers.length;
-      const paidPlayers = transformedPlayers.filter(p => p.payment_status === 'paid').length;
-      const unpaidPlayers = totalPlayers - paidPlayers;
-      
-      setStats({
-        totalPlayers,
-        paidPlayers,
-        unpaidPlayers
-      });
-      
-      // Now fetch attendance data for these players
-      await fetchAttendanceDataForTeam(year, month, teamId, transformedPlayers);
-      
-      // 2. After fetching payments for a team, compute monthStatusMap
-      // Fetch all months' payment data for these players
-      const { data: allPayments, error: allPaymentsError } = await supabase
-        .from('monthly_payments')
-        .select('player_id, year, month, status')
-        .in('player_id', playersData.map((p: any) => p.id));
-      if (allPaymentsError) throw allPaymentsError;
       // Build a map: { 'YYYY-M': { paid: X, total: Y } }
       const statusMap: { [key: string]: { paid: number; total: number } } = {};
       playersData.forEach((player: any) => {
@@ -564,12 +563,13 @@ export const CoachPaymentsScreen = () => {
           statusMap[key].total++;
         }
       });
-      (allPayments || []).forEach((payment: any) => {
+      (paymentsData || []).forEach((payment: any) => {
         const key = `${payment.year}-${payment.month}`;
         if (statusMap[key]) {
           if (payment.status === 'paid') statusMap[key].paid++;
         }
       });
+      
       // Now build monthStatusMap
       const newMonthStatusMap: { [key: string]: 'all_paid' | 'not_all_paid' } = {};
       Object.entries(statusMap).forEach(([key, val]) => {
@@ -709,81 +709,86 @@ export const CoachPaymentsScreen = () => {
     setSearchQuery(text);
   };
 
-  // Toggle payment status for a player
+  // Modified togglePaymentStatus to require payment method if marking as paid
   const togglePaymentStatus = async (player: Player) => {
+    if (player.payment_status !== 'paid') {
+      setPendingPaymentPlayer(player);
+      setIsPaymentMethodModalVisible(true);
+      return;
+    }
+    // If marking as unpaid, proceed as before
+    await updatePaymentStatus(player, 'not_paid', null);
+  };
+
+  // New function to update payment status with payment method
+  const updatePaymentStatus = async (player: Player, newStatus: string, paymentMethod: string | null) => {
     try {
-      // Determine the new status (opposite of current)
-      const newStatus = player.payment_status === 'paid' ? 'not_paid' : 'paid';
-      
-      console.log(`Toggling payment status for ${player.player_name} from ${player.payment_status} to ${newStatus}`);
-      
       if (!selectedMonth) return;
-      
-      // Get current user information
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         Alert.alert('Error', 'User information not found. Please log in again.');
         return;
       }
-      
       const now = new Date().toISOString();
-      
-      // Update the monthly_payments table
+      const upsertData: any = {
+        player_id: player.id,
+        year: selectedMonth.year,
+        month: selectedMonth.value,
+        status: newStatus,
+        updated_at: now,
+        updated_by: user.id
+      };
+      if (newStatus === 'paid' && paymentMethod) {
+        upsertData.payment_method = paymentMethod;
+      } else if (newStatus !== 'paid') {
+        // Do not set payment_method at all if not paid
+        delete upsertData.payment_method;
+      }
       const { error } = await supabase
         .from('monthly_payments')
-        .upsert({
-          player_id: player.id,
-          year: selectedMonth.year,
-          month: selectedMonth.value,
-          status: newStatus,
-          updated_at: now,
-          updated_by: user.id
-        }, {
-          onConflict: 'player_id,year,month'
-        });
-      
+        .upsert(upsertData, { onConflict: 'player_id,year,month' });
       if (error) throw error;
-      
-      // Update local state
-      setPlayers(players.map(p => 
-        p.id === player.id 
-          ? { 
-              ...p, 
+      setPlayers(players.map(p =>
+        p.id === player.id
+          ? {
+              ...p,
               payment_status: newStatus,
               payment_updated_at: now,
               payment_updated_by: user.id,
-              payment_updated_by_name: user.email
-            } 
+              payment_updated_by_name: user.email,
+              ...(upsertData.payment_method !== undefined ? { payment_method: upsertData.payment_method ?? undefined } : {})
+            }
           : p
       ));
-      
-      // Update stats
-      const updatedPaidCount = newStatus === 'paid' 
-        ? stats.paidPlayers + 1 
+      const updatedPaidCount = newStatus === 'paid'
+        ? stats.paidPlayers + 1
         : stats.paidPlayers - 1;
-        
       setStats({
         ...stats,
         paidPlayers: updatedPaidCount,
         unpaidPlayers: stats.totalPlayers - updatedPaidCount
       });
-      
-      // Show toast notification
       setToastMessage(`${player.player_name} marked as ${newStatus}`);
       setShowToast(true);
-      
-      // Broadcast event for other screens
       triggerEvent('payment_status_changed', player.id, newStatus, now);
-      
-      // Collapse the expanded card after action
-      setExpandedPlayerId(null);
-      
     } catch (error) {
-      console.error('Error toggling payment status:', error);
-      Alert.alert('Error', 'Failed to update payment status. Please try again.');
+      Alert.alert('Error', 'Failed to update payment status.');
     }
   };
-  
+
+  // Handler for confirming payment method
+  const handleConfirmPaymentMethod = async () => {
+    if (!pendingPaymentPlayer || !selectedPaymentMethod) {
+      Alert.alert('Select Payment Method', 'Please select a payment method.');
+      return;
+    }
+    await updatePaymentStatus(pendingPaymentPlayer, 'paid', selectedPaymentMethod);
+    setIsPaymentMethodModalVisible(false);
+    setSelectedPaymentMethod(null);
+    setPendingPaymentPlayer(null);
+    setExpandedPlayerId(null); // Collapse the expanded card after marking as paid
+  };
+
   // Filter players based on search query
   const filteredPlayers = players.filter(player => {
     const matchesSearch = !searchQuery || 
@@ -1012,16 +1017,8 @@ export const CoachPaymentsScreen = () => {
             month,
             status: recordsByMonth[key].status
           };
-        } else if (month === currentMonth) {
-          // For current month with no record, use player's current status
-          return {
-            player_id: playerId,
-            year,
-            month,
-            status: player.payment_status || 'not_paid'
-          };
         } else {
-          // For previous months with no record, show as Not Paid
+          // For any month with no record, always show Not Paid
           return {
             player_id: playerId,
             year,
@@ -1486,20 +1483,10 @@ export const CoachPaymentsScreen = () => {
       
       console.log(`[DEBUG] fetchAllTeamsPayments - Found ${paymentsData?.length || 0} payment records across all teams`);
       
-      // Create a map of payment statuses and update information
-      const paymentMap = new Map();
-      (paymentsData || []).forEach((payment: any) => {
-        paymentMap.set(payment.player_id, {
-          status: payment.status,
-          updated_at: payment.updated_at,
-          updated_by: payment.updated_by
-        });
-      });
-      
       // Transform player data with payment status
       const transformedPlayers = (playersData || []).map((player: any) => {
         // Default to 'unpaid' if no payment record exists
-        const paymentInfo = paymentMap.get(player.id) || { status: 'unpaid' };
+        const paymentInfo = (paymentsData || []).find((p: any) => p.player_id === player.id) || { status: 'unpaid' };
         
         return {
           id: player.id,
@@ -1510,7 +1497,8 @@ export const CoachPaymentsScreen = () => {
           payment_status: paymentInfo.status,
           payment_updated_at: paymentInfo.updated_at,
           payment_updated_by: paymentInfo.updated_by,
-          payment_updated_by_name: 'Coach'
+          payment_updated_by_name: 'Coach',
+          payment_method: paymentInfo.payment_method ?? undefined
         };
       });
       
@@ -1853,37 +1841,21 @@ export const CoachPaymentsScreen = () => {
                             <Text style={styles.paymentUpdateText}>
                               Marked as paid on {formatDate(player.payment_updated_at)}
                             </Text>
-                          </View>
-                        )}
-                        {/* Attendance Info */}
-                        {player.attendance && (
-                          <View style={styles.attendanceContainer}>
-                            {/* Training label */}
-                            <MaterialCommunityIcons name="whistle" size={16} color={COLORS.primary} style={{ marginRight: 4 }} />
-                            <Text style={[styles.attendanceLabel, { marginRight: 8 }]}>Training:</Text>
-                            
-                            {/* Present icon */}
-                            <MaterialCommunityIcons 
-                              name="check-circle" 
-                              size={16} 
-                              color={COLORS.success} 
-                              style={{ marginRight: 2 }} 
-                            />
-                            <Text style={styles.attendanceText}>{player.attendance.present}</Text>
-                            
-                            {/* Absent icon */}
-                            <MaterialCommunityIcons 
-                              name="close-circle" 
-                              size={16} 
-                              color={COLORS.error} 
-                              style={{ marginLeft: 8, marginRight: 2 }} 
-                            />
-                            <Text style={styles.attendanceText}>{player.attendance.absent}</Text>
-                            
-                            {/* Total and percentage */}
-                            <Text style={{ marginHorizontal: 8, color: COLORS.grey[400], fontWeight: 'bold', fontSize: 16 }}>|</Text>
-                            <Text style={styles.attendanceText}>{player.attendance.total} total</Text>
-                            <Text style={[styles.attendanceText, { marginLeft: 4 }]}>({player.attendance.percentage}%)</Text>
+                            {player.payment_method && (
+                              <View style={{
+                                alignSelf: 'flex-start',
+                                backgroundColor: COLORS.primary + '15',
+                                borderRadius: 8,
+                                paddingHorizontal: 8,
+                                paddingVertical: 2,
+                                marginTop: 2,
+                                marginBottom: 2,
+                              }}>
+                                <Text style={{ fontSize: 13, color: COLORS.primary }}>
+                                  {paymentMethodOptions.find(opt => opt.value === player.payment_method)?.label || player.payment_method}
+                                </Text>
+                              </View>
+                            )}
                           </View>
                         )}
                         {/* Expandable Payment Toggle Button */}
@@ -2013,6 +1985,67 @@ export const CoachPaymentsScreen = () => {
                 );
               })}
             </View>
+          </View>
+        </View>
+      </Modal>
+      {/* Payment Method Modal */}
+      <Modal
+        visible={isPaymentMethodModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setIsPaymentMethodModalVisible(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'flex-end' }}>
+          <View style={{ backgroundColor: 'white', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 24 }}>
+            <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 16 }}>Select Payment Method</Text>
+            <RadioButton.Group
+              onValueChange={value => setSelectedPaymentMethod(value)}
+              value={selectedPaymentMethod ?? ''}
+            >
+              {paymentMethodOptions.map(option => {
+                const isSelected = selectedPaymentMethod === option.value;
+                return (
+                  <TouchableOpacity
+                    key={option.value}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      marginBottom: 12,
+                      paddingVertical: 8,
+                      borderRadius: 8,
+                      backgroundColor: isSelected ? '#e6f7ff' : 'transparent',
+                    }}
+                    onPress={() => setSelectedPaymentMethod(option.value)}
+                    activeOpacity={0.7}
+                  >
+                    <RadioButton
+                      value={option.value}
+                      status={isSelected ? 'checked' : 'unchecked'}
+                      onPress={() => setSelectedPaymentMethod(option.value)}
+                      color="#00BDF2"
+                      uncheckedColor="#ccc"
+                    />
+                    <Text style={{ fontSize: 16, color: '#222' }}>{option.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </RadioButton.Group>
+            <TouchableOpacity
+              style={{ backgroundColor: COLORS.primary, borderRadius: 8, padding: 12, marginTop: 16, alignItems: 'center' }}
+              onPress={handleConfirmPaymentMethod}
+            >
+              <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>Confirm</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={{ marginTop: 12, alignItems: 'center' }}
+              onPress={() => {
+                setIsPaymentMethodModalVisible(false);
+                setSelectedPaymentMethod(null);
+                setPendingPaymentPlayer(null);
+              }}
+            >
+              <Text style={{ color: COLORS.error, fontSize: 16 }}>Cancel</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -2205,18 +2238,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     marginLeft: 3,
-  },
-  attendanceContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: SPACING.xs,
-    marginBottom: SPACING.md,
-    paddingHorizontal: SPACING.xs,
-  },
-  attendanceText: {
-    fontSize: 14,
-    color: COLORS.grey[600],
-    marginLeft: SPACING.xs,
   },
   paymentToggleButton: {
     flexDirection: 'row',

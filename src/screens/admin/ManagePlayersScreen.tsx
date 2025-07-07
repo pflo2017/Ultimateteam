@@ -33,6 +33,7 @@ interface Player {
   parent_id?: string;
   medicalVisaIssueDate?: string;
   medical_visa_issue_date?: string;
+  paymentMethod?: string;
 }
 
 interface ManagePlayersScreenProps {
@@ -245,75 +246,6 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
 
   // Create a PlayerCard component that fetches fresh status data
   const PlayerCardWithFreshStatus = ({ player }: { player: Player }) => {
-    const [freshStatus, setFreshStatus] = useState<string | null>(null);
-    const [freshPaidDate, setFreshPaidDate] = useState<string | null>(null);
-    const [freshMedicalVisaStatus, setFreshMedicalVisaStatus] = useState<string | null>(null);
-    const [freshMedicalVisaIssueDate, setFreshMedicalVisaIssueDate] = useState<string | null>(null);
-    
-    useEffect(() => {
-      const getFreshStatus = async () => {
-        try {
-          // Get current year and month
-          const now = new Date();
-          const year = now.getFullYear();
-          const month = now.getMonth() + 1;
-          
-          // Fetch payment status and updated_at for this month from monthly_payments
-          // Force a network request by adding a random param to bypass cache
-          const random = Math.random();
-          console.log(`[DEBUG] Fetching payment status for player ${player.id} (admin) for ${year}-${month}, random=${random}`);
-          
-          const { data, error } = await supabase
-            .from('monthly_payments')
-            .select('status, updated_at')
-            .eq('player_id', player.id)
-            .eq('year', year)
-            .eq('month', month)
-            .single();
-            
-          console.log('[DEBUG] Raw payment status fetch result:', { data, error });
-          
-          if (!error && data && data.status) {
-            console.log(`[DEBUG] Setting fresh payment status for ${player.name}: ${data.status}`);
-            setFreshStatus(data.status);
-            if (data.status === 'paid' && data.updated_at) {
-              const paidDate = new Date(data.updated_at).toLocaleDateString('en-GB');
-              setFreshPaidDate(paidDate);
-            } else {
-              setFreshPaidDate(null);
-            }
-          } else {
-            console.log(`[DEBUG] No payment data found for ${player.name}, setting to unpaid`);
-            setFreshStatus('unpaid');
-            setFreshPaidDate(null);
-          }
-          
-          // Also fetch fresh medical visa status
-          const { data: playerData, error: playerError } = await supabase
-            .from('players')
-            .select('medical_visa_status, medical_visa_issue_date')
-            .eq('id', player.id)
-            .single();
-            
-          if (!playerError && playerData) {
-            setFreshMedicalVisaStatus(playerData.medical_visa_status);
-            setFreshMedicalVisaIssueDate(playerData.medical_visa_issue_date);
-          }
-        } catch (err) {
-          console.error(`[ERROR] Error fetching fresh status for player ${player.name}:`, err);
-          setFreshStatus('unpaid');
-          setFreshPaidDate(null);
-        }
-      };
-      
-      getFreshStatus();
-    }, [player.id, player.name]);
-    
-    // Use freshStatus if available, otherwise fall back to player.payment_status
-    const displayStatus = freshStatus || player.payment_status;
-    const displayMedicalVisaStatus = freshMedicalVisaStatus || player.medicalVisaStatus || 'pending';
-    const displayMedicalVisaIssueDate = freshMedicalVisaIssueDate || player.medicalVisaIssueDate || player.medical_visa_issue_date;
-    
     // Format the date if it exists
     let formattedBirthDate = 'Not available';
     if (player.birth_date) {
@@ -326,7 +258,7 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
         console.error("Error formatting birth date:", e);
       }
     }
-    
+
     return (
       <Card 
         key={player.id} 
@@ -373,7 +305,7 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
               Medical Visa
             </Text>
             <View style={{
-              backgroundColor: getMedicalVisaStatusColor(displayMedicalVisaStatus) + '20',
+              backgroundColor: getMedicalVisaStatusColor(player.medicalVisaStatus) + '20',
               borderRadius: 12,
               paddingHorizontal: SPACING.md,
               paddingVertical: 4,
@@ -384,30 +316,17 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
               <Text style={{
                 fontSize: FONT_SIZES.xs,
                 fontWeight: '600',
-                color: getMedicalVisaStatusColor(displayMedicalVisaStatus)
+                color: getMedicalVisaStatusColor(player.medicalVisaStatus)
               }}>
-                {displayMedicalVisaStatus === 'no_status' 
+                {player.medicalVisaStatus === 'no_status' 
                   ? 'No Status' 
-                  : displayMedicalVisaStatus.charAt(0).toUpperCase() + displayMedicalVisaStatus.slice(1)}
+                  : player.medicalVisaStatus.charAt(0).toUpperCase() + player.medicalVisaStatus.slice(1)}
               </Text>
             </View>
             <View style={{ alignItems: 'flex-end', marginLeft: 'auto' }}>
               <Text style={{ fontSize: FONT_SIZES.xs, color: COLORS.grey[600], fontWeight: '500' }}>Until</Text>
               <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '600' }}>
-                {displayMedicalVisaStatus === 'valid' && displayMedicalVisaIssueDate ?
-                  (() => {
-                    try {
-                      const issueDate = new Date(displayMedicalVisaIssueDate);
-                    if (isNaN(issueDate.getTime())) return 'N/A';
-                    const expiryDate = new Date(issueDate);
-                    expiryDate.setMonth(expiryDate.getMonth() + 6);
-                    return expiryDate.toLocaleDateString('en-GB');
-                    } catch (e) {
-                      console.error("Error calculating expiry date:", e);
-                      return 'N/A';
-                    }
-                  })()
-                  : 'N/A'}
+                {'N/A'}
               </Text>
             </View>
           </View>
@@ -418,7 +337,7 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
               Payment Status
             </Text>
             <View style={{
-              backgroundColor: getPaymentStatusColor(displayStatus || '') + '20',
+              backgroundColor: getPaymentStatusColor(player.paymentStatus || '') + '20',
               borderRadius: 12,
               paddingHorizontal: SPACING.md,
               paddingVertical: 4,
@@ -429,16 +348,35 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
               <Text style={{
                 fontSize: FONT_SIZES.xs,
                 fontWeight: '600',
-                color: getPaymentStatusColor(displayStatus || '')
+                color: getPaymentStatusColor(player.paymentStatus || '')
               }}>
-                {getPaymentStatusText(displayStatus || '')}
+                {getPaymentStatusText(player.paymentStatus || '')}
               </Text>
             </View>
-            {displayStatus === 'paid' && freshPaidDate && (
+            {player.paymentStatus === 'paid' && player.last_payment_date && (
               <View style={{ alignItems: 'flex-end', marginLeft: 'auto' }}>
                 <Text style={{ fontSize: FONT_SIZES.xs, color: COLORS.grey[600], fontWeight: '500' }}>Marked as paid on</Text>
                 <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '600' }}>
-                  {freshPaidDate}
+                  {new Date(player.last_payment_date).toLocaleDateString('en-GB')}
+                </Text>
+              </View>
+            )}
+            {/* Payment method badge */}
+            {player.paymentStatus === 'paid' && player.paymentMethod && (
+              <View style={{
+                alignSelf: 'flex-start',
+                backgroundColor: COLORS.primary + '15',
+                borderRadius: 8,
+                paddingHorizontal: 8,
+                paddingVertical: 2,
+                marginTop: 2,
+                marginBottom: 2,
+              }}>
+                <Text style={{ fontSize: 13, color: COLORS.primary }}>
+                  {player.paymentMethod === 'cash' && 'Cash'}
+                  {player.paymentMethod === 'voucher_cash' && 'Voucher & cash'}
+                  {player.paymentMethod === 'bank_transfer' && 'Bank transfer'}
+                  {!['cash','voucher_cash','bank_transfer'].includes(player.paymentMethod) && player.paymentMethod}
                 </Text>
               </View>
             )}

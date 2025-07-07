@@ -315,6 +315,28 @@ export const AdminManageScreen = () => {
 
       if (playersError) throw playersError;
 
+      // Fetch latest payment record for each player
+      const playerIds = playersData.map(player => player.id);
+      const { data: paymentsData, error: paymentsError } = await supabase
+        .from('monthly_payments')
+        .select('*')
+        .in('player_id', playerIds)
+        .order('year', { ascending: false })
+        .order('month', { ascending: false });
+      if (paymentsError) throw paymentsError;
+
+      // Build a map of latest payment record for each player
+      const latestPaymentMap = new Map();
+      const latestPaidMap = new Map();
+      for (const payment of paymentsData) {
+        if (!latestPaymentMap.has(payment.player_id)) {
+          latestPaymentMap.set(payment.player_id, payment);
+        }
+        if (payment.status === 'paid' && !latestPaidMap.has(payment.player_id)) {
+          latestPaidMap.set(payment.player_id, payment);
+        }
+      }
+
       console.log('Raw players data from DB:', JSON.stringify(playersData, null, 2));
       
       // Log all players' medical visa status for debugging
@@ -326,7 +348,6 @@ export const AdminManageScreen = () => {
       })));
       
       // Fetch related parent_children data for additional info
-      const playerIds = playersData.map(player => player.id);
       const parentIds = playersData
         .filter(player => player.parent_id)
         .map(player => player.parent_id);
@@ -379,21 +400,26 @@ export const AdminManageScreen = () => {
       const transformedPlayers = playersData.map(player => {
         // Use medical visa status directly from players table
         let medicalVisaStatus = player.medical_visa_status;
-        console.log(`[DEBUG] Admin - Player ${player.name} raw medical visa status: ${medicalVisaStatus}`);
-        // Don't default to 'pending' - use the actual value from the database
         let paymentStatus = player.payment_status || 'pending';
+        let paymentMethod = null;
+        let lastPaymentDate = null;
         let teamId = player.team_id;
         let teamName = null;
         let birthDate = player.birth_date;
         let matchingChild = undefined;
-        
-        // Check for recently joined players - set to on_trial ONLY if no status is set
-        if (!player.payment_status) {
-          const createdAt = new Date(player.created_at);
-          const now = new Date();
-          const diff = now.getTime() - createdAt.getTime();
-          const isOnTrial = diff < 30 * 24 * 60 * 60 * 1000;
-          if (isOnTrial) paymentStatus = 'on_trial';
+
+        // Use latest payment record if available
+        const latestPayment = latestPaymentMap.get(player.id);
+        if (latestPayment) {
+          paymentStatus = latestPayment.status;
+          paymentMethod = latestPayment.payment_method;
+        }
+        // Use latest paid record for last_payment_date
+        const latestPaid = latestPaidMap.get(player.id);
+        if (latestPaid) {
+          lastPaymentDate = latestPaid.updated_at;
+        } else if (latestPayment) {
+          lastPaymentDate = latestPayment.updated_at;
         }
         
         // Still check parent_children for additional info
@@ -429,14 +455,15 @@ export const AdminManageScreen = () => {
           medicalVisaStatus: medicalVisaStatus,
           paymentStatus,
           payment_status: paymentStatus,
+          paymentMethod,
           parent_id: player.parent_id,
           birth_date: birthDate,
-          last_payment_date: player.last_payment_date,
+          last_payment_date: lastPaymentDate,
           medicalVisaIssueDate: player.medical_visa_issue_date,
         };
       });
 
-      setPlayers(transformedPlayers);
+      setPlayers(transformedPlayers.filter(Boolean));
     } catch (error) {
       console.error('Error fetching players:', error);
     }
