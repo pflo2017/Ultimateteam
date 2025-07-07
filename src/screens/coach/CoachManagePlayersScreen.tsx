@@ -114,7 +114,7 @@ const PlayerCard = ({ player, onDetailsPress, onDelete, onUpdateMedicalVisa }: {
   const [refreshedStatus, setRefreshedStatus] = useState<string | null>(null);
   const [refreshedPaidDate, setRefreshedPaidDate] = useState<string | null>(null);
   const [refreshedLastPaidMonth, setRefreshedLastPaidMonth] = useState<string | null>(null);
-  const [refreshedMonthsSinceLastPayment, setRefreshedMonthsSinceLastPayment] = useState<number | null>(null);
+  const [refreshedLastPaidExactDate, setRefreshedLastPaidExactDate] = useState<string | null>(null);
   const [refreshedMedicalVisaStatus, setRefreshedMedicalVisaStatus] = useState<string | null>(null);
   const [refreshedMedicalVisaIssueDate, setRefreshedMedicalVisaIssueDate] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -129,8 +129,6 @@ const PlayerCard = ({ player, onDetailsPress, onDelete, onUpdateMedicalVisa }: {
       const month = now.getMonth() + 1;
       
       // First, check current month payment status
-      console.log(`[DEBUG] Fetching current month payment status for player ${player.id} (coach) for ${year}-${month}`);
-      
       const { data: currentMonthData, error: currentMonthError } = await supabase
         .from('monthly_payments')
         .select('status, updated_at')
@@ -138,12 +136,8 @@ const PlayerCard = ({ player, onDetailsPress, onDelete, onUpdateMedicalVisa }: {
         .eq('year', year)
         .eq('month', month)
         .single();
-        
-      console.log('[DEBUG] Current month payment status fetch result:', { currentMonthData, currentMonthError });
       
       // Then, find the last paid payment record
-      console.log(`[DEBUG] Fetching last paid payment for player ${player.id}`);
-      
       const { data: lastPaidData, error: lastPaidError } = await supabase
         .from('monthly_payments')
         .select('status, updated_at, year, month')
@@ -153,41 +147,29 @@ const PlayerCard = ({ player, onDetailsPress, onDelete, onUpdateMedicalVisa }: {
         .order('month', { ascending: false })
         .limit(1)
         .single();
-        
-      console.log('[DEBUG] Last paid payment fetch result:', { lastPaidData, lastPaidError });
       
       // Set current month status
       if (!currentMonthError && currentMonthData && currentMonthData.status) {
-        console.log(`[DEBUG] Setting current month payment status for ${player.player_name || player.name}: ${currentMonthData.status}`);
         setRefreshedStatus(currentMonthData.status);
+        if (currentMonthData.status === 'paid' && currentMonthData.updated_at) {
+          const paidDate = new Date(currentMonthData.updated_at);
+          setRefreshedPaidDate(paidDate.toLocaleDateString('en-GB'));
+        } else {
+          setRefreshedPaidDate(null);
+        }
       } else {
-        console.log(`[DEBUG] No current month payment data found for ${player.player_name || player.name}, setting to unpaid`);
         setRefreshedStatus('unpaid');
+        setRefreshedPaidDate(null);
       }
-      
-      // Set last paid date if found
+      // Set last paid month and exact date if found
       if (!lastPaidError && lastPaidData && lastPaidData.status === 'paid' && lastPaidData.updated_at) {
         const paidDate = new Date(lastPaidData.updated_at);
         const monthName = paidDate.toLocaleDateString('en-GB', { month: 'long' });
-        const year = paidDate.getFullYear();
-        const lastPaidText = `${monthName} ${year}`;
-        const lastPaidMonthText = `${lastPaidData.month}/${lastPaidData.year}`;
-        
-        // Calculate months since last payment
-        const currentDate = new Date();
-        const currentYear = currentDate.getFullYear();
-        const currentMonth = currentDate.getMonth() + 1;
-        const monthsSinceLastPayment = (currentYear - lastPaidData.year) * 12 + (currentMonth - lastPaidData.month);
-        
-        console.log(`[DEBUG] Setting last paid date for ${player.player_name || player.name}: ${lastPaidText} (${lastPaidMonthText}), months since: ${monthsSinceLastPayment}`);
-        setRefreshedPaidDate(lastPaidText);
-        setRefreshedLastPaidMonth(lastPaidMonthText);
-        setRefreshedMonthsSinceLastPayment(monthsSinceLastPayment);
+        setRefreshedLastPaidMonth(monthName);
+        setRefreshedLastPaidExactDate(paidDate.toLocaleDateString('en-GB'));
       } else {
-        console.log(`[DEBUG] No last paid payment found for ${player.player_name || player.name}`);
-        setRefreshedPaidDate(null);
         setRefreshedLastPaidMonth(null);
-        setRefreshedMonthsSinceLastPayment(null);
+        setRefreshedLastPaidExactDate(null);
       }
       
       // Also fetch fresh medical visa status
@@ -249,7 +231,7 @@ const PlayerCard = ({ player, onDetailsPress, onDelete, onUpdateMedicalVisa }: {
   const displayStatus = refreshedStatus || player.payment_status;
   const displayPaidDate = refreshedPaidDate;
   const displayLastPaidMonth = refreshedLastPaidMonth;
-  const displayMonthsSinceLastPayment = refreshedMonthsSinceLastPayment;
+  const displayLastPaidExactDate = refreshedLastPaidExactDate;
   const displayMedicalVisaStatus = refreshedMedicalVisaStatus || player.medical_visa_status;
   const displayMedicalVisaIssueDate = refreshedMedicalVisaIssueDate || player.medical_visa_issue_date;
   
@@ -353,57 +335,72 @@ const PlayerCard = ({ player, onDetailsPress, onDelete, onUpdateMedicalVisa }: {
         </TouchableOpacity>
         
         <View style={{ marginBottom: SPACING.md }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <MaterialCommunityIcons name="credit-card-outline" size={20} color={COLORS.primary} />
-            <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500' }}>
-              Payment Status
-            </Text>
-            <View style={{
-              backgroundColor: getPaymentStatusColor(displayStatus) + '20',
-              borderRadius: 12,
-              paddingHorizontal: SPACING.md,
-              paddingVertical: 4,
-              alignItems: 'center',
-              justifyContent: 'center',
-              marginLeft: 4,
-            }}>
-              <Text style={{
-                fontSize: FONT_SIZES.xs,
-                fontWeight: '600',
-                color: getPaymentStatusColor(displayStatus)
-              }}>
-                {getPaymentStatusText(displayStatus)}
-              </Text>
-            </View>
-          </View>
-          {/* Details below the badge, always left-aligned and wrapped */}
-          {(displayPaidDate || (displayMonthsSinceLastPayment !== null && displayMonthsSinceLastPayment > 0 && displayStatus !== 'paid')) && (
-            <View style={{ marginLeft: 34, marginTop: 4, flexDirection: 'column', alignItems: 'flex-start', flexWrap: 'wrap' }}>
-              {displayPaidDate && (
-                <Text style={{ fontSize: FONT_SIZES.xs, color: COLORS.grey[600], fontWeight: '500' }}>
-                  {displayStatus === 'paid' ? 'Paid on' : 'Last paid'} {displayPaidDate}
-                  {displayLastPaidMonth && displayStatus !== 'paid' ? ` (${displayLastPaidMonth})` : ''}
-                </Text>
-              )}
-              {displayMonthsSinceLastPayment !== null && displayMonthsSinceLastPayment > 0 && displayStatus !== 'paid' && (
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
-                  <MaterialCommunityIcons 
-                    name="alert-circle" 
-                    size={12} 
-                    color={displayMonthsSinceLastPayment >= 3 ? COLORS.error : COLORS.warning} 
-                  />
-                  <Text style={{ 
-                    fontSize: FONT_SIZES.xs, 
-                    color: displayMonthsSinceLastPayment >= 3 ? COLORS.error : COLORS.warning, 
-                    fontWeight: '500',
-                    marginLeft: 2
-                  }}>
-                    {displayMonthsSinceLastPayment} month{displayMonthsSinceLastPayment !== 1 ? 's' : ''} overdue
+            {displayStatus === 'paid' && displayPaidDate ? (
+              <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginLeft: 8 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500', marginRight: 8 }}>
+                    Payment Status
                   </Text>
+                  <View style={{
+                    backgroundColor: getPaymentStatusColor(displayStatus) + '20',
+                    borderRadius: 12,
+                    paddingHorizontal: SPACING.md,
+                    paddingVertical: 4,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}>
+                    <Text style={{
+                      fontSize: FONT_SIZES.xs,
+                      fontWeight: '600',
+                      color: getPaymentStatusColor(displayStatus)
+                    }}>
+                      {getPaymentStatusText(displayStatus)}
+                    </Text>
+                  </View>
                 </View>
-              )}
-            </View>
-          )}
+                <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500' }}>
+                  {displayPaidDate}
+                </Text>
+              </View>
+            ) : (
+              <View style={{ flex: 1, flexDirection: 'column', marginLeft: 8 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500', marginRight: 8 }}>
+                    Payment Status
+                  </Text>
+                  <View style={{
+                    backgroundColor: getPaymentStatusColor(displayStatus) + '20',
+                    borderRadius: 12,
+                    paddingHorizontal: SPACING.md,
+                    paddingVertical: 4,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}>
+                    <Text style={{
+                      fontSize: FONT_SIZES.xs,
+                      fontWeight: '600',
+                      color: getPaymentStatusColor(displayStatus)
+                    }}>
+                      {getPaymentStatusText(displayStatus)}
+                    </Text>
+                  </View>
+                </View>
+                {/* Details below, left-aligned with label */}
+                {displayStatus !== 'paid' && displayLastPaidMonth && displayLastPaidExactDate && (
+                  <View style={{ flexDirection: 'row', alignItems: 'baseline', marginTop: 8, marginLeft: 0 }}>
+                    <Text style={{ fontSize: FONT_SIZES.sm, fontWeight: '700', color: COLORS.text }}>
+                      {displayLastPaidMonth}
+                    </Text>
+                    <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.grey[600], fontWeight: '500', marginLeft: 6 }}>
+                      Paid on {displayLastPaidExactDate}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
         </View>
         
         <View style={styles.actionButtons}>
