@@ -1734,7 +1734,6 @@ export const CoachPaymentsScreen = () => {
           {/* Stats Summary */}
           {players.length > 0 && (
             <>
-              {console.log('[DEBUG][RENDER] Stats summary:', stats)}
               <View style={styles.statsContainer}>
                 <View style={styles.statItem}>
                   <MaterialCommunityIcons name="check-circle" size={24} color={COLORS.success} />
