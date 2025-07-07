@@ -333,32 +333,67 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
           
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: SPACING.md }}>
             <MaterialCommunityIcons name="credit-card-outline" size={20} color={COLORS.primary} />
-            <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500' }}>
-              Payment Status
-            </Text>
-            <View style={{
-              backgroundColor: getPaymentStatusColor(player.paymentStatus || '') + '20',
-              borderRadius: 12,
-              paddingHorizontal: SPACING.md,
-              paddingVertical: 4,
-              alignItems: 'center',
-              justifyContent: 'center',
-              marginLeft: 4,
-            }}>
-              <Text style={{
-                fontSize: FONT_SIZES.xs,
-                fontWeight: '600',
-                color: getPaymentStatusColor(player.paymentStatus || '')
-              }}>
-                {getPaymentStatusText(player.paymentStatus || '')}
-              </Text>
-            </View>
-            {player.paymentStatus === 'paid' && player.last_payment_date && (
-              <View style={{ alignItems: 'flex-end', marginLeft: 'auto' }}>
-                <Text style={{ fontSize: FONT_SIZES.xs, color: COLORS.grey[600], fontWeight: '500' }}>Marked as paid on</Text>
-                <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '600' }}>
+            {player.paymentStatus === 'paid' && player.last_payment_date ? (
+              <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginLeft: 8 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500', marginRight: 8 }}>
+                    Payment Status
+                  </Text>
+                  <View style={{
+                    backgroundColor: getPaymentStatusColor(player.paymentStatus || '') + '20',
+                    borderRadius: 12,
+                    paddingHorizontal: SPACING.md,
+                    paddingVertical: 4,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}>
+                    <Text style={{
+                      fontSize: FONT_SIZES.xs,
+                      fontWeight: '600',
+                      color: getPaymentStatusColor(player.paymentStatus || '')
+                    }}>
+                      {getPaymentStatusText(player.paymentStatus || '')}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500' }}>
                   {new Date(player.last_payment_date).toLocaleDateString('en-GB')}
                 </Text>
+              </View>
+            ) : (
+              <View style={{ flex: 1, flexDirection: 'column', marginLeft: 8 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500', marginRight: 8 }}>
+                    Payment Status
+                  </Text>
+                  <View style={{
+                    backgroundColor: getPaymentStatusColor(player.paymentStatus || '') + '20',
+                    borderRadius: 12,
+                    paddingHorizontal: SPACING.md,
+                    paddingVertical: 4,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}>
+                    <Text style={{
+                      fontSize: FONT_SIZES.xs,
+                      fontWeight: '600',
+                      color: getPaymentStatusColor(player.paymentStatus || '')
+                    }}>
+                      {getPaymentStatusText(player.paymentStatus || '')}
+                    </Text>
+                  </View>
+                </View>
+                {/* Details below, left-aligned with label */}
+                {player.paymentStatus !== 'paid' && player.last_payment_date && (
+                  <View style={{ flexDirection: 'row', alignItems: 'baseline', marginTop: 8, marginLeft: 0 }}>
+                    <Text style={{ fontSize: FONT_SIZES.sm, fontWeight: '700', color: COLORS.text }}>
+                      {new Date(player.last_payment_date).toLocaleDateString('en-GB', { month: 'long' })}
+                    </Text>
+                    <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.grey[600], fontWeight: '500', marginLeft: 6 }}>
+                      Paid on {new Date(player.last_payment_date).toLocaleDateString('en-GB')}
+                    </Text>
+                  </View>
+                )}
               </View>
             )}
             {/* Payment method badge */}
