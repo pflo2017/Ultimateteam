@@ -559,6 +559,12 @@ export const CoachPaymentsScreen = () => {
       const unpaidPlayers = totalPlayers - paidPlayers;
       setStats({ totalPlayers, paidPlayers, unpaidPlayers });
       
+      // Fetch all months' payment data for these players (like admin)
+      const { data: allPayments, error: allPaymentsError } = await supabase
+        .from('monthly_payments')
+        .select('player_id, year, month, status')
+        .in('player_id', playersData.map((p: any) => p.id));
+      if (allPaymentsError) throw allPaymentsError;
       // Build a map: { 'YYYY-M': { paid: X, total: Y } }
       const statusMap: { [key: string]: { paid: number; total: number } } = {};
       playersData.forEach((player: any) => {
@@ -568,13 +574,12 @@ export const CoachPaymentsScreen = () => {
           statusMap[key].total++;
         }
       });
-      (paymentsData || []).forEach((payment: any) => {
+      (allPayments || []).forEach((payment: any) => {
         const key = `${payment.year}-${payment.month}`;
         if (statusMap[key]) {
           if (payment.status === 'paid') statusMap[key].paid++;
         }
       });
-      
       // Now build monthStatusMap
       const newMonthStatusMap: { [key: string]: 'all_paid' | 'not_all_paid' } = {};
       Object.entries(statusMap).forEach(([key, val]) => {
