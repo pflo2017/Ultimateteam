@@ -279,132 +279,86 @@ const PaymentsPage: React.FC = () => {
       const year = parseInt(yearFilter);
       const month = parseInt(monthFilter);
 
-      console.log(`Fetching payments for ${MONTHS[month-1]} ${year}`);
-      
       // Use adminSupabase to bypass RLS if available, otherwise fall back to regular supabase client
       const client = adminSupabase || supabase;
 
-      // First, fetch all teams to create a map of team IDs to names
+      // Get club ID from localStorage (for club admin)
       const clubId = localStorage.getItem('clubId');
+      // Fetch all teams for the club
       const { data: teamsData, error: teamsError } = await client
         .from('teams')
         .select('id, name')
         .eq('is_active', true)
         .eq('club_id', clubId);
-      
       if (teamsError) {
         console.error('Error fetching teams:', teamsError);
       }
-      
-      // Create a map of team IDs to team names
       const teamMap: Record<string, string> = {};
       if (teamsData && teamsData.length > 0) {
         teamsData.forEach((team: any) => {
           teamMap[team.id] = team.name;
         });
       }
-      
-      console.log('Team map:', teamMap);
-      
-      // Fetch payments for the selected month/year
+
+      // Fetch all active players for the club (and team if filtered)
+      let playersQuery = client
+        .from('players')
+        .select('id, name, team_id')
+        .eq('is_active', true)
+        .eq('club_id', clubId);
+      if (teamFilter) {
+        playersQuery = playersQuery.eq('team_id', teamFilter);
+      }
+      const { data: playersData, error: playersError } = await playersQuery;
+      if (playersError) {
+        setError('Failed to load players: ' + playersError.message);
+        setLoading(false);
+        return;
+      }
+      const playerIds = playersData.map((p: any) => p.id);
+
+      // Fetch all monthly_payments for these players for the selected month/year
       const { data: paymentData, error: paymentError } = await client
         .from('monthly_payments')
         .select('*')
         .eq('year', year)
-        .eq('month', month);
-      
+        .eq('month', month)
+        .in('player_id', playerIds);
       if (paymentError) {
-        console.error('Error fetching payments:', paymentError);
-        setError(`Failed to load payments: ${paymentError.message}`);
+        setError('Failed to load payments: ' + paymentError.message);
         setLoading(false);
         return;
       }
-      
-      console.log('Payments data:', paymentData);
-      
-      if (!paymentData || paymentData.length === 0) {
-        console.log('No payment data found for the selected period');
-        setPayments([]);
-        setSummary({
+      // Map player_id to payment record
+      const paymentMap: Record<string, any> = {};
+      if (paymentData) {
+        paymentData.forEach((payment: any) => {
+          paymentMap[payment.player_id] = payment;
+        });
+      }
+      // Build the full list for the table
+      const transformedPayments = playersData.map((player: any) => {
+        const payment = paymentMap[player.id];
+        return {
+          id: payment ? payment.id : player.id,
+          player_id: player.id,
+          player_name: player.name,
+          team_id: player.team_id,
+          team_name: teamMap[player.team_id] || 'No Team',
           year,
           month,
-          totalPlayers: 0,
-          paidCount: 0,
-          unpaidCount: 0,
-          paidPercentage: 0
-        });
-        setFilteredPayments([]);
-        setTotalPages(1);
-        setActivePage(1);
-        setLoading(false);
-        return;
-      }
-      
-      // Get all player IDs from the payment data
-      const playerIds = paymentData.map(payment => payment.player_id);
-      
-      // Fetch player details with team information in a single query
-      const { data: playersWithTeams, error: playersWithTeamsError } = await client
-        .from('players')
-        .select(`
-          id, 
-          name,
-          team_id,
-          teams:team_id (
-            id,
-            name
-          )
-        `)
-        .in('id', playerIds);
-      
-      if (playersWithTeamsError) {
-        console.error('Error fetching players with teams:', playersWithTeamsError);
-      }
-      
-      // Create a map of player IDs to player info including team data
-      const playerMap: Record<string, {name: string, team_id?: string, team_name?: string}> = {};
-      
-      if (playersWithTeams && playersWithTeams.length > 0) {
-        console.log('Players with teams data:', playersWithTeams);
-        
-        playersWithTeams.forEach((player: any) => {
-          playerMap[player.id] = {
-            name: player.name || 'Unknown Player',
-            team_id: player.team_id,
-            team_name: player.teams?.name || 'No Team'
-          };
-        });
-      }
-      
-      console.log('Player map with teams:', playerMap);
-      
-      // Transform the payment data to include player names and team info
-      const transformedPayments = paymentData.map(payment => {
-        const playerInfo = playerMap[payment.player_id] || {};
-        console.log(`Player ${payment.player_id} info:`, playerInfo);
-        
-        // Ensure team_id is a string
-        const team_id = playerInfo.team_id ? String(playerInfo.team_id) : null;
-        
-        return {
-          ...payment,
-          player_name: playerInfo.name || 'Unknown Player',
-          team_id: team_id,
-          team_name: playerInfo.team_name || 'No Team',
-          // Format the date for display
-          updated_at: payment.updated_at ? new Date(payment.updated_at).toLocaleString() : ''
+          status: payment ? payment.status : 'unpaid',
+          payment_method: payment ? payment.payment_method : '-',
+          updated_at: payment && payment.updated_at ? new Date(payment.updated_at).toLocaleString() : '',
+          updated_by: payment ? payment.updated_by : null,
         };
       });
-      
-      console.log('Transformed payments:', transformedPayments);
       setPayments(transformedPayments);
-      
-      // Calculate summary statistics
+      // Update summary
       const totalPlayers = transformedPayments.length;
       const paidCount = transformedPayments.filter(p => p.status === 'paid').length;
       const unpaidCount = totalPlayers - paidCount;
       const paidPercentage = totalPlayers > 0 ? Math.round((paidCount / totalPlayers) * 100) : 0;
-      
       setSummary({
         year,
         month,
@@ -413,19 +367,11 @@ const PaymentsPage: React.FC = () => {
         unpaidCount,
         paidPercentage
       });
-      
-      // Set filtered payments initially to all payments
       setFilteredPayments(transformedPayments);
-      
-      // Calculate pagination
       setTotalPages(Math.ceil(transformedPayments.length / itemsPerPage));
       setActivePage(1);
-      
-      // Fetch all teams for the filter dropdown
       fetchTeams();
-      
     } catch (error: any) {
-      console.error('Error in fetchPayments:', error);
       setError(`An error occurred: ${error.message}`);
     } finally {
       setLoading(false);
