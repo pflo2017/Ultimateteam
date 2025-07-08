@@ -1,21 +1,70 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Linking, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Linking, Dimensions, Alert } from 'react-native';
+import { supabase } from '../lib/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface SuspendedClubBannerProps {
   clubName?: string;
   supportEmail?: string;
+  onLogout?: () => void;
 }
 
-const SuspendedClubBanner: React.FC<SuspendedClubBannerProps> = ({ clubName, supportEmail = 'support@example.com' }) => {
+const SuspendedClubBanner: React.FC<SuspendedClubBannerProps> = ({ clubName, supportEmail = 'support@example.com', onLogout }) => {
   const handleContactSupport = () => {
     Linking.openURL(`mailto:${supportEmail}?subject=Club%20Suspension%20Inquiry${clubName ? '%20-%20' + encodeURIComponent(clubName) : ''}`);
   };
 
   const handleLogout = async () => {
-    // You may want to call your signOut logic here
-    // For now, just reload the app (or navigate to login)
-    if (typeof window !== 'undefined') {
-      window.location.reload();
+    try {
+      console.log('[SUSPENSION BANNER] Starting logout process...');
+      
+      // Clear all stored data
+      await AsyncStorage.multiRemove([
+        'admin_data',
+        'coach_data', 
+        'parent_data',
+        'user_role',
+        'session_data'
+      ]);
+      console.log('[SUSPENSION BANNER] Cleared AsyncStorage data');
+      
+      // Sign out from Supabase
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error('[SUSPENSION BANNER] Error signing out from Supabase:', error);
+        Alert.alert('Error', 'Failed to sign out properly. Please try again.');
+        return;
+      }
+      console.log('[SUSPENSION BANNER] Successfully signed out from Supabase');
+      
+      // Trigger role reload if available
+      if (global.reloadRole && typeof global.reloadRole === 'function') {
+        console.log('[SUSPENSION BANNER] Triggering role reload...');
+        global.reloadRole();
+      }
+      
+      if (onLogout) {
+        onLogout();
+      }
+      
+      // Show success message
+      Alert.alert(
+        'Logged Out',
+        'You have been successfully logged out due to club suspension.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              // The app should automatically redirect to login screen
+              // due to the auth state change
+            }
+          }
+        ]
+      );
+      
+    } catch (error) {
+      console.error('[SUSPENSION BANNER] Error during logout:', error);
+      Alert.alert('Error', 'An error occurred during logout. Please try again.');
     }
   };
 
