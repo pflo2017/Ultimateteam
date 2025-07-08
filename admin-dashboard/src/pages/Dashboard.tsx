@@ -623,201 +623,207 @@ const Dashboard: React.FC = () => {
       </SimpleGrid>
 
       {/* Financial Overview Cards */}
-      <SimpleGrid cols={4} spacing="md" mb="md">
-        {/* Paid Card */}
-        <Paper withBorder p="md" radius="md" style={{ cursor: 'pointer', transition: 'box-shadow 0.2s', boxShadow: '0 0 0 rgba(0,0,0,0)' }} onClick={() => navigate(`/payments?status=paid&year=${currentYear}&month=${currentMonth}`)} onMouseOver={e => (e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.08)')} onMouseOut={e => (e.currentTarget.style.boxShadow = '0 0 0 rgba(0,0,0,0)')}>
-          <Group position="apart">
-            <div>
-              <Text color="dimmed" size="xs" transform="uppercase" weight={700}>
-                Paid This Month
-              </Text>
-              <Text weight={700} size="xl" color="green">
-                {stats?.currentMonthPaid}
-              </Text>
-            </div>
-            <ThemeIcon color="green" variant="light" size={38} radius="md">
-              <IconUserCheck size={22} />
-            </ThemeIcon>
-          </Group>
-          <Text size="xs" color="dimmed" mt="xs">
-            Players who paid
-          </Text>
-        </Paper>
-        {/* Unpaid Card */}
-        <Paper withBorder p="md" radius="md" style={{ cursor: 'pointer', transition: 'box-shadow 0.2s', boxShadow: '0 0 0 rgba(0,0,0,0)' }} onClick={() => navigate(`/payments?status=unpaid&year=${currentYear}&month=${currentMonth}`)} onMouseOver={e => (e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.08)')} onMouseOut={e => (e.currentTarget.style.boxShadow = '0 0 0 rgba(0,0,0,0)')}>
-          <Group position="apart">
-            <div>
-              <Text color="dimmed" size="xs" transform="uppercase" weight={700}>
-                Unpaid This Month
-              </Text>
-              <Text weight={700} size="xl" color="red">
-                {stats?.currentMonthUnpaid}
-              </Text>
-            </div>
-            <ThemeIcon color="red" variant="light" size={38} radius="md">
-              <IconUserCheck size={22} />
-            </ThemeIcon>
-          </Group>
-          <Text size="xs" color="dimmed" mt="xs">
-            Players who haven't paid
-          </Text>
-        </Paper>
+      {userRole === 'clubAdmin' && (
+        <SimpleGrid cols={4} spacing="md" mb="md">
+          {/* Paid Card */}
+          <Paper withBorder p="md" radius="md" style={{ cursor: 'pointer', transition: 'box-shadow 0.2s', boxShadow: '0 0 0 rgba(0,0,0,0)' }} onClick={() => navigate(`/payments?status=paid&year=${currentYear}&month=${currentMonth}`)} onMouseOver={e => (e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.08)')} onMouseOut={e => (e.currentTarget.style.boxShadow = '0 0 0 rgba(0,0,0,0)')}>
+            <Group position="apart">
+              <div>
+                <Text color="dimmed" size="xs" transform="uppercase" weight={700}>
+                  Paid This Month
+                </Text>
+                <Text weight={700} size="xl" color="green">
+                  {stats?.currentMonthPaid}
+                </Text>
+              </div>
+              <ThemeIcon color="green" variant="light" size={38} radius="md">
+                <IconUserCheck size={22} />
+              </ThemeIcon>
+            </Group>
+            <Text size="xs" color="dimmed" mt="xs">
+              Players who paid
+            </Text>
+          </Paper>
+          {/* Unpaid Card */}
+          <Paper withBorder p="md" radius="md" style={{ cursor: 'pointer', transition: 'box-shadow 0.2s', boxShadow: '0 0 0 rgba(0,0,0,0)' }} onClick={() => navigate(`/payments?status=unpaid&year=${currentYear}&month=${currentMonth}`)} onMouseOver={e => (e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.08)')} onMouseOut={e => (e.currentTarget.style.boxShadow = '0 0 0 rgba(0,0,0,0)')}>
+            <Group position="apart">
+              <div>
+                <Text color="dimmed" size="xs" transform="uppercase" weight={700}>
+                  Unpaid This Month
+                </Text>
+                <Text weight={700} size="xl" color="red">
+                  {stats?.currentMonthUnpaid}
+                </Text>
+              </div>
+              <ThemeIcon color="red" variant="light" size={38} radius="md">
+                <IconUserCheck size={22} />
+              </ThemeIcon>
+            </Group>
+            <Text size="xs" color="dimmed" mt="xs">
+              Players who haven't paid
+            </Text>
+          </Paper>
 
-        <Paper withBorder p="md" radius="md">
-          <Group position="apart">
-            <div>
-              <Text color="dimmed" size="xs" transform="uppercase" weight={700}>
-                Payment Rate
-              </Text>
-              <Text weight={700} size="xl">
-                {stats?.paymentRate}%
-              </Text>
-            </div>
-            <ThemeIcon color="blue" variant="light" size={38} radius="md">
-              <IconChartBar size={22} />
-            </ThemeIcon>
-          </Group>
-          <Text size="xs" color="dimmed" mt="xs">
-            Percentage of players paid
-          </Text>
-        </Paper>
+          <Paper withBorder p="md" radius="md">
+            <Group position="apart">
+              <div>
+                <Text color="dimmed" size="xs" transform="uppercase" weight={700}>
+                  Payment Rate
+                </Text>
+                <Text weight={700} size="xl">
+                  {stats?.paymentRate}%
+                </Text>
+              </div>
+              <ThemeIcon color="blue" variant="light" size={38} radius="md">
+                <IconChartBar size={22} />
+              </ThemeIcon>
+            </Group>
+            <Text size="xs" color="dimmed" mt="xs">
+              Percentage of players paid
+            </Text>
+          </Paper>
 
-        <Paper withBorder p="md" radius="md">
-          <Group position="apart">
-            <div>
-              <Text color="dimmed" size="xs" transform="uppercase" weight={700}>
-                Payment Reminders
-              </Text>
-              <Text weight={700} size="xl">
-                {stats?.paymentRemindersSent}
-              </Text>
-            </div>
-            <ThemeIcon color="orange" variant="light" size={38} radius="md">
-              <IconUserCheck size={22} />
-            </ThemeIcon>
-          </Group>
-          <Text size="xs" color="dimmed" mt="xs">
-            Reminders sent this month
-          </Text>
-        </Paper>
-      </SimpleGrid>
+          <Paper withBorder p="md" radius="md">
+            <Group position="apart">
+              <div>
+                <Text color="dimmed" size="xs" transform="uppercase" weight={700}>
+                  Payment Reminders
+                </Text>
+                <Text weight={700} size="xl">
+                  {stats?.paymentRemindersSent}
+                </Text>
+              </div>
+              <ThemeIcon color="orange" variant="light" size={38} radius="md">
+                <IconUserCheck size={22} />
+              </ThemeIcon>
+            </Group>
+            <Text size="xs" color="dimmed" mt="xs">
+              Reminders sent this month
+            </Text>
+          </Paper>
+        </SimpleGrid>
+      )}
 
       {/* New Players and Medical Visa Cards */}
-      <SimpleGrid cols={2} spacing="md" mb="md">
-        {/* New Players This Month */}
-        <Card withBorder p="md" radius="md">
+      {userRole === 'clubAdmin' && (
+        <SimpleGrid cols={2} spacing="md" mb="md">
+          {/* New Players This Month */}
+          <Card withBorder p="md" radius="md">
+            <Card.Section withBorder inheritPadding py="xs">
+              <Group position="apart">
+                <Text weight={500}>New Players This Month</Text>
+                <Badge color="blue" size="lg">{stats?.newPlayersThisMonth}</Badge>
+              </Group>
+            </Card.Section>
+            
+            <Table>
+              <thead>
+                <tr>
+                  <th>Player Name</th>
+                  <th>Team</th>
+                  <th>Join Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {newPlayers.slice(0, 5).map((player) => (
+                  <tr key={player.id}>
+                    <td>{player.name}</td>
+                    <td>{player.team_name}</td>
+                    <td>{player.join_date}</td>
+                  </tr>
+                ))}
+                {newPlayers.length === 0 && (
+                  <tr>
+                    <td colSpan={3} style={{ textAlign: 'center', padding: '20px' }}>
+                      No new players this month
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </Table>
+          </Card>
+          
+          {/* Medical Visa Status */}
+          <Card withBorder p="md" radius="md">
+            <Card.Section withBorder inheritPadding py="xs">
+              <Group position="apart">
+                <Text weight={500}>Medical Visa Status</Text>
+              </Group>
+            </Card.Section>
+            
+            <Group position="apart" mt="md">
+              <Card withBorder p="xs" radius="md" style={{ background: 'rgba(75, 192, 112, 0.1)', borderColor: 'rgba(75, 192, 112, 0.5)', width: '30%' }}>
+                <Group position="apart">
+                  <Text size="sm" weight={600}>Valid</Text>
+                  <Badge color="green" size="lg" radius="sm" variant="filled">
+                    {stats?.medicalVisaValid}
+                  </Badge>
+                </Group>
+              </Card>
+              <Card withBorder p="xs" radius="md" style={{ background: 'rgba(255, 99, 132, 0.1)', borderColor: 'rgba(255, 99, 132, 0.5)', width: '30%' }}>
+                <Group position="apart">
+                  <Text size="sm" weight={600}>Expired</Text>
+                  <Badge color="red" size="lg" radius="sm" variant="filled">
+                    {stats?.medicalVisaExpired}
+                  </Badge>
+                </Group>
+              </Card>
+              <Card withBorder p="xs" radius="md" style={{ background: 'rgba(255, 193, 7, 0.1)', borderColor: 'rgba(255, 193, 7, 0.5)', width: '30%' }}>
+                <Group position="apart">
+                  <Text size="sm" weight={600}>Pending</Text>
+                  <Badge color="yellow" size="lg" radius="sm" variant="filled">
+                    {stats?.medicalVisaPending}
+                  </Badge>
+                </Group>
+              </Card>
+            </Group>
+          </Card>
+        </SimpleGrid>
+      )}
+
+      {/* Payment Reminders Table */}
+      {userRole === 'clubAdmin' && (
+        <Card withBorder p="md" radius="md" mb="md">
           <Card.Section withBorder inheritPadding py="xs">
             <Group position="apart">
-              <Text weight={500}>New Players This Month</Text>
-              <Badge color="blue" size="lg">{stats?.newPlayersThisMonth}</Badge>
+              <Text weight={500}>Recent Payment Reminders</Text>
             </Group>
           </Card.Section>
           
           <Table>
             <thead>
               <tr>
-                <th>Player Name</th>
-                <th>Team</th>
-                <th>Join Date</th>
+                <th>Player</th>
+                <th>Parent</th>
+                <th>Sent Date</th>
+                <th>Status</th>
               </tr>
             </thead>
             <tbody>
-              {newPlayers.slice(0, 5).map((player) => (
-                <tr key={player.id}>
-                  <td>{player.name}</td>
-                  <td>{player.team_name}</td>
-                  <td>{player.join_date}</td>
-                </tr>
-              ))}
-              {newPlayers.length === 0 && (
+              {paymentReminders.length > 0 ? (
+                paymentReminders.map((reminder) => (
+                  <tr key={reminder.id}>
+                    <td>{reminder.player_name}</td>
+                    <td>{reminder.parent_name}</td>
+                    <td>{reminder.sent_date}</td>
+                    <td>
+                      <Badge color={reminder.status === 'sent' ? 'green' : 'yellow'}>
+                        {reminder.status}
+                      </Badge>
+                    </td>
+                  </tr>
+                ))
+              ) : (
                 <tr>
-                  <td colSpan={3} style={{ textAlign: 'center', padding: '20px' }}>
-                    No new players this month
+                  <td colSpan={4} style={{ textAlign: 'center', padding: '20px' }}>
+                    No payment reminders sent
                   </td>
                 </tr>
               )}
             </tbody>
           </Table>
         </Card>
-        
-        {/* Medical Visa Status */}
-        <Card withBorder p="md" radius="md">
-          <Card.Section withBorder inheritPadding py="xs">
-            <Group position="apart">
-              <Text weight={500}>Medical Visa Status</Text>
-            </Group>
-          </Card.Section>
-          
-          <Group position="apart" mt="md">
-            <Card withBorder p="xs" radius="md" style={{ background: 'rgba(75, 192, 112, 0.1)', borderColor: 'rgba(75, 192, 112, 0.5)', width: '30%' }}>
-              <Group position="apart">
-                <Text size="sm" weight={600}>Valid</Text>
-                <Badge color="green" size="lg" radius="sm" variant="filled">
-                  {stats?.medicalVisaValid}
-                </Badge>
-              </Group>
-            </Card>
-            <Card withBorder p="xs" radius="md" style={{ background: 'rgba(255, 99, 132, 0.1)', borderColor: 'rgba(255, 99, 132, 0.5)', width: '30%' }}>
-              <Group position="apart">
-                <Text size="sm" weight={600}>Expired</Text>
-                <Badge color="red" size="lg" radius="sm" variant="filled">
-                  {stats?.medicalVisaExpired}
-                </Badge>
-              </Group>
-            </Card>
-            <Card withBorder p="xs" radius="md" style={{ background: 'rgba(255, 193, 7, 0.1)', borderColor: 'rgba(255, 193, 7, 0.5)', width: '30%' }}>
-              <Group position="apart">
-                <Text size="sm" weight={600}>Pending</Text>
-                <Badge color="yellow" size="lg" radius="sm" variant="filled">
-                  {stats?.medicalVisaPending}
-                </Badge>
-              </Group>
-            </Card>
-          </Group>
-        </Card>
-      </SimpleGrid>
-
-      {/* Payment Reminders Table */}
-      <Card withBorder p="md" radius="md" mb="md">
-        <Card.Section withBorder inheritPadding py="xs">
-          <Group position="apart">
-            <Text weight={500}>Recent Payment Reminders</Text>
-          </Group>
-        </Card.Section>
-        
-        <Table>
-          <thead>
-            <tr>
-              <th>Player</th>
-              <th>Parent</th>
-              <th>Sent Date</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {paymentReminders.length > 0 ? (
-              paymentReminders.map((reminder) => (
-                <tr key={reminder.id}>
-                  <td>{reminder.player_name}</td>
-                  <td>{reminder.parent_name}</td>
-                  <td>{reminder.sent_date}</td>
-                  <td>
-                    <Badge color={reminder.status === 'sent' ? 'green' : 'yellow'}>
-                      {reminder.status}
-                    </Badge>
-                  </td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={4} style={{ textAlign: 'center', padding: '20px' }}>
-                  No payment reminders sent
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </Table>
-      </Card>
+      )}
 
       {/* Club admin doesn't need to see the club status overview */}
       {userRole !== 'clubAdmin' && (
