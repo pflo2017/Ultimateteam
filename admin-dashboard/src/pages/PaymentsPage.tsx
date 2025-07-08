@@ -205,6 +205,7 @@ interface Payment {
   year: number;
   month: number;
   status: string;
+  payment_method?: string;
   updated_at: string;
   updated_by: string | null;
 }
@@ -607,6 +608,7 @@ const PaymentsPage: React.FC = () => {
       <td>{payment.team_name || 'No Team'}</td>
       <td>{MONTHS[payment.month - 1]} {payment.year}</td>
       <td>{getStatusBadge(payment.status)}</td>
+      <td>{payment.payment_method || '-'}</td>
       <td>{payment.updated_at}</td>
     </tr>
   ));
@@ -766,6 +768,7 @@ const PaymentsPage: React.FC = () => {
                   <th>Team</th>
                   <th>Period</th>
                   <th>Status</th>
+                  <th>Payment Method</th>
                   <th>Last Updated</th>
                 </tr>
               </thead>
@@ -774,7 +777,7 @@ const PaymentsPage: React.FC = () => {
                   rows
                 ) : (
                   <tr>
-                    <td colSpan={4}>
+                    <td colSpan={6}>
                       <Text weight={500} align="center">
                         {loading ? 'Loading...' : 'No payment records found'}
                       </Text>
