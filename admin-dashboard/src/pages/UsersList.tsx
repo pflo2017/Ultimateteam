@@ -1041,7 +1041,11 @@ const UsersList: React.FC = () => {
                         </Avatar>
                         <div>
                           <Text weight={500}>{user.name || 'Unknown'}</Text>
-                          <Text size="xs" color="dimmed">{user.email}</Text>
+                          <Text size="xs" color="dimmed">
+                            {user.role === 'coach' && !user.is_active && /^coach_[a-f0-9\-]+@example\.com$/i.test(user.email || '')
+                              ? 'Pending registration'
+                              : user.email}
+                          </Text>
                         </div>
                       </Group>
                     </td>

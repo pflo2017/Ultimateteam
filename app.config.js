@@ -14,5 +14,9 @@ export default ({ config }) => ({
     supabaseUrl: process.env.SUPABASE_URL || "https://ulltpjezntzgiawchmaj.supabase.co",
     supabasePublishableKey: process.env.SUPABASE_PUBLISHABLE_KEY || "sb_publishable_k6gtnpe-RzS6RQ3EC8e5Jg_rVvZbqVm",
     supabaseSecretKey: process.env.SUPABASE_SECRET_KEY || "sb_secret_Rh0p39XrweFbVGozkaflhQ_-pOLol5-"
+  },
+  ios: {
+    ...(config.ios || {}),
+    bundleIdentifier: "com.ultimateteam.app"
   }
 }); 
