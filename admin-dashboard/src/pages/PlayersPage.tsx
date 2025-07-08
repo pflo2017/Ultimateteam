@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Table, 
   Group, 
@@ -14,7 +14,7 @@ import {
   Paper,
   Title
 } from '@mantine/core';
-import { IconSearch, IconFilter, IconBug } from '@tabler/icons-react';
+import { IconSearch, IconFilter, IconBug, IconRefresh } from '@tabler/icons-react';
 import { supabase } from '../lib/supabase';
 
 interface Team {
@@ -57,6 +57,8 @@ export function PlayersPage() {
   const [clubId, setClubId] = useState<string | null>(null);
   const [clubName, setClubName] = useState<string | null>(null);
 
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   useEffect(() => {
     // Get user role and club information
     const role = localStorage.getItem('userRole');
@@ -70,11 +72,22 @@ export function PlayersPage() {
 
   // Separate useEffect for fetching data when userRole and clubId are available
   useEffect(() => {
-    if (userRole) {
+    // Only fetch if we have the required data and it's not still loading
+    if (userRole && (userRole === 'masterAdmin' || (userRole === 'clubAdmin' && clubId))) {
       fetchPlayers();
       fetchTeams();
     }
   }, [userRole, clubId]);
+
+  // Add polling effect for auto-refresh every 30 seconds
+  useEffect(() => {
+    pollingRef.current = setInterval(() => {
+      fetchPlayers();
+    }, 30000); // 30 seconds
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, []);
 
   const fetchTeams = async () => {
     try {
@@ -115,6 +128,18 @@ export function PlayersPage() {
     };
     
     try {
+      // Guard: if club admin and no clubId, show error and abort
+      if (userRole === 'clubAdmin' && (!clubId || clubId === 'null' || clubId === 'undefined')) {
+        setError('Your club information is missing. Please log out and log in again, or contact support.');
+        setLoading(false);
+        return;
+      }
+      // Guard: if userRole is not set yet, don't proceed
+      if (!userRole) {
+        setLoading(false);
+        return;
+      }
+
       // Get players with team, parent and club information
       debugData.queries.push({ name: 'players', startTime: new Date().toISOString() });
       
@@ -169,6 +194,7 @@ export function PlayersPage() {
           let formattedBirthdate = null;
           let formattedLastPaymentDate = null;
           let formattedClubJoinDate = null;
+          let formattedMedicalVisaDate = null;
           
           try {
             if (player.birth_date) {
@@ -179,6 +205,9 @@ export function PlayersPage() {
             }
             if (player.club_join_date) {
               formattedClubJoinDate = new Date(player.club_join_date).toLocaleDateString();
+            }
+            if (player.medical_visa_issue_date) {
+              formattedMedicalVisaDate = new Date(player.medical_visa_issue_date).toLocaleDateString();
             }
           } catch (e) {
             console.error('Error formatting dates:', e);
@@ -191,7 +220,7 @@ export function PlayersPage() {
             parent_id: player.parent_id,
             is_active: player.is_active,
             medical_visa_status: player.medical_visa_status,
-            medical_visa_issue_date: player.medical_visa_issue_date,
+            medical_visa_issue_date: formattedMedicalVisaDate,
             payment_status: player.payment_status,
             team_name: player.teams?.name || 'Unknown Team',
             parent_name: player.parents?.name || 'Unknown Parent',
@@ -212,7 +241,7 @@ export function PlayersPage() {
         
         let paymentsQuery = supabase
           .from('monthly_payments')
-          .select('player_id, status')
+          .select('player_id, status, updated_at')
           .eq('year', currentYear)
           .eq('month', currentMonth);
         
@@ -222,7 +251,8 @@ export function PlayersPage() {
           const { data: clubPlayerIds } = await supabase
             .from('players')
             .select('id')
-            .eq('club_id', clubId);
+            .eq('club_id', clubId)
+            .eq('is_active', true);
           
           if (clubPlayerIds && clubPlayerIds.length > 0) {
             const playerIds = clubPlayerIds.map(p => p.id);
@@ -243,19 +273,33 @@ export function PlayersPage() {
           console.error('Error fetching monthly payments:', paymentsError);
         }
         
-        // Create a map of player_id to payment status
-        const paymentStatusMap: {[key: string]: string} = {};
+        // Create a map of player_id to payment status and updated_at
+        const paymentStatusMap: {[key: string]: { status: string, updated_at: string | null } } = {};
         if (paymentsData) {
           paymentsData.forEach((payment: any) => {
-            paymentStatusMap[payment.player_id] = payment.status;
+            paymentStatusMap[payment.player_id] = {
+              status: payment.status,
+              updated_at: payment.updated_at || null
+            };
           });
         }
-        
-        // Update players with current payment status from monthly_payments
-        const updatedPlayers = playersWithDetails.map(player => ({
-          ...player,
-          current_payment_status: paymentStatusMap[player.id] || player.payment_status
-        }));
+        // Update players with current payment status and last payment date from monthly_payments
+        const updatedPlayers = playersWithDetails.map(player => {
+          const payment = paymentStatusMap[player.id];
+          let formattedLastPaymentDate = null;
+          if (payment && payment.updated_at) {
+            try {
+              formattedLastPaymentDate = new Date(payment.updated_at).toLocaleDateString();
+            } catch (e) {
+              formattedLastPaymentDate = null;
+            }
+          }
+          return {
+            ...player,
+            current_payment_status: payment && payment.status === 'paid' ? 'paid' : 'unpaid',
+            last_payment_date: formattedLastPaymentDate
+          };
+        });
         
         debugData.transformedPlayers = {
           count: updatedPlayers.length,
@@ -397,14 +441,24 @@ export function PlayersPage() {
           />
         </Group>
         
-        <Button 
-          leftIcon={<IconBug size={16} />}
-          variant="outline"
-          onClick={() => setShowDebug(!showDebug)}
-          size="sm"
-        >
-          {showDebug ? 'Hide Debug' : 'Show Debug'}
-        </Button>
+        <Group>
+          <Button
+            leftIcon={<IconRefresh size={16} />}
+            variant="outline"
+            onClick={() => fetchPlayers()}
+            size="sm"
+          >
+            Refresh
+          </Button>
+          <Button 
+            leftIcon={<IconBug size={16} />}
+            variant="outline"
+            onClick={() => setShowDebug(!showDebug)}
+            size="sm"
+          >
+            {showDebug ? 'Hide Debug' : 'Show Debug'}
+          </Button>
+        </Group>
       </Group>
       
       {error && (

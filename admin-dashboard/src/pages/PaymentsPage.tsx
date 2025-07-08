@@ -242,13 +242,18 @@ const PaymentsPage: React.FC = () => {
   // Fetch teams for the filter dropdown
   const fetchTeams = async () => {
     try {
+      // Get club ID from localStorage (for club admin)
+      const clubId = localStorage.getItem('clubId');
+      if (!clubId) {
+        setTeams([]);
+        return;
+      }
       const { data, error } = await supabase
         .from('teams')
         .select('id, name')
-        .eq('is_active', true);
-
+        .eq('is_active', true)
+        .eq('club_id', clubId);
       if (error) throw error;
-
       if (data) {
         const teamOptions = data.map((team: any) => ({
           value: team.id,
@@ -279,9 +284,12 @@ const PaymentsPage: React.FC = () => {
       const client = adminSupabase || supabase;
 
       // First, fetch all teams to create a map of team IDs to names
+      const clubId = localStorage.getItem('clubId');
       const { data: teamsData, error: teamsError } = await client
         .from('teams')
-        .select('id, name');
+        .select('id, name')
+        .eq('is_active', true)
+        .eq('club_id', clubId);
       
       if (teamsError) {
         console.error('Error fetching teams:', teamsError);
