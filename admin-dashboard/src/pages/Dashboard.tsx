@@ -23,6 +23,7 @@ import {
 import { supabase } from '../lib/supabase';
 import { Doughnut, Pie } from 'react-chartjs-2';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale } from 'chart.js';
+import { useNavigate } from 'react-router-dom';
 
 // Register Chart.js components
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale);
@@ -97,6 +98,7 @@ const Dashboard: React.FC = () => {
   const [userRole, setUserRole] = useState<string | null>(null);
   const [clubId, setClubId] = useState<string | null>(null);
   const [clubName, setClubName] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     // Get user role and club ID from localStorage
@@ -524,6 +526,10 @@ const Dashboard: React.FC = () => {
     );
   }
 
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+
   return (
     <>
       <Title order={2} mb="md">
@@ -558,7 +564,7 @@ const Dashboard: React.FC = () => {
           )}
         </Paper>
 
-        <Paper withBorder p="md" radius="md">
+        <Paper withBorder p="md" radius="md" style={{ cursor: 'pointer', transition: 'box-shadow 0.2s', boxShadow: '0 0 0 rgba(0,0,0,0)' }} onClick={() => navigate('/players')} onMouseOver={e => (e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.08)')} onMouseOut={e => (e.currentTarget.style.boxShadow = '0 0 0 rgba(0,0,0,0)')}>
           <Group position="apart">
             <div>
               <Text color="dimmed" size="xs" transform="uppercase" weight={700}>
@@ -577,7 +583,7 @@ const Dashboard: React.FC = () => {
           </Text>
         </Paper>
 
-        <Paper withBorder p="md" radius="md">
+        <Paper withBorder p="md" radius="md" style={{ cursor: 'pointer', transition: 'box-shadow 0.2s', boxShadow: '0 0 0 rgba(0,0,0,0)' }} onClick={() => navigate('/teams')} onMouseOver={e => (e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.08)')} onMouseOut={e => (e.currentTarget.style.boxShadow = '0 0 0 rgba(0,0,0,0)')}>
           <Group position="apart">
             <div>
               <Text color="dimmed" size="xs" transform="uppercase" weight={700}>
@@ -596,7 +602,7 @@ const Dashboard: React.FC = () => {
           </Text>
         </Paper>
 
-        <Paper withBorder p="md" radius="md">
+        <Paper withBorder p="md" radius="md" style={{ cursor: 'pointer', transition: 'box-shadow 0.2s', boxShadow: '0 0 0 rgba(0,0,0,0)' }} onClick={() => navigate('/coaches')} onMouseOver={e => (e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.08)')} onMouseOut={e => (e.currentTarget.style.boxShadow = '0 0 0 rgba(0,0,0,0)')}>
           <Group position="apart">
             <div>
               <Text color="dimmed" size="xs" transform="uppercase" weight={700}>
@@ -618,7 +624,8 @@ const Dashboard: React.FC = () => {
 
       {/* Financial Overview Cards */}
       <SimpleGrid cols={4} spacing="md" mb="md">
-        <Paper withBorder p="md" radius="md">
+        {/* Paid Card */}
+        <Paper withBorder p="md" radius="md" style={{ cursor: 'pointer', transition: 'box-shadow 0.2s', boxShadow: '0 0 0 rgba(0,0,0,0)' }} onClick={() => navigate(`/payments?status=paid&year=${currentYear}&month=${currentMonth}`)} onMouseOver={e => (e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.08)')} onMouseOut={e => (e.currentTarget.style.boxShadow = '0 0 0 rgba(0,0,0,0)')}>
           <Group position="apart">
             <div>
               <Text color="dimmed" size="xs" transform="uppercase" weight={700}>
@@ -636,8 +643,8 @@ const Dashboard: React.FC = () => {
             Players who paid
           </Text>
         </Paper>
-
-        <Paper withBorder p="md" radius="md">
+        {/* Unpaid Card */}
+        <Paper withBorder p="md" radius="md" style={{ cursor: 'pointer', transition: 'box-shadow 0.2s', boxShadow: '0 0 0 rgba(0,0,0,0)' }} onClick={() => navigate(`/payments?status=unpaid&year=${currentYear}&month=${currentMonth}`)} onMouseOver={e => (e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.08)')} onMouseOut={e => (e.currentTarget.style.boxShadow = '0 0 0 rgba(0,0,0,0)')}>
           <Group position="apart">
             <div>
               <Text color="dimmed" size="xs" transform="uppercase" weight={700}>

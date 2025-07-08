@@ -24,6 +24,7 @@ import {
 import { IconSearch, IconFilter, IconDownload, IconEye, IconAlertCircle } from '@tabler/icons-react';
 import { supabase, adminSupabase } from '../lib/supabase';
 import { useDisclosure } from '@mantine/hooks';
+import { useLocation } from 'react-router-dom';
 
 // Add a function to check if a table exists in Supabase
 const checkTableExists = async (client: any, tableName: string): Promise<boolean> => {
@@ -239,6 +240,23 @@ const PaymentsPage: React.FC = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const itemsPerPage = 20;
+  const location = useLocation();
+
+  // On mount, read query params and set filters
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const status = params.get('status');
+    const year = params.get('year');
+    const month = params.get('month');
+    if (status) setStatusFilter(status);
+    if (year) setYearFilter(year);
+    if (month) setMonthFilter(month);
+    if (!year && !month) {
+      const now = new Date();
+      setYearFilter(now.getFullYear().toString());
+      setMonthFilter((now.getMonth() + 1).toString());
+    }
+  }, [location.search]);
 
   // Fetch teams for the filter dropdown
   const fetchTeams = async () => {
