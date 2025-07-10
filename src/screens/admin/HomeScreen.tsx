@@ -12,6 +12,7 @@ import type { AdminStackParamList, AdminTabParamList } from '../../types/navigat
 import { EventCard } from '../../components/Schedule/ScheduleCalendar';
 import { Post } from '../../components/news/types';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 // Define a composite navigation type that can access both stack and tab navigators
 // (kept for navigation to details and schedule)
@@ -27,6 +28,7 @@ export const AdminHomeScreen = () => {
   const [latestPost, setLatestPost] = useState<Post | null>(null);
   const navigation = useNavigation<AdminNavigationProp>();
   const isFocused = useIsFocused();
+  const { t } = useTranslation();
 
   useEffect(() => {
     if (isFocused) {
@@ -145,7 +147,7 @@ export const AdminHomeScreen = () => {
     if (activities.length === 0) {
       return (
         <View style={styles.emptyCarousel}>
-          <Text style={styles.emptyText}>No upcoming activities in the next 7 days.</Text>
+          <Text style={styles.emptyText}>{t('admin.dashboard.noUpcomingActivities')}</Text>
         </View>
       );
     }
@@ -153,10 +155,10 @@ export const AdminHomeScreen = () => {
       <>
         <View style={styles.divider} />
         <View style={styles.carouselHeaderRow}>
-          <Text style={styles.carouselTitle}>Future activities</Text>
+          <Text style={styles.carouselTitle}>{t('admin.dashboard.futureActivities')}</Text>
           {activities.length > 3 && (
             <TouchableOpacity onPress={handleSeeAll} style={styles.seeAllButton} activeOpacity={0.7}>
-              <Text style={styles.seeAllText}>See all &gt;</Text>
+              <Text style={styles.seeAllText}>{t('admin.dashboard.seeAll')}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -185,7 +187,7 @@ export const AdminHomeScreen = () => {
     if (!latestPost) {
       return (
         <View style={styles.emptyPost}>
-          <Text style={styles.emptyText}>No recent posts.</Text>
+          <Text style={styles.emptyText}>{t('admin.dashboard.noRecentPosts')}</Text>
         </View>
       );
     }
@@ -194,9 +196,9 @@ export const AdminHomeScreen = () => {
       <>
         <View style={styles.divider} />
         <View style={styles.postHeaderRow}>
-          <Text style={styles.postTitle}>Latest Post</Text>
+          <Text style={styles.postTitle}>{t('admin.dashboard.latestPost')}</Text>
           <TouchableOpacity onPress={handlePostPress} style={styles.seeAllButton}>
-            <Text style={styles.seeAllText}>See all &gt;</Text>
+            <Text style={styles.seeAllText}>{t('admin.dashboard.seeAll')}</Text>
           </TouchableOpacity>
         </View>
         <TouchableOpacity 
@@ -244,9 +246,9 @@ export const AdminHomeScreen = () => {
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
-        <Text variant="headlineMedium" style={styles.title}>Welcome, {adminName}</Text>
+        <Text variant="headlineMedium" style={styles.title}>{t('admin.dashboard.welcome', { name: adminName })}</Text>
         <Text variant="bodyLarge" style={styles.subtitle}>
-          Manage and stay connected with your club
+          {t('admin.dashboard.subtitle')}
         </Text>
       </View>
       {/* Carousel at the top */}

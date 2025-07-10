@@ -11,6 +11,7 @@ import { supabase } from '@/lib/supabase';
 import { Activity, getActivityById } from '../services/activitiesService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CommonActions } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 
 // Helper function to capitalize first letter
 const capitalize = (str: string | null | undefined) => {
@@ -98,6 +99,8 @@ export const AttendanceReportDetailsScreen = () => {
   const [playerMap, setPlayerMap] = useState<{ [id: string]: string }>({});
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  const { t } = useTranslation();
 
   useEffect(() => {
     const loadUserRole = async () => {
@@ -331,7 +334,7 @@ export const AttendanceReportDetailsScreen = () => {
         }} style={styles.backButton}>
           <MaterialCommunityIcons name="arrow-left" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Attendance Details</Text>
+        <Text style={styles.headerTitle}>{t('attendance.detailsTitle')}</Text>
         <View style={{ width: 40 }} />
       </View>
       {isLoading ? (
@@ -359,7 +362,7 @@ export const AttendanceReportDetailsScreen = () => {
               size={20}
               color={getActivityColor(activity?.type || attendance[0]?.activity_type || 'other')}
             />
-            <Text style={styles.detailText}>{capitalize(activity?.type || attendance[0]?.activity_type)}</Text>
+            <Text style={styles.detailText}>{t('admin.activityForm.' + (activity?.type || attendance[0]?.activity_type))}</Text>
           </View>
           <View style={styles.summaryRow}>
             <View style={styles.summaryBox}><Text style={styles.summaryValue}>{presentCount}</Text><Text style={styles.summaryLabel}>Present</Text></View>
@@ -456,7 +459,7 @@ export const AttendanceReportDetailsScreen = () => {
           disabled={isSaving}
           style={{ marginBottom: SPACING.md }}
         >
-            Save Attendance
+            {t('attendance.saveAttendance')}
         </Button>
       </SafeAreaView>
     </SafeAreaView>

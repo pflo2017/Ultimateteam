@@ -11,10 +11,12 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../types/navigation';
 import { getUserClubId } from '../services/activitiesService';
 import { fetchPlayerAttendanceStats, fetchTeamAttendanceStats } from '../services/attendanceService';
+import { useTranslation } from 'react-i18next';
 
 export const StatisticsScreen = () => {
   // Navigation
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { t } = useTranslation();
 
   // Refs
   const monthScrollViewRef = useRef<ScrollView>(null);
@@ -702,7 +704,7 @@ export const StatisticsScreen = () => {
           onPress={() => setIsActivityTypeDropdownOpen(!isActivityTypeDropdownOpen)}
         >
           <Text style={styles.dropdownButtonText}>
-            Activity Type: {selectedType?.label || 'All Activities'}
+            {t('attendance.statistics.activityType')}: {t('attendance.statistics.' + (selectedType?.value || 'all'))}
           </Text>
           <MaterialCommunityIcons 
             name={isActivityTypeDropdownOpen ? "chevron-up" : "chevron-down"} 
@@ -758,7 +760,7 @@ export const StatisticsScreen = () => {
             styles.viewToggleButtonText,
             activeView === 'player' && styles.viewToggleButtonTextActive
           ]}>
-            Player Statistics
+            {t('attendance.statistics.playerStatistics')}
           </Text>
         </TouchableOpacity>
         
@@ -774,7 +776,7 @@ export const StatisticsScreen = () => {
             styles.viewToggleButtonText,
             activeView === 'team' && styles.viewToggleButtonTextActive
           ]}>
-            Team Statistics
+            {t('attendance.statistics.teamStatistics')}
           </Text>
         </TouchableOpacity>
       </View>
@@ -787,7 +789,7 @@ export const StatisticsScreen = () => {
     
     return (
       <View style={styles.teamSelectorContainer}>
-        <Text style={styles.sectionLabel}>Team:</Text>
+        <Text style={styles.sectionLabel}>{t('attendance.statistics.team')}</Text>
         <TouchableOpacity 
           style={styles.teamSelectorButton}
           disabled={isLoading} // Disable when loading
@@ -887,7 +889,7 @@ export const StatisticsScreen = () => {
       return (
         <View style={styles.emptyStateContainer}>
           <MaterialCommunityIcons name="arrow-up-drop-circle" size={48} color={COLORS.primary} />
-          <Text style={styles.emptyStateText}>Please select a team to view player statistics</Text>
+          <Text style={styles.emptyStateText}>{t('attendance.statistics.selectTeamPlayer')}</Text>
         </View>
       );
     }
@@ -897,7 +899,7 @@ export const StatisticsScreen = () => {
       return (
         <View style={styles.emptyStateContainer}>
           <MaterialCommunityIcons name="account-search" size={48} color={COLORS.grey[400]} />
-          <Text style={styles.emptyStateText}>No players found for the selected team</Text>
+          <Text style={styles.emptyStateText}>{t('attendance.statistics.noPlayers')}</Text>
         </View>
       );
     }
@@ -907,12 +909,12 @@ export const StatisticsScreen = () => {
       return (
         <View style={styles.emptyStateContainer}>
           <MaterialCommunityIcons name="calendar-question" size={48} color={COLORS.grey[400]} />
-          <Text style={styles.emptyStateText}>No attendance data found for this period</Text>
+          <Text style={styles.emptyStateText}>{t('attendance.statistics.noAttendanceData')}</Text>
           
           {/* Show players anyway */}
           {players.length > 0 && (
             <>
-              <Text style={styles.sectionTitle}>Players in {teams.find(t => t.id === selectedTeamId)?.name}</Text>
+              <Text style={styles.sectionTitle}>{t('attendance.statistics.playersInTeam', { team: teams.find(t => t.id === selectedTeamId)?.name })}</Text>
               {players.map(player => (
                 <View key={player.id} style={styles.playerCard}>
                   <View style={styles.playerCardHeader}>
@@ -932,7 +934,7 @@ export const StatisticsScreen = () => {
     return (
       <View style={styles.statsContainer}>
         {/* Player List */}
-        <Text style={styles.sectionTitle}>Player Attendance</Text>
+        <Text style={styles.sectionTitle}>{t('attendance.statistics.playerAttendance')}</Text>
         {filteredPlayerStats.map((player) => (
           <TouchableOpacity
             key={player.player_id}
@@ -957,33 +959,33 @@ export const StatisticsScreen = () => {
                     player.attendance_percentage >= 70 ? (
                       <>
                         <MaterialCommunityIcons name="check" size={20} color={COLORS.success} />
-                        <Text style={[styles.playerAttendanceStatusText, { color: COLORS.success }]}>Good</Text>
+                        <Text style={[styles.playerAttendanceStatusText, { color: COLORS.success }]}>{t('attendance.statistics.good')}</Text>
                       </>
                     ) : player.attendance_percentage >= 50 ? (
                       <>
                         <MaterialCommunityIcons name="alert" size={20} color={COLORS.warning} />
-                        <Text style={[styles.playerAttendanceStatusText, { color: COLORS.warning }]}>Average</Text>
+                        <Text style={[styles.playerAttendanceStatusText, { color: COLORS.warning }]}>{t('attendance.statistics.average')}</Text>
                       </>
                     ) : (
                       <>
                         <MaterialCommunityIcons name="close" size={20} color={COLORS.error} />
-                        <Text style={[styles.playerAttendanceStatusText, { color: COLORS.error }]}>Poor</Text>
+                        <Text style={[styles.playerAttendanceStatusText, { color: COLORS.error }]}>{t('attendance.statistics.poor')}</Text>
                       </>
                     )
                   ) : (
                     <>
                       <MaterialCommunityIcons name="minus" size={20} color={COLORS.grey[500]} />
-                      <Text style={[styles.playerAttendanceStatusText, { color: COLORS.grey[500] }]}>No data</Text>
+                      <Text style={[styles.playerAttendanceStatusText, { color: COLORS.grey[500] }]}>{t('attendance.statistics.noData')}</Text>
                     </>
                   )}
                 </View>
               </View>
               <View style={styles.playerCardDetails}>
                 <Text style={styles.attendanceDetailText}>
-                  Present: {player.present_count} | Absent: {player.absent_count} | Total: {player.total_activities}
+                  {t('attendance.statistics.present')}: {player.present_count} | {t('attendance.statistics.absent')}: {player.absent_count} | {t('attendance.statistics.total')}: {player.total_activities}
                 </Text>
                 <Text style={styles.attendanceDetailText}>
-                  Attendance Rate: {player.attendance_percentage}%
+                  {t('attendance.statistics.attendanceRate')}: {player.attendance_percentage}%
                 </Text>
               </View>
             </View>
@@ -1010,7 +1012,7 @@ export const StatisticsScreen = () => {
       return (
         <View style={styles.emptyStateContainer}>
           <MaterialCommunityIcons name="arrow-up-drop-circle" size={48} color={COLORS.primary} />
-          <Text style={styles.emptyStateText}>Please select a team to view team statistics</Text>
+          <Text style={styles.emptyStateText}>{t('attendance.statistics.selectTeamTeam')}</Text>
         </View>
       );
     }
@@ -1020,7 +1022,7 @@ export const StatisticsScreen = () => {
       return (
         <View style={styles.emptyStateContainer}>
           <MaterialCommunityIcons name="calendar-question" size={48} color={COLORS.grey[400]} />
-          <Text style={styles.emptyStateText}>No attendance data found for this period</Text>
+          <Text style={styles.emptyStateText}>{t('attendance.statistics.noAttendanceData')}</Text>
         </View>
       );
     }
@@ -1098,7 +1100,7 @@ export const StatisticsScreen = () => {
           >
             <MaterialCommunityIcons name="arrow-left" size={24} color={COLORS.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Attendance Statistics</Text>
+          <Text style={styles.headerTitle}>{t('attendance.statistics.title')}</Text>
         </View>
       </View>
       

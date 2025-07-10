@@ -13,6 +13,7 @@ import { ManageCoachesScreen } from './ManageCoachesScreen';
 import { ManagePlayersScreen } from './ManagePlayersScreen';
 import { registerEventListener } from '../../utils/events';
 import { getUserClubId } from '../../services/activitiesService';
+import { useTranslation } from 'react-i18next';
 
 type CardType = 'teams' | 'coaches' | 'players' | 'payments';
 
@@ -94,6 +95,7 @@ interface SupabaseTeam {
 export const AdminManageScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<AdminStackParamList>>();
   const route = useRoute<RouteProp<AdminStackParamList, 'Manage'>>();
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<CardType>('teams');
   const [teams, setTeams] = useState<Team[]>([]);
   const [coaches, setCoaches] = useState<Coach[]>([]);
@@ -488,10 +490,10 @@ export const AdminManageScreen = () => {
   const handleCopyCode = async (code: string) => {
     try {
       await Clipboard.setStringAsync(code);
-      Alert.alert('Success', 'Code copied to clipboard');
+      Alert.alert(t('common.success'), t('admin.manage.codeCopied'));
     } catch (error) {
       console.error('Error copying code:', error);
-      Alert.alert('Error', 'Failed to copy code');
+      Alert.alert(t('common.error'), t('admin.manage.failedToCopyCode'));
     }
   };
 
@@ -503,21 +505,21 @@ export const AdminManageScreen = () => {
             style={styles.horizontalTabButton}
             onPress={() => setActiveTab('teams')}
           >
-            <Text style={[styles.horizontalTabText, activeTab === 'teams' && styles.horizontalTabTextActive]}>Teams</Text>
+            <Text style={[styles.horizontalTabText, activeTab === 'teams' && styles.horizontalTabTextActive]}>{t('admin.manage.teams')}</Text>
             {activeTab === 'teams' && <View style={styles.horizontalTabUnderline} />}
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.horizontalTabButton}
             onPress={() => setActiveTab('coaches')}
           >
-            <Text style={[styles.horizontalTabText, activeTab === 'coaches' && styles.horizontalTabTextActive]}>Coaches</Text>
+            <Text style={[styles.horizontalTabText, activeTab === 'coaches' && styles.horizontalTabTextActive]}>{t('admin.manage.coaches')}</Text>
             {activeTab === 'coaches' && <View style={styles.horizontalTabUnderline} />}
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.horizontalTabButton}
             onPress={() => setActiveTab('players')}
           >
-            <Text style={[styles.horizontalTabText, activeTab === 'players' && styles.horizontalTabTextActive]}>Players</Text>
+            <Text style={[styles.horizontalTabText, activeTab === 'players' && styles.horizontalTabTextActive]}>{t('admin.manage.players')}</Text>
             {activeTab === 'players' && <View style={styles.horizontalTabUnderline} />}
           </TouchableOpacity>
         </View>

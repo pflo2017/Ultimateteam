@@ -13,6 +13,7 @@ import { ActivityType, createActivity, getPlayersByTeamId } from '../services/ac
 import { RepeatSchedule, RepeatType, DayOfWeek } from '../components/Schedule/RepeatSchedule';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getCoachInternalId, getCoachAuthId } from '../utils/coachUtils';
+import { useTranslation } from 'react-i18next';
 
 type CreateActivityScreenRouteProp = RouteProp<RootStackParamList, 'CreateActivity'>;
 
@@ -28,6 +29,7 @@ type MaterialCommunityIconName = React.ComponentProps<typeof MaterialCommunityIc
 export const CreateActivityScreen = () => {
   const navigation = useNavigation();
   const route = useRoute<CreateActivityScreenRouteProp>();
+  const { t } = useTranslation();
   
   // Initialize with the type from route params or default to 'training'
   const initialType: ActivityType = 'training';
@@ -228,27 +230,27 @@ export const CreateActivityScreen = () => {
 
   const validateForm = (): boolean => {
     if (!title.trim()) {
-      Alert.alert('Error', 'Please enter a title');
+      Alert.alert(t('common.error'), t('admin.activityForm.titleRequired'));
       return false;
     }
     
     if (!location.trim()) {
-      Alert.alert('Error', 'Please enter a location');
+      Alert.alert(t('common.error'), t('admin.activityForm.locationRequired'));
       return false;
     }
     
     if (!userId) {
-      Alert.alert('Error', 'User not authenticated');
+      Alert.alert(t('common.error'), t('admin.activityForm.userNotAuthenticated'));
       return false;
     }
     
     if (isRepeating && repeatType === 'weekly' && repeatDays.length === 0) {
-      Alert.alert('Error', 'Please select at least one day for weekly repeat');
+      Alert.alert(t('common.error'), t('admin.activityForm.atLeastOneDay'));
       return false;
     }
     
     if (availableTeams.length > 0 && !selectedTeam) {
-      Alert.alert('Error', 'Please select a team for this activity');
+      Alert.alert(t('common.error'), t('admin.activityForm.atLeastOneTeam'));
       return false;
     }
     
@@ -336,11 +338,11 @@ export const CreateActivityScreen = () => {
         throw error;
       }
       
-      Alert.alert('Success', 'Activity created successfully');
+      Alert.alert(t('common.success'), t('admin.activityForm.activityCreated'));
       navigation.goBack();
     } catch (error) {
       console.error('Error creating activity:', error);
-      Alert.alert('Error', `Failed to create activity: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      Alert.alert(t('common.error'), t('admin.activityForm.failedToCreateActivity', { error: error instanceof Error ? error.message : 'Unknown error' }));
     } finally {
       setIsLoading(false);
     }
@@ -418,11 +420,11 @@ export const CreateActivityScreen = () => {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="dark" />
-      <View style={styles.header}>
+      <View style={[styles.header, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}> 
         <TouchableOpacity onPress={handleGoBack} style={styles.backButton}>
           <MaterialCommunityIcons name="close" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>New Activity</Text>
+        <Text style={[styles.headerTitle, { flex: 1, marginHorizontal: 8 }]} numberOfLines={1} ellipsizeMode="tail">{t('admin.activityForm.newActivity', { type: t('admin.activityForm.' + activityType) })}</Text>
         <Button 
           mode="contained" 
           onPress={handleCreate} 
@@ -431,7 +433,7 @@ export const CreateActivityScreen = () => {
           loading={isLoading}
           disabled={isLoading}
         >
-          Create
+          {t('admin.activityForm.create')}
         </Button>
       </View>
 
@@ -446,13 +448,13 @@ export const CreateActivityScreen = () => {
           contentContainerStyle={{ paddingBottom: 100 }}
         >
           <View style={styles.activityTypeContainer}>
-            <ActivityTypeButton type="training" label="Training" icon="whistle" />
-            <ActivityTypeButton type="game" label="Game" icon="trophy-outline" />
-            <ActivityTypeButton type="tournament" label="Tournament" icon="tournament" />
-            <ActivityTypeButton type="other" label="Other" icon="calendar-text" />
+            <ActivityTypeButton type="training" label={t('admin.activityForm.training')} icon="whistle" />
+            <ActivityTypeButton type="game" label={t('admin.activityForm.game')} icon="trophy-outline" />
+            <ActivityTypeButton type="tournament" label={t('admin.activityForm.tournament')} icon="tournament" />
+            <ActivityTypeButton type="other" label={t('admin.activityForm.other')} icon="calendar-text" />
           </View>
 
-          <Text style={styles.label}>Title</Text>
+          <Text style={styles.label}>{t('admin.activityForm.title')}</Text>
           <TextInput
             value={title}
             onChangeText={setTitle}
@@ -461,11 +463,11 @@ export const CreateActivityScreen = () => {
             outlineColor={COLORS.grey[200]}
             activeOutlineColor={getActivityColor(activityType)}
             outlineStyle={styles.inputOutline}
-            placeholder="Enter activity title"
+            placeholder={t('admin.activityForm.enterTitle')}
             dense
           />
 
-          <Text style={styles.label}>Location</Text>
+          <Text style={styles.label}>{t('admin.activityForm.location')}</Text>
           <TextInput
             value={location}
             onChangeText={setLocation}
@@ -474,14 +476,14 @@ export const CreateActivityScreen = () => {
             outlineColor={COLORS.grey[200]}
             activeOutlineColor={getActivityColor(activityType)}
             outlineStyle={styles.inputOutline}
-            placeholder="Enter location"
+            placeholder={t('admin.activityForm.enterLocation')}
             dense
           />
 
           {/* Home/Away selection for Game type */}
           {activityType === 'game' && (
             <View>
-              <Text style={styles.label}>Home/Away</Text>
+              <Text style={styles.label}>{t('admin.activityForm.homeAway')}</Text>
               <View style={styles.homeAwayContainer}>
                 <TouchableOpacity
                   style={[
@@ -494,7 +496,7 @@ export const CreateActivityScreen = () => {
                     styles.homeAwayButtonText,
                     homeAway === 'home' && styles.activeHomeAwayButtonText
                   ]}>
-                    Home
+                    {t('admin.activityForm.home')}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -508,17 +510,17 @@ export const CreateActivityScreen = () => {
                     styles.homeAwayButtonText,
                     homeAway === 'away' && styles.activeHomeAwayButtonText
                   ]}>
-                    Away
+                    {t('admin.activityForm.away')}
                   </Text>
                 </TouchableOpacity>
               </View>
             </View>
           )}
 
-          <Text style={styles.label}>Time</Text>
+          <Text style={styles.label}>{t('admin.activityForm.time')}</Text>
           <View style={styles.timeContainer}>
             <View style={styles.startTimeContainer}>
-              <Text style={styles.timeLabel}>Start</Text>
+              <Text style={styles.timeLabel}>{t('admin.activityForm.start')}</Text>
               <TouchableOpacity 
                 style={styles.dateTimeButton} 
                 onPress={showStartDatePicker}
@@ -536,7 +538,7 @@ export const CreateActivityScreen = () => {
             </View>
             
             <View style={styles.durationContainer}>
-              <Text style={styles.timeLabel}>Duration</Text>
+              <Text style={styles.timeLabel}>{t('admin.activityForm.duration')}</Text>
               <TextInput
                 value={duration}
                 onChangeText={setDuration}
@@ -545,7 +547,7 @@ export const CreateActivityScreen = () => {
                 outlineColor={COLORS.grey[200]}
                 activeOutlineColor={getActivityColor(activityType)}
                 outlineStyle={styles.inputOutline}
-                placeholder="1h"
+                placeholder={t('admin.activityForm.durationPlaceholder')}
                 dense
                 left={<TextInput.Icon icon="clock-outline" color={getActivityColor(activityType)} />}
               />
@@ -553,17 +555,17 @@ export const CreateActivityScreen = () => {
           </View>
 
           {/* Team Selection */}
-          <Text style={styles.label}>Select Team</Text>
+          <Text style={styles.label}>{t('admin.activityForm.selectTeam')}</Text>
           <TouchableOpacity 
-            style={styles.teamSelector}
+            style={[styles.teamSelector, { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: COLORS.grey[200], borderRadius: 12, padding: 12, marginVertical: 8 }]} 
             onPress={() => setShowTeamMenu(true)}
           >
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={styles.teamSelectorText}>
-                {selectedTeam ? selectedTeam.name : 'Select a team'}
+                {selectedTeam ? selectedTeam.name : t('admin.activityForm.selectTeamPlaceholder')}
               </Text>
               <Text style={styles.teamSelectorSubtext}>
-                This activity will be visible to the selected team
+                {t('admin.activityForm.activityVisibleToTeam')}
               </Text>
             </View>
             <MaterialCommunityIcons
@@ -576,7 +578,7 @@ export const CreateActivityScreen = () => {
           {/* Lineup Selection for Game type */}
           {activityType === 'game' && selectedTeam && (
             <View>
-              <Text style={styles.label}>Lineup</Text>
+              <Text style={styles.label}>{t('admin.activityForm.lineup')}</Text>
               <TouchableOpacity 
                 style={styles.teamSelector}
                 onPress={() => setShowPlayerMenu(true)}
@@ -585,11 +587,11 @@ export const CreateActivityScreen = () => {
                 <View>
                   <Text style={styles.teamSelectorText}>
                     {selectedPlayers.length > 0 
-                      ? `${selectedPlayers.length} player${selectedPlayers.length > 1 ? 's' : ''} selected` 
-                      : 'Select players for lineup'}
+                      ? `${selectedPlayers.length} ${t('admin.activityForm.playerSelected', { count: selectedPlayers.length })}` 
+                      : t('admin.activityForm.selectPlayersForLineup')}
                   </Text>
                   <Text style={styles.teamSelectorSubtext}>
-                    Select players that will be in the game lineup
+                    {t('admin.activityForm.selectPlayersForLineupSubtext')}
                   </Text>
                 </View>
                 <MaterialCommunityIcons
@@ -611,7 +613,7 @@ export const CreateActivityScreen = () => {
             <View style={styles.modalOverlay}>
               <View style={styles.modalContent}>
                 <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>Select Team</Text>
+                  <Text style={styles.modalTitle}>{t('admin.activityForm.selectTeam')}</Text>
                   <TouchableOpacity 
                     onPress={() => setShowTeamMenu(false)}
                     style={styles.closeButton}
@@ -653,7 +655,7 @@ export const CreateActivityScreen = () => {
                       </TouchableOpacity>
                     ))
                   ) : (
-                    <Text style={styles.noTeamsText}>No teams available</Text>
+                    <Text style={styles.noTeamsText}>{t('admin.activityForm.noTeamsAvailable')}</Text>
                   )}
                 </ScrollView>
               </View>
@@ -670,7 +672,7 @@ export const CreateActivityScreen = () => {
             <View style={styles.modalOverlay}>
               <View style={styles.modalContent}>
                 <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>Select Players for Lineup</Text>
+                  <Text style={styles.modalTitle}>{t('admin.activityForm.selectPlayersForLineup')}</Text>
                   <TouchableOpacity 
                     onPress={() => setShowPlayerMenu(false)}
                     style={styles.closeButton}
@@ -712,7 +714,7 @@ export const CreateActivityScreen = () => {
                       </TouchableOpacity>
                     ))
                   ) : (
-                    <Text style={styles.noTeamsText}>No players available</Text>
+                    <Text style={styles.noTeamsText}>{t('admin.activityForm.noPlayersAvailable')}</Text>
                   )}
                 </ScrollView>
               </View>
@@ -722,7 +724,7 @@ export const CreateActivityScreen = () => {
           {/* Repeat Schedule Component */}
           <View style={styles.repeatContainer}>
             <View style={styles.repeatHeader}>
-              <Text style={styles.label}>Repeat Schedule</Text>
+              <Text style={styles.label}>{t('admin.activityForm.repeatSchedule')}</Text>
               <TouchableOpacity 
                 style={styles.repeatToggle}
                 onPress={() => setIsRepeating(!isRepeating)}
@@ -736,7 +738,7 @@ export const CreateActivityScreen = () => {
                   styles.repeatToggleText,
                   isRepeating && { color: getActivityColor(activityType) }
                 ]}>
-                  Repeat this event
+                  {t('admin.activityForm.repeatThisEvent')}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -757,7 +759,7 @@ export const CreateActivityScreen = () => {
             )}
           </View>
 
-          <Text style={styles.label}>Additional information</Text>
+          <Text style={styles.label}>{t('admin.activityForm.additionalInfo')}</Text>
           <TextInput
             value={additionalInfo}
             onChangeText={setAdditionalInfo}
@@ -768,12 +770,12 @@ export const CreateActivityScreen = () => {
             outlineStyle={styles.inputOutline}
             multiline
             numberOfLines={3}
-            placeholder="Don't forget to bring..."
+            placeholder={t('admin.activityForm.dontForgetToBring')}
           />
 
           <View style={styles.privateNotesContainer}>
-            <Text style={styles.privateNotesTitle}>Private notes for coaches</Text>
-            <Text style={styles.privateNotesSubtitle}>Visible for all coaches and admins in the team</Text>
+            <Text style={styles.privateNotesTitle}>{t('admin.activityForm.privateNotesForCoaches')}</Text>
+            <Text style={styles.privateNotesSubtitle}>{t('admin.activityForm.privateNotesSubtitle')}</Text>
             <TextInput
               value={privateNotes}
               onChangeText={setPrivateNotes}
@@ -784,7 +786,7 @@ export const CreateActivityScreen = () => {
               outlineStyle={styles.inputOutline}
               multiline
               numberOfLines={3}
-              placeholder="Add notes..."
+              placeholder={t('admin.activityForm.addNotes')}
             />
           </View>
           

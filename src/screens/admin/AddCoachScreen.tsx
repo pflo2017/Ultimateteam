@@ -8,6 +8,7 @@ import { supabase } from '../../lib/supabase';
 import { RootStackParamList } from '../../types/navigation';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import PhoneInput from 'react-native-phone-number-input';
+import { useTranslation } from 'react-i18next';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -17,10 +18,11 @@ export const AddCoachScreen = () => {
   const [isLoading, setIsLoading] = useState(false);
   const navigation = useNavigation<NavigationProp>();
   const phoneInputRef = React.useRef<PhoneInput>(null);
+  const { t } = useTranslation();
 
   const handleCreateCoach = async () => {
     if (!coachName.trim() || !phoneNumber.trim()) {
-      Alert.alert('Error', 'Please fill in all fields');
+      Alert.alert(t('common.error'), t('admin.addCoach.pleaseFillAllFields'));
       return;
     }
 
@@ -67,7 +69,7 @@ export const AddCoachScreen = () => {
         .single();
 
       if (existingCoach) {
-        Alert.alert('Error', 'A coach with this phone number already exists in this club.');
+        Alert.alert(t('common.error'), t('admin.addCoach.coachExistsError'));
         setIsLoading(false);
         return;
       }
@@ -88,11 +90,11 @@ export const AddCoachScreen = () => {
 
       // Show success message
       Alert.alert(
-        'Coach Created',
-        `Coach has been created successfully!\n\nPhone Number: ${formattedPhone}\n\nShare this phone number with the coach so they can complete their registration.`,
+        t('admin.addCoach.coachCreated'),
+        t('admin.addCoach.coachCreatedSuccess', { phone: formattedPhone }),
         [
           { 
-            text: 'OK',
+            text: t('admin.addCoach.ok'),
             onPress: () => navigation.goBack()
           }
         ]
@@ -101,9 +103,9 @@ export const AddCoachScreen = () => {
     } catch (error) {
       console.error('Error creating coach:', error);
       Alert.alert(
-        'Error',
-        'Failed to create coach. Please try again.',
-        [{ text: 'OK' }]
+        t('common.error'),
+        t('admin.addCoach.failedToCreateCoach'),
+        [{ text: t('admin.addCoach.ok') }]
       );
     } finally {
       setIsLoading(false);
@@ -128,13 +130,13 @@ export const AddCoachScreen = () => {
 
       <View style={styles.content}>
         <View style={styles.header}>
-          <Text style={styles.title}>Add New Coach</Text>
-          <Text style={styles.subtitle}>Enter coach details</Text>
+          <Text style={styles.title}>{t('admin.addCoach.title')}</Text>
+          <Text style={styles.subtitle}>{t('admin.addCoach.subtitle')}</Text>
         </View>
 
         <View style={styles.form}>
           <TextInput
-            label="Coach Name"
+            label={t('admin.addCoach.coachName')}
             value={coachName}
             onChangeText={setCoachName}
             mode="outlined"
@@ -142,7 +144,7 @@ export const AddCoachScreen = () => {
             outlineStyle={styles.inputOutline}
             contentStyle={styles.inputContent}
             theme={{ colors: { primary: COLORS.primary }}}
-            placeholder="Enter full name"
+            placeholder={t('admin.addCoach.enterFullName')}
             left={<TextInput.Icon icon="account-tie" color={COLORS.primary} />}
           />
 
@@ -162,7 +164,7 @@ export const AddCoachScreen = () => {
             },
             containerStyle: { marginBottom: 16 },
             textInputProps: {
-              placeholder: 'Enter phone number',
+              placeholder: t('admin.addCoach.enterPhoneNumber'),
               keyboardType: 'phone-pad',
             },
             textContainerStyle: { backgroundColor: COLORS.background },
@@ -176,7 +178,7 @@ export const AddCoachScreen = () => {
             style={[styles.createButton, isLoading && styles.createButtonDisabled]}
           >
             <Text style={styles.buttonText}>
-              {isLoading ? 'Creating Coach...' : 'Create Coach'}
+              {isLoading ? t('admin.addCoach.creatingCoach') : t('admin.addCoach.createCoach')}
             </Text>
           </Pressable>
         </View>

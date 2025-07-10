@@ -29,6 +29,7 @@ import { decode } from 'base64-arraybuffer';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PostEditorScreen } from '../screens/admin/PostEditorScreen';
 import { PlayerDetailsScreen } from '../screens/PlayerDetailsScreen';
+import { useTranslation } from 'react-i18next';
 
 // Add the CardType type definition
 type CardType = 'players' | 'teams' | 'coaches';
@@ -291,6 +292,7 @@ const AdminHeader = () => {
 };
 
 const TabNavigator = () => {
+  const { t } = useTranslation();
   return (
     <Tab.Navigator
       screenOptions={{
@@ -309,7 +311,7 @@ const TabNavigator = () => {
         name="Home"
         component={AdminHomeScreen}
         options={{
-          tabBarLabel: 'Dashboard',
+          tabBarLabel: t('admin.tabs.dashboard'),
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="view-dashboard-outline" size={size} color={color} />
           ),
@@ -319,7 +321,7 @@ const TabNavigator = () => {
         name="Manage"
         component={AdminManageScreen}
         options={{
-          tabBarLabel: 'Manage',
+          tabBarLabel: t('admin.tabs.manage'),
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="account-multiple-plus-outline" size={size} color={color} />
           ),
@@ -329,7 +331,7 @@ const TabNavigator = () => {
         name="Schedule"
         component={AdminScheduleScreen}
         options={{
-          tabBarLabel: 'Schedule',
+          tabBarLabel: t('admin.tabs.schedule'),
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="calendar-outline" size={size} color={color} />
           ),
@@ -339,7 +341,7 @@ const TabNavigator = () => {
         name="Attendance"
         component={AttendanceScreen}
         options={{
-          tabBarLabel: 'Attendance',
+          tabBarLabel: t('admin.tabs.attendance'),
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="clipboard-check-outline" size={size} color={color} />
           ),
@@ -349,6 +351,7 @@ const TabNavigator = () => {
         name="Payments"
         component={AdminPaymentsScreen}
         options={{
+          tabBarLabel: t('admin.tabs.payments'),
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="credit-card-outline" size={size} color={color} />
           ),
@@ -369,7 +372,7 @@ const TabNavigator = () => {
         name="News"
         component={AdminNewsScreen}
         options={{
-          tabBarLabel: 'News',
+          tabBarLabel: t('admin.tabs.news'),
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="bullhorn-outline" size={24} color={color} />
           ),

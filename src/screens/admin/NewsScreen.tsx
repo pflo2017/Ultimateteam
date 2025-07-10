@@ -9,6 +9,7 @@ import { updatePost, deletePost } from '../../components/news/postsService';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { AdminStackParamList } from '../../types/navigation';
+import { useTranslation } from 'react-i18next';
 
 // Real createPost function
 const createPost = async (data: { title?: string; content: string; is_general: boolean; team_ids: string[] }) => {
@@ -101,6 +102,7 @@ const onSubmitComment = async (postId: string, content: string): Promise<void> =
 
 export const AdminNewsScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<AdminStackParamList>>();
+  const { t } = useTranslation();
   const [refreshKey, setRefreshKey] = useState(0);
   const [showCommentModal, setShowCommentModal] = useState(false);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
@@ -195,12 +197,12 @@ export const AdminNewsScreen = () => {
         </>
       ) : (
         <View style={styles.centered}>
-          <Text>Loading club information...</Text>
+          <Text>{t('admin.news.loadingClubInfo')}</Text>
         </View>
       )}
       {loadingTeams && (
         <View style={{ position: 'absolute', top: 100, left: 0, right: 0, alignItems: 'center' }}>
-          <Text>Loading teams...</Text>
+          <Text>{t('admin.news.loadingTeams')}</Text>
         </View>
       )}
       {selectedPost && (

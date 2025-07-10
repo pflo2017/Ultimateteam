@@ -10,7 +10,7 @@ import SuspendedClubBanner from './src/components/SuspendedClubBanner';
 import { getUserClubId } from './src/services/activitiesService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Session } from '@supabase/supabase-js';
-
+import './src/i18n';
 const customTheme = {
   ...DefaultTheme,
   colors: {

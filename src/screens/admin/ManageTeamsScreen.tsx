@@ -7,6 +7,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { AdminStackParamList } from '../../types/navigation';
 import * as Clipboard from 'expo-clipboard';
+import { useTranslation } from 'react-i18next';
 
 interface Team {
   id: string;
@@ -31,6 +32,8 @@ interface TeamCardProps {
 }
 
 const TeamCard: React.FC<TeamCardProps> = ({ team, onPress, onCopyAccessCode, navigation }) => {
+  const { t } = useTranslation();
+  
   return (
     <Card 
       key={team.id} 
@@ -99,7 +102,7 @@ const TeamCard: React.FC<TeamCardProps> = ({ team, onPress, onCopyAccessCode, na
                 }}
                 numberOfLines={1}
               >
-                Team
+                {t('admin.teams.role')}
               </Text>
             </View>
           </View>
@@ -138,7 +141,7 @@ const TeamCard: React.FC<TeamCardProps> = ({ team, onPress, onCopyAccessCode, na
                 fontSize: FONT_SIZES.sm,
                 color: COLORS.grey[600],
               }}>
-                Coach: <Text style={{
+                {t('admin.teams.coach')} <Text style={{
                   fontWeight: '600',
                   color: COLORS.text
                 }}>{team.coach.name}</Text>
@@ -156,7 +159,7 @@ const TeamCard: React.FC<TeamCardProps> = ({ team, onPress, onCopyAccessCode, na
                 color: COLORS.grey[600],
                 fontStyle: 'italic'
               }}>
-                No coach assigned
+                {t('admin.teams.noCoachAssigned')}
               </Text>
             </View>
           )}
@@ -171,7 +174,7 @@ const TeamCard: React.FC<TeamCardProps> = ({ team, onPress, onCopyAccessCode, na
               fontSize: FONT_SIZES.sm,
               color: COLORS.grey[600],
             }}>
-              Players: <Text style={{
+              {t('admin.teams.players')} <Text style={{
                 fontWeight: '600',
                 color: COLORS.text
               }}>{team.players_count || '0'}</Text>
@@ -195,7 +198,7 @@ const TeamCard: React.FC<TeamCardProps> = ({ team, onPress, onCopyAccessCode, na
                 fontSize: FONT_SIZES.sm,
                 color: COLORS.grey[600],
               }}>
-                Access: <Text style={{
+                {t('admin.teams.access')} <Text style={{
                   fontWeight: '600',
                   color: COLORS.text
                 }}>{team.access_code}</Text>
@@ -234,6 +237,7 @@ export const ManageTeamsScreen: React.FC<ManageTeamsScreenProps> = ({
   onCopyAccessCode
 }) => {
   const navigation = useNavigation<NativeStackNavigationProp<AdminStackParamList>>();
+  const { t } = useTranslation();
 
   if (isLoading) {
     return <ActivityIndicator style={styles.loader} color={COLORS.primary} />;
@@ -244,15 +248,15 @@ export const ManageTeamsScreen: React.FC<ManageTeamsScreenProps> = ({
       <View style={styles.content}>
         <View style={styles.header}>
           <View>
-            <Text style={styles.sectionTitle}>Teams</Text>
-            <Text style={styles.totalCount}>Total: {teams.length} teams</Text>
+            <Text style={styles.sectionTitle}>{t('admin.teams.title')}</Text>
+            <Text style={styles.totalCount}>{t('admin.teams.totalCount', { count: teams.length })}</Text>
           </View>
           <TouchableOpacity
             style={styles.addButton}
             onPress={() => navigation.navigate('AddTeam')}
           >
             <MaterialCommunityIcons name="plus" size={16} color={COLORS.white} />
-            <Text style={styles.addButtonText}>Add Team</Text>
+            <Text style={styles.addButtonText}>{t('admin.teams.addTeam')}</Text>
           </TouchableOpacity>
         </View>
 
@@ -260,7 +264,7 @@ export const ManageTeamsScreen: React.FC<ManageTeamsScreenProps> = ({
           <MaterialCommunityIcons name="magnify" size={20} color={COLORS.grey[400]} style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search team"
+            placeholder={t('admin.teams.searchPlaceholder')}
             placeholderTextColor={COLORS.grey[400]}
           />
         </View>
@@ -272,7 +276,7 @@ export const ManageTeamsScreen: React.FC<ManageTeamsScreenProps> = ({
           contentContainerStyle={styles.scrollContent}
         >
           {!teams?.length ? (
-            <Text style={styles.emptyText}>No teams found</Text>
+            <Text style={styles.emptyText}>{t('admin.teams.noTeamsFound')}</Text>
           ) : (
             teams.map((team) => (
               <TeamCard

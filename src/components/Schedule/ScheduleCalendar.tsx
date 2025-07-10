@@ -14,6 +14,7 @@ import type { RootStackParamList } from '../../types/navigation';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { TeamFilterModal } from '../../components/Teams/TeamFilterModal';
 import { getUserClubId } from '../../services/activitiesService';
+import { useTranslation } from 'react-i18next';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -38,20 +39,20 @@ const getActivityIcon = (type: ServiceActivityType) => {
   }
 };
 
-const getActivityTypeLabel = (type: ServiceActivityType | 'all') => {
+const getActivityTypeLabel = (type: ServiceActivityType | 'all', t: any) => {
   switch (type) {
     case 'training':
-      return 'Training';
+      return t('admin.schedule.training');
     case 'game':
-      return 'Game';
+      return t('admin.schedule.game');
     case 'tournament':
-      return 'Tournament';
+      return t('admin.schedule.tournament');
     case 'other':
-      return 'Other';
+      return t('admin.schedule.other');
     case 'all':
-      return 'All Types';
+      return t('admin.schedule.allTypes');
     default:
-      return 'Event';
+      return t('admin.schedule.event');
   }
 };
 
@@ -441,6 +442,8 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
       </View>
     );
   };
+
+  const { t } = useTranslation();
   
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -454,14 +457,14 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
                 style={styles.tabButton}
                 onPress={() => setViewMode('monthly')}
               >
-                <Text style={[styles.tabText, viewMode === 'monthly' && styles.tabTextActive]}>Monthly</Text>
+                <Text style={[styles.tabText, viewMode === 'monthly' && styles.tabTextActive]}>{t('admin.schedule.monthly')}</Text>
                 {viewMode === 'monthly' && <View style={styles.tabUnderline} />}
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.tabButton}
                 onPress={() => setViewMode('weekly')}
               >
-                <Text style={[styles.tabText, viewMode === 'weekly' && styles.tabTextActive]}>Weekly</Text>
+                <Text style={[styles.tabText, viewMode === 'weekly' && styles.tabTextActive]}>{t('admin.schedule.weekly')}</Text>
                 {viewMode === 'weekly' && <View style={styles.tabUnderline} />}
               </TouchableOpacity>
             </View>
@@ -502,7 +505,7 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
           
           <View style={styles.eventsContainer}>
             <View style={styles.eventsHeader}>
-              <Text style={styles.eventsTitle}>Activities</Text>
+              <Text style={styles.eventsTitle}>{t('admin.schedule.activities')}</Text>
               {isLoading && <ActivityIndicator size="small" color={COLORS.primary} />}
             </View>
             
@@ -514,7 +517,7 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
               ) : (
                 !isLoading && (
                   <Text style={styles.noEventsText}>
-                    No activities scheduled for {viewMode === 'monthly' ? 'this date' : 'this week'}
+                    {t('admin.schedule.noActivities')} {viewMode === 'monthly' ? t('admin.schedule.thisDate') : t('admin.schedule.thisWeek')}
                   </Text>
                 )
               )}
@@ -539,7 +542,7 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Activity Type</Text>
+              <Text style={styles.modalTitle}>{t('admin.schedule.selectActivityType')}</Text>
               <TouchableOpacity 
                 onPress={() => setShowTypeFilter(false)}
                 style={styles.closeButton}
@@ -554,7 +557,7 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
             >
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <MaterialCommunityIcons name="filter-variant-remove" size={20} color={COLORS.primary} style={{ marginRight: 8 }} />
-                <Text style={[styles.optionText, selectedType === 'all' && styles.optionTextSelected]}>All Types</Text>
+                <Text style={[styles.optionText, selectedType === 'all' && styles.optionTextSelected]}>{t('admin.schedule.allTypes')}</Text>
               </View>
               {selectedType === 'all' && (
                 <MaterialCommunityIcons name="check" size={20} color={COLORS.primary} />
@@ -567,7 +570,7 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
             >
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <MaterialCommunityIcons name="whistle" size={20} color={COLORS.primary} style={{ marginRight: 8 }} />
-                <Text style={[styles.optionText, selectedType === 'training' && styles.optionTextSelected]}>Training</Text>
+                <Text style={[styles.optionText, selectedType === 'training' && styles.optionTextSelected]}>{t('admin.schedule.training')}</Text>
               </View>
               {selectedType === 'training' && (
                 <MaterialCommunityIcons name="check" size={20} color={COLORS.primary} />
@@ -580,7 +583,7 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
             >
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <MaterialCommunityIcons name="trophy-outline" size={20} color={'#E67E22'} style={{ marginRight: 8 }} />
-                <Text style={[styles.optionText, selectedType === 'game' && styles.optionTextSelected]}>Game</Text>
+                <Text style={[styles.optionText, selectedType === 'game' && styles.optionTextSelected]}>{t('admin.schedule.game')}</Text>
               </View>
               {selectedType === 'game' && (
                 <MaterialCommunityIcons name="check" size={20} color={COLORS.primary} />
@@ -593,7 +596,7 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
             >
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <MaterialCommunityIcons name="tournament" size={20} color={'#8E44AD'} style={{ marginRight: 8 }} />
-                <Text style={[styles.optionText, selectedType === 'tournament' && styles.optionTextSelected]}>Tournament</Text>
+                <Text style={[styles.optionText, selectedType === 'tournament' && styles.optionTextSelected]}>{t('admin.schedule.tournament')}</Text>
               </View>
               {selectedType === 'tournament' && (
                 <MaterialCommunityIcons name="check" size={20} color={COLORS.primary} />
@@ -606,7 +609,7 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
             >
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <MaterialCommunityIcons name="calendar-text" size={20} color={'#2ECC71'} style={{ marginRight: 8 }} />
-                <Text style={[styles.optionText, selectedType === 'other' && styles.optionTextSelected]}>Other</Text>
+                <Text style={[styles.optionText, selectedType === 'other' && styles.optionTextSelected]}>{t('admin.schedule.other')}</Text>
               </View>
               {selectedType === 'other' && (
                 <MaterialCommunityIcons name="check" size={20} color={COLORS.primary} />
@@ -626,7 +629,7 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Month</Text>
+              <Text style={styles.modalTitle}>{t('admin.schedule.selectMonth')}</Text>
               <TouchableOpacity 
                 onPress={() => setShowMonthFilter(false)}
                 style={styles.closeButton}
@@ -679,8 +682,8 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
             <TouchableWithoutFeedback onPress={() => {}}>
               <View style={styles.filterModalContent}>
                 <ScrollView>
-                  <Text style={styles.filterModalTitle}>Filter Activities</Text>
-                  <Text style={styles.filterModalSection}>Activity Type</Text>
+                  <Text style={styles.filterModalTitle}>{t('admin.schedule.filterActivities')}</Text>
+                  <Text style={styles.filterModalSection}>{t('admin.schedule.activityType')}</Text>
                   <View style={styles.filterChipRow}>
                     {(['all', 'training', 'game', 'tournament', 'other'] as (ServiceActivityType | 'all')[]).map((type) => {
                       const isSelected = selectedFilterType === type;
@@ -689,7 +692,6 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
                       else if (type === 'game') selectedColor = '#E67E22';
                       else if (type === 'tournament') selectedColor = '#8E44AD';
                       else if (type === 'other') selectedColor = '#2ECC71';
-                      else if (type === 'all') selectedColor = COLORS.primary;
                       return (
                         <TouchableOpacity
                           key={type}
@@ -709,13 +711,13 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
                             styles.chipText,
                             isSelected && { color: '#fff' }
                           ]}>
-                            {getActivityTypeLabel(type as ServiceActivityType)}
+                            {getActivityTypeLabel(type as ServiceActivityType, t)}
                           </Text>
                         </TouchableOpacity>
                       );
                     })}
                   </View>
-                  <Text style={styles.filterModalSection}>Teams</Text>
+                  <Text style={styles.filterModalSection}>{t('admin.schedule.teams')}</Text>
                   
                   {/* Replace the team chips with a button to open the FilterTeamsModal */}
                   <TouchableOpacity
@@ -728,14 +730,14 @@ export const ScheduleCalendar = ({ userRole, onCreateActivity }: ScheduleCalenda
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                       <MaterialCommunityIcons name="account-group" size={20} color={COLORS.primary} style={{ marginRight: 8 }} />
                       <Text style={styles.teamSelectorText}>
-                        {selectedTeam ? selectedTeam.name : 'All Teams'}
+                        {selectedTeam ? selectedTeam.name : t('admin.schedule.allTeams')}
                       </Text>
                     </View>
                     <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.grey[400]} />
                   </TouchableOpacity>
                   
                   <Button mode="contained" onPress={() => setShowFilterModal(false)} style={styles.filterApplyButton}>
-                    Apply Filters
+                    {t('admin.schedule.applyFilters')}
                   </Button>
                 </ScrollView>
               </View>
@@ -1098,6 +1100,7 @@ const styles = StyleSheet.create({
 });
 
 export const EventCard = ({ activity, isWeeklyView }: { activity: Activity, isWeeklyView?: boolean }) => {
+  const { t } = useTranslation();
   const startTime = parseISO(activity.start_time);
   const cardNavigation = useNavigation<NavigationProp>();
   const activityColor = getActivityColor(activity.type);
@@ -1154,7 +1157,7 @@ export const EventCard = ({ activity, isWeeklyView }: { activity: Activity, isWe
                 color={activityColor} 
               />
               <Text style={[styles.eventTypeText, { color: activityColor }]}> 
-                {getActivityTypeLabel(activity.type)}
+                {getActivityTypeLabel(activity.type, t)}
               </Text>
               {activity.is_repeating && (
                 <MaterialCommunityIcons name="repeat" size={14} color={activityColor} style={styles.repeatIcon} />

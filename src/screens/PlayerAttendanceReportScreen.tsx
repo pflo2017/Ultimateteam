@@ -6,6 +6,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { fetchPlayerAttendanceStats } from '../services/attendanceService';
+import { useTranslation } from 'react-i18next';
 
 // Define proper types for better type safety
 interface ActivityType {
@@ -54,6 +55,8 @@ const PlayerAttendanceReportScreen = () => {
     byType: {} 
   });
   const [error, setError] = useState<string | null>(null);
+
+  const { t } = useTranslation();
 
   // Safe date parsing function
   const parseActivityDate = (dateStr?: string): Date | null => {
@@ -351,21 +354,21 @@ const PlayerAttendanceReportScreen = () => {
           <ScrollView contentContainerStyle={styles.content}>
             {/* Summary */}
             <View style={styles.summaryContainer}>
-              <Text style={styles.summaryTitle}>Attendance Summary</Text>
-              <Text style={styles.summaryText}>Present: <Text style={styles.bold}>{summary.present}</Text></Text>
-              <Text style={styles.summaryText}>Absent: <Text style={styles.bold}>{summary.absent}</Text></Text>
-              <Text style={styles.summaryText}>Attendance Rate: <Text style={styles.bold}>{summary.percentage}%</Text></Text>
+              <Text style={styles.summaryTitle}>{t('attendance.playerReport.summaryTitle')}</Text>
+              <Text style={styles.summaryText}>{t('attendance.playerReport.present')}: <Text style={styles.bold}>{summary.present}</Text></Text>
+              <Text style={styles.summaryText}>{t('attendance.playerReport.absent')}: <Text style={styles.bold}>{summary.absent}</Text></Text>
+              <Text style={styles.summaryText}>{t('attendance.playerReport.attendanceRate')}: <Text style={styles.bold}>{summary.percentage}%</Text></Text>
             </View>
             
             {/* Breakdown by type */}
             <View style={styles.breakdownContainer}>
-              <Text style={styles.breakdownTitle}>By Activity Type</Text>
+              <Text style={styles.breakdownTitle}>{t('attendance.playerReport.byActivityType')}</Text>
               {Object.entries(summary.byType).length === 0 ? (
-                <Text style={styles.noDataText}>No activity types found.</Text>
+                <Text style={styles.noDataText}>{t('attendance.playerReport.noActivityTypes')}</Text>
               ) : (
                 Object.entries(summary.byType).map(([type, val]) => (
                   <Text key={type} style={styles.breakdownText}>
-                    {type.charAt(0).toUpperCase() + type.slice(1)}: <Text style={styles.bold}>{val.present} present</Text>, <Text style={styles.bold}>{val.absent} absent</Text>
+                    {t('admin.activityForm.' + type)}: <Text style={styles.bold}>{val.present} {t('attendance.playerReport.present')}</Text>, <Text style={styles.bold}>{val.absent} {t('attendance.playerReport.absent')}</Text>
                   </Text>
                 ))
               )}
@@ -373,9 +376,9 @@ const PlayerAttendanceReportScreen = () => {
             
             {/* Detailed list */}
             <View style={styles.listContainer}>
-              <Text style={styles.listTitle}>All Activities</Text>
+              <Text style={styles.listTitle}>{t('attendance.playerReport.allActivities')}</Text>
               {filteredRecords.length === 0 ? (
-                <Text style={styles.noDataText}>No attendance records found for this player in the selected period.</Text>
+                <Text style={styles.noDataText}>{t('attendance.playerReport.noRecords')}</Text>
               ) : (
                 filteredRecords.map((rec, idx) => (
                   <View key={rec.id || `record-${idx}`} style={styles.activityRow}>
@@ -405,7 +408,7 @@ const PlayerAttendanceReportScreen = () => {
                           { color: rec.status === 'present' ? COLORS.success : COLORS.error }
                         ]}
                       >
-                        {rec.status === 'present' ? 'Present' : 'Absent'}
+                        {rec.status === 'present' ? t('attendance.playerReport.present') : t('attendance.playerReport.absent')}
                       </Text>
                       {rec.status === 'absent' && rec.note && (
                         <Text style={styles.reasonText}>

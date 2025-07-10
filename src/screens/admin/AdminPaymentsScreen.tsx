@@ -5,6 +5,7 @@ import { COLORS, SPACING } from '../../constants/theme';
 import { supabase } from '../../lib/supabase';
 import { useDataRefresh } from '../../utils/useDataRefresh';
 import { getUserClubId } from '../../services/activitiesService';
+import { useTranslation } from 'react-i18next';
 
 interface Player {
   id: string;
@@ -39,6 +40,7 @@ interface PaymentStats {
 export const AdminPaymentsScreen = () => {
   // Refs
   const monthScrollViewRef = useRef<ScrollView>(null);
+  const { t } = useTranslation();
   
   // Basic state
   const [isLoading, setIsLoading] = useState(true);
@@ -257,7 +259,7 @@ export const AdminPaymentsScreen = () => {
       
     } catch (error) {
       console.error('Error fetching teams:', error);
-      Alert.alert('Error', 'Failed to load teams data');
+      Alert.alert(t('common.error'), t('admin.payments.failedToLoadTeams'));
     } finally {
       setIsLoading(false);
     }
@@ -430,7 +432,7 @@ export const AdminPaymentsScreen = () => {
       
     } catch (error) {
       console.error('Error fetching monthly payments:', error);
-      Alert.alert('Error', 'Failed to load payment data');
+      Alert.alert(t('common.error'), t('admin.payments.failedToLoadPaymentData'));
     } finally {
       setIsLoading(false);
     }
@@ -598,7 +600,7 @@ export const AdminPaymentsScreen = () => {
       
     } catch (error) {
       console.error('Error fetching monthly payments:', error);
-      Alert.alert('Error', 'Failed to load payment data');
+      Alert.alert(t('common.error'), t('admin.payments.failedToLoadPaymentData'));
     } finally {
       setIsLoading(false);
     }
@@ -801,7 +803,7 @@ export const AdminPaymentsScreen = () => {
       if (userError) throw userError;
       
       if (!user) {
-        Alert.alert('Error', 'You must be logged in to send reminders.');
+        Alert.alert(t('common.error'), t('admin.payments.mustBeLoggedInToSendReminders'));
         return;
       }
       
@@ -822,7 +824,7 @@ export const AdminPaymentsScreen = () => {
       if (error) throw error;
       
       // Show success message
-      setToastMessage(data.message || 'Payment reminder sent');
+      setToastMessage(data.message || t('admin.payments.paymentReminderSent'));
       setShowToast(true);
       
       // Hide toast after 3 seconds
@@ -832,7 +834,7 @@ export const AdminPaymentsScreen = () => {
       
     } catch (error) {
       console.error('Error sending payment reminder:', error);
-      Alert.alert('Error', 'Failed to send payment reminder. Please try again.');
+      Alert.alert(t('common.error'), t('admin.payments.failedToSendPaymentReminder'));
     }
   };
 
@@ -902,7 +904,7 @@ export const AdminPaymentsScreen = () => {
               style={styles.teamSelectorIcon} 
             />
             <Text style={styles.teamSelectorText} numberOfLines={1}>
-              {selectedTeamId ? teams.find(t => t.id === selectedTeamId)?.name : 'Select Team'}
+              {selectedTeamId ? teams.find(t => t.id === selectedTeamId)?.name : t('admin.payments.selectTeam')}
             </Text>
             <MaterialCommunityIcons name="chevron-down" size={20} color={COLORS.grey[400]} />
           </TouchableOpacity>
@@ -911,7 +913,7 @@ export const AdminPaymentsScreen = () => {
           {!selectedTeamId && (
             <View style={styles.emptyStateContainer}>
               <MaterialCommunityIcons name="arrow-up-drop-circle" size={48} color={COLORS.primary} />
-              <Text style={styles.emptyStateText}>Please select a team to view payments</Text>
+              <Text style={styles.emptyStateText}>{t('admin.payments.pleaseSelectTeamToViewPayments')}</Text>
             </View>
           )}
           
@@ -921,7 +923,7 @@ export const AdminPaymentsScreen = () => {
               <MaterialCommunityIcons name="magnify" size={20} color={COLORS.grey[400]} style={styles.searchIcon} />
               <TextInput
                 style={styles.searchInput}
-                placeholder="Search player"
+                placeholder={t('admin.payments.searchPlayer')}
                 placeholderTextColor={COLORS.grey[400]}
                 value={searchQuery}
                 onChangeText={handleSearchChange}
@@ -935,7 +937,7 @@ export const AdminPaymentsScreen = () => {
               <View style={styles.statsContainer}>
                 <View style={styles.statItem}>
                   <MaterialCommunityIcons name="check-circle" size={24} color={COLORS.success} />
-                  <Text style={styles.statLabel}>Paid</Text>
+                  <Text style={styles.statLabel}>{t('admin.payments.paid')}</Text>
                   <Text style={styles.statValue}>{stats.paidPlayers}</Text>
                 </View>
                 
@@ -943,7 +945,7 @@ export const AdminPaymentsScreen = () => {
                 
                 <View style={styles.statItem}>
                   <MaterialCommunityIcons name="close-circle" size={24} color={COLORS.error} />
-                  <Text style={styles.statLabel}>Not Paid</Text>
+                  <Text style={styles.statLabel}>{t('admin.payments.notPaid')}</Text>
                   <Text style={styles.statValue}>{stats.unpaidPlayers}</Text>
                 </View>
                 
@@ -951,7 +953,7 @@ export const AdminPaymentsScreen = () => {
                 
                 <View style={styles.statItem}>
                   <MaterialCommunityIcons name="account-group" size={24} color={COLORS.primary} />
-                  <Text style={styles.statLabel}>Total</Text>
+                  <Text style={styles.statLabel}>{t('admin.payments.total')}</Text>
                   <Text style={styles.statValue}>{stats.totalPlayers}</Text>
                 </View>
               </View>
@@ -961,7 +963,7 @@ export const AdminPaymentsScreen = () => {
                 {filteredPlayers.length === 0 ? (
                   <View style={styles.emptyState}>
                     <MaterialCommunityIcons name="account-off" size={48} color={COLORS.grey[400]} />
-                    <Text style={styles.emptyStateText}>No players found</Text>
+                    <Text style={styles.emptyStateText}>{t('admin.payments.noPlayersFound')}</Text>
                   </View>
                 ) : (
                   filteredPlayers.map(player => (
@@ -1004,7 +1006,7 @@ export const AdminPaymentsScreen = () => {
                               styles.statusText,
                               { color: player.payment_status === 'paid' ? COLORS.success : COLORS.error }
                             ]}>
-                              {player.payment_status === 'paid' ? 'Paid' : 'Not Paid'}
+                              {player.payment_status === 'paid' ? t('admin.payments.paid') : t('admin.payments.notPaid')}
                             </Text>
                           </View>
                           
@@ -1013,7 +1015,7 @@ export const AdminPaymentsScreen = () => {
                             <TouchableOpacity 
                               style={styles.reminderButton}
                               onPress={() => sendPaymentReminder(player)}
-                              accessibilityLabel="Send payment reminder"
+                              accessibilityLabel={t('admin.payments.sendPaymentReminder')}
                             >
                               <MaterialCommunityIcons 
                                 name="bell" 
@@ -1029,7 +1031,7 @@ export const AdminPaymentsScreen = () => {
                           <View style={styles.paymentUpdateContainer}>
                             <MaterialCommunityIcons name="clock-outline" size={16} color={COLORS.grey[600]} />
                             <Text style={styles.paymentUpdateText}>
-                              Paid on {formatDate(player.payment_updated_at)}
+                              {t('admin.payments.paidOn')} {formatDate(player.payment_updated_at)}
                             </Text>
                             {player.payment_method && (
                               <View style={{
@@ -1042,9 +1044,9 @@ export const AdminPaymentsScreen = () => {
                                 marginBottom: 2,
                               }}>
                                 <Text style={{ fontSize: 13, color: COLORS.primary }}>
-                                  {player.payment_method === 'cash' && 'Cash'}
-                                  {player.payment_method === 'voucher_cash' && 'Voucher & cash'}
-                                  {player.payment_method === 'bank_transfer' && 'Bank transfer'}
+                                  {player.payment_method === 'cash' && t('admin.payments.cash')}
+                                  {player.payment_method === 'voucher_cash' && t('admin.payments.voucherCash')}
+                                  {player.payment_method === 'bank_transfer' && t('admin.payments.bankTransfer')}
                                   {!['cash','voucher_cash','bank_transfer'].includes(player.payment_method) && player.payment_method}
                                 </Text>
                               </View>
@@ -1073,7 +1075,7 @@ export const AdminPaymentsScreen = () => {
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Select Team</Text>
+                <Text style={styles.modalTitle}>{t('admin.payments.selectTeam')}</Text>
                 <TouchableOpacity 
                   onPress={() => setIsTeamModalVisible(false)}
                 >
@@ -1113,7 +1115,7 @@ export const AdminPaymentsScreen = () => {
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContent, { borderRadius: 0, padding: 24, width: '100%', maxWidth: undefined, alignSelf: undefined, margin: 0 }]}> 
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                <Text style={{ fontSize: 20, fontWeight: 'bold', textAlign: 'center', flex: 1 }}>Select Month</Text>
+                <Text style={{ fontSize: 20, fontWeight: 'bold', textAlign: 'center', flex: 1 }}>{t('admin.payments.selectMonth')}</Text>
                 <TouchableOpacity onPress={() => setIsMonthPickerVisible(false)} style={{ marginLeft: 8 }}>
                   <MaterialCommunityIcons name="close" size={28} color={COLORS.grey[600]} />
                 </TouchableOpacity>

@@ -8,6 +8,7 @@ import { supabase } from '../../lib/supabase';
 import type { RouteProp } from '@react-navigation/native';
 import type { AdminStackParamList } from '../../types/navigation';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useTranslation } from 'react-i18next';
 
 type EditCoachScreenRouteProp = RouteProp<AdminStackParamList, 'EditCoach'>;
 type EditCoachScreenNavigationProp = NativeStackNavigationProp<AdminStackParamList>;
@@ -19,6 +20,7 @@ export const EditCoachScreen = () => {
   const navigation = useNavigation<EditCoachScreenNavigationProp>();
   const route = useRoute<EditCoachScreenRouteProp>();
   const { coachId } = route.params;
+  const { t } = useTranslation();
 
   useEffect(() => {
     loadCoachData();
@@ -39,13 +41,13 @@ export const EditCoachScreen = () => {
       }
     } catch (error) {
       console.error('Error loading coach data:', error);
-      Alert.alert('Error', 'Failed to load coach data');
+      Alert.alert(t('common.error'), t('admin.editCoach.failedToLoadData'));
     }
   };
 
   const handleUpdateCoach = async () => {
     if (!coachName.trim() || !phoneNumber.trim()) {
-      Alert.alert('Error', 'Please fill in all fields');
+      Alert.alert(t('common.error'), t('admin.editCoach.pleaseFillAllFields'));
       return;
     }
 
@@ -62,11 +64,11 @@ export const EditCoachScreen = () => {
       if (error) throw error;
 
       Alert.alert(
-        'Success',
-        'Coach updated successfully',
+        t('common.success'),
+        t('admin.editCoach.coachUpdated'),
         [
           {
-            text: 'OK',
+            text: t('admin.addCoach.ok'),
             onPress: () => {
               navigation.dispatch(
                 CommonActions.reset({
@@ -86,7 +88,7 @@ export const EditCoachScreen = () => {
       );
     } catch (error) {
       console.error('Error updating coach:', error);
-      Alert.alert('Error', 'Failed to update coach');
+      Alert.alert(t('common.error'), t('admin.editCoach.failedToUpdateCoach'));
     } finally {
       setIsLoading(false);
     }
@@ -94,15 +96,15 @@ export const EditCoachScreen = () => {
 
   const handleDeleteCoach = () => {
     Alert.alert(
-      'Delete Coach',
-      'Are you sure you want to delete this coach? This action cannot be undone.',
+      t('admin.editCoach.deleteCoach'),
+      t('admin.editCoach.deleteConfirmation'),
       [
         {
-          text: 'Cancel',
+          text: t('admin.addCoach.cancel'),
           style: 'cancel',
         },
         {
-          text: 'Delete',
+          text: t('admin.addCoach.delete'),
           style: 'destructive',
           onPress: async () => {
             setIsLoading(true);
@@ -174,11 +176,11 @@ export const EditCoachScreen = () => {
               }
 
               Alert.alert(
-                'Success',
-                'Coach deleted successfully',
+                t('common.success'),
+                t('admin.editCoach.coachDeleted'),
                 [
                   {
-                    text: 'OK',
+                    text: t('admin.addCoach.ok'),
                     onPress: () => {
                       navigation.dispatch(
                         CommonActions.reset({
@@ -198,7 +200,7 @@ export const EditCoachScreen = () => {
               );
             } catch (error) {
               console.error('Error deleting coach:', error);
-              Alert.alert('Error', 'Failed to delete coach');
+              Alert.alert(t('common.error'), t('admin.editCoach.failedToDeleteCoach'));
             } finally {
               setIsLoading(false);
             }
@@ -226,13 +228,13 @@ export const EditCoachScreen = () => {
 
       <View style={styles.content}>
         <View style={styles.header}>
-          <Text style={styles.title}>Edit Coach</Text>
-          <Text style={styles.subtitle}>Update coach information or delete coach</Text>
+          <Text style={styles.title}>{t('admin.editCoach.title')}</Text>
+          <Text style={styles.subtitle}>{t('admin.editCoach.subtitle')}</Text>
         </View>
 
         <View style={styles.form}>
           <TextInput
-            label="Coach Name"
+            label={t('admin.editCoach.coachName')}
             value={coachName}
             onChangeText={setCoachName}
             mode="outlined"
@@ -244,7 +246,7 @@ export const EditCoachScreen = () => {
           />
 
           <TextInput
-            label="Phone Number"
+            label={t('admin.editCoach.phoneNumber')}
             value={phoneNumber}
             onChangeText={setPhoneNumber}
             mode="outlined"
@@ -262,7 +264,7 @@ export const EditCoachScreen = () => {
             style={[styles.updateButton, isLoading && styles.buttonDisabled]}
           >
             <Text style={styles.buttonText}>
-              {isLoading ? 'Updating...' : 'Update Coach'}
+              {isLoading ? t('admin.editCoach.updating') : t('admin.editCoach.updateCoach')}
             </Text>
           </Pressable>
 
@@ -272,7 +274,7 @@ export const EditCoachScreen = () => {
             style={[styles.deleteButton, isLoading && styles.buttonDisabled]}
           >
             <Text style={[styles.buttonText, styles.deleteButtonText]}>
-              Delete Coach
+              {t('admin.editCoach.deleteCoach')}
             </Text>
           </Pressable>
         </View>

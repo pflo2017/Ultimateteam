@@ -7,8 +7,10 @@ import * as ImagePicker from 'expo-image-picker';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { decode } from 'base64-arraybuffer';
 import { SUPABASE_URL } from '@env';
+import { useTranslation } from 'react-i18next';
 
 export const ClubSettingsScreen = () => {
+  const { t } = useTranslation();
   const [profile, setProfile] = useState({
     clubName: '',
     clubLocation: '',
@@ -47,7 +49,7 @@ export const ClubSettingsScreen = () => {
       });
     } catch (error) {
       console.error('Error loading profile:', error);
-      Alert.alert('Error', 'Failed to load profile information');
+      Alert.alert(t('common.error'), t('admin.clubSettings.failedToLoadProfile'));
     }
   };
 
@@ -72,10 +74,10 @@ export const ClubSettingsScreen = () => {
 
       if (error) throw error;
 
-      Alert.alert('Success', 'Profile updated successfully');
+      Alert.alert(t('common.success'), t('admin.clubSettings.profileUpdated'));
     } catch (error) {
       console.error('Error updating profile:', error);
-      Alert.alert('Error', 'Failed to update profile');
+      Alert.alert(t('common.error'), t('admin.clubSettings.failedToUpdateProfile'));
     } finally {
       setIsLoading(false);
     }
@@ -86,12 +88,12 @@ export const ClubSettingsScreen = () => {
       setIsLoading(true);
 
       if (newPassword !== confirmNewPassword) {
-        Alert.alert('Error', 'New passwords do not match');
+        Alert.alert(t('common.error'), t('admin.clubSettings.passwordsDoNotMatch'));
         return;
       }
 
       if (newPassword.length < 6) {
-        Alert.alert('Error', 'Password must be at least 6 characters long');
+        Alert.alert(t('common.error'), t('admin.clubSettings.passwordTooShort'));
         return;
       }
 
@@ -101,13 +103,13 @@ export const ClubSettingsScreen = () => {
 
       if (error) throw error;
 
-      Alert.alert('Success', 'Password updated successfully');
+      Alert.alert(t('common.success'), t('admin.clubSettings.passwordUpdated'));
       setCurrentPassword('');
       setNewPassword('');
       setConfirmNewPassword('');
     } catch (error) {
       console.error('Error changing password:', error);
-      Alert.alert('Error', 'Failed to update password');
+      Alert.alert(t('common.error'), t('admin.clubSettings.failedToUpdatePassword'));
     } finally {
       setIsLoading(false);
     }
@@ -160,7 +162,7 @@ export const ClubSettingsScreen = () => {
       }
     } catch (error) {
       console.error('Error picking/uploading image:', error);
-      Alert.alert('Error', 'Failed to upload image. Please try again.');
+      Alert.alert(t('common.error'), t('admin.clubSettings.failedToUploadImage'));
     } finally {
       setIsLoading(false);
     }
@@ -179,7 +181,7 @@ export const ClubSettingsScreen = () => {
       >
         <View style={styles.form}>
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Club Information</Text>
+            <Text style={styles.sectionTitle}>{t('admin.clubSettings.clubInformation')}</Text>
             
             <View style={styles.logoSection}>
               <Pressable 
@@ -211,11 +213,11 @@ export const ClubSettingsScreen = () => {
                   />
                 </View>
               </Pressable>
-              <Text style={styles.logoHint}>Tap to change club logo</Text>
+              <Text style={styles.logoHint}>{t('admin.clubSettings.tapToChangeLogo')}</Text>
             </View>
 
             <TextInput
-              label="Club Name"
+              label={t('admin.clubSettings.clubName')}
               value={profile.clubName}
               onChangeText={(text) => setProfile(prev => ({ ...prev, clubName: text }))}
               mode="flat"
@@ -225,7 +227,7 @@ export const ClubSettingsScreen = () => {
             />
 
             <TextInput
-              label="Club Location"
+              label={t('admin.clubSettings.clubLocation')}
               value={profile.clubLocation}
               onChangeText={(text) => setProfile(prev => ({ ...prev, clubLocation: text }))}
               mode="flat"
@@ -235,7 +237,7 @@ export const ClubSettingsScreen = () => {
             />
 
             <TextInput
-              label="Administrator Name"
+              label={t('admin.clubSettings.administratorName')}
               value={profile.adminName}
               onChangeText={(text) => setProfile(prev => ({ ...prev, adminName: text }))}
               mode="flat"
@@ -245,7 +247,7 @@ export const ClubSettingsScreen = () => {
             />
 
             <TextInput
-              label="Email"
+              label={t('admin.clubSettings.email')}
               value={profile.email}
               mode="flat"
               style={styles.input}
@@ -260,15 +262,15 @@ export const ClubSettingsScreen = () => {
               style={[styles.updateButton, isLoading && styles.buttonDisabled]}
             >
               <Text style={styles.buttonText}>
-                {isLoading ? 'Updating...' : 'Update Profile'}
+                {isLoading ? t('admin.clubSettings.updating') : t('admin.clubSettings.updateProfile')}
               </Text>
             </Pressable>
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Change Password</Text>
+            <Text style={styles.sectionTitle}>{t('admin.clubSettings.changePassword')}</Text>
             <TextInput
-              label="Current Password"
+              label={t('admin.clubSettings.currentPassword')}
               value={currentPassword}
               onChangeText={setCurrentPassword}
               mode="flat"
@@ -278,7 +280,7 @@ export const ClubSettingsScreen = () => {
               left={<TextInput.Icon icon="lock" color={COLORS.primary} style={{ marginRight: 30 }} />}
             />
             <TextInput
-              label="New Password"
+              label={t('admin.clubSettings.newPassword')}
               value={newPassword}
               onChangeText={setNewPassword}
               mode="flat"
@@ -288,7 +290,7 @@ export const ClubSettingsScreen = () => {
               left={<TextInput.Icon icon="lock-plus" color={COLORS.primary} style={{ marginRight: 30 }} />}
             />
             <TextInput
-              label="Confirm New Password"
+              label={t('admin.clubSettings.confirmNewPassword')}
               value={confirmNewPassword}
               onChangeText={setConfirmNewPassword}
               mode="flat"
@@ -303,7 +305,7 @@ export const ClubSettingsScreen = () => {
               style={[styles.updateButton, isLoading && styles.buttonDisabled]}
             >
               <Text style={styles.buttonText}>
-                {isLoading ? 'Changing Password...' : 'Change Password'}
+                {isLoading ? t('admin.clubSettings.changingPassword') : t('admin.clubSettings.changePasswordButton')}
               </Text>
             </Pressable>
           </View>

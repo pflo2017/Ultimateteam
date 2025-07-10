@@ -7,6 +7,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { AdminStackParamList } from '../../types/navigation';
 import { supabase } from '../../lib/supabase';
+import { useTranslation } from 'react-i18next';
 
 interface Coach {
   id: string;
@@ -37,6 +38,7 @@ export const ManageCoachesScreen: React.FC<ManageCoachesScreenProps> = ({
   onCopyAccessCode
 }) => {
   const navigation = useNavigation<NativeStackNavigationProp<AdminStackParamList>>();
+  const { t } = useTranslation();
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [showSnackbar, setShowSnackbar] = useState(false);
 
@@ -120,7 +122,7 @@ export const ManageCoachesScreen: React.FC<ManageCoachesScreenProps> = ({
                   }}
                   numberOfLines={1}
                 >
-                  Coach
+                  {t('admin.coaches.role')}
                 </Text>
                 
                 {!coach.is_active && (
@@ -135,7 +137,7 @@ export const ManageCoachesScreen: React.FC<ManageCoachesScreenProps> = ({
                       color: COLORS.warning,
                       fontWeight: '600'
                     }}>
-                      Pending Registration
+                      {t('admin.coaches.pendingRegistration')}
                     </Text>
                   </View>
                 )}
@@ -176,7 +178,7 @@ export const ManageCoachesScreen: React.FC<ManageCoachesScreenProps> = ({
               fontSize: FONT_SIZES.sm,
               color: COLORS.grey[600],
             }}>
-              Phone: <Text style={{
+              {t('admin.coaches.phone')} <Text style={{
                 fontWeight: '600',
                 color: COLORS.text
               }}>{coach.phone_number}</Text>
@@ -192,7 +194,7 @@ export const ManageCoachesScreen: React.FC<ManageCoachesScreenProps> = ({
             color: COLORS.text,
             marginBottom: SPACING.xs
           }}>
-            Assigned Teams:
+            {t('admin.coaches.assignedTeams')}
           </Text>
           
           <View style={{
@@ -220,7 +222,7 @@ export const ManageCoachesScreen: React.FC<ManageCoachesScreenProps> = ({
                 fontSize: FONT_SIZES.sm,
                 color: COLORS.grey[400],
                 fontStyle: 'italic'
-              }}>No teams assigned</Text>
+              }}>{t('admin.coaches.noTeamsAssigned')}</Text>
             )}
           </View>
         </View>
@@ -237,15 +239,15 @@ export const ManageCoachesScreen: React.FC<ManageCoachesScreenProps> = ({
       <View style={styles.content}>
         <View style={styles.header}>
           <View>
-            <Text style={styles.sectionTitle}>Coaches</Text>
-            <Text style={styles.totalCount}>Total: {coaches.length} coaches</Text>
+            <Text style={styles.sectionTitle}>{t('admin.coaches.title')}</Text>
+            <Text style={styles.totalCount}>{t('admin.coaches.totalCount', { count: coaches.length })}</Text>
           </View>
           <TouchableOpacity
             style={styles.addButton}
             onPress={() => navigation.navigate('AddCoach')}
           >
             <MaterialCommunityIcons name="plus" size={16} color={COLORS.white} />
-            <Text style={styles.addButtonText}>Add Coach</Text>
+            <Text style={styles.addButtonText}>{t('admin.coaches.addCoach')}</Text>
           </TouchableOpacity>
         </View>
 
@@ -253,7 +255,7 @@ export const ManageCoachesScreen: React.FC<ManageCoachesScreenProps> = ({
           <MaterialCommunityIcons name="magnify" size={20} color={COLORS.grey[400]} style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search coach"
+            placeholder={t('admin.coaches.searchPlaceholder')}
             placeholderTextColor={COLORS.grey[400]}
           />
         </View>
@@ -265,7 +267,7 @@ export const ManageCoachesScreen: React.FC<ManageCoachesScreenProps> = ({
           contentContainerStyle={styles.scrollContent}
         >
           {!filteredCoaches?.length ? (
-            <Text style={styles.emptyText}>No coaches found</Text>
+            <Text style={styles.emptyText}>{t('admin.coaches.noCoachesFound')}</Text>
           ) : (
             filteredCoaches.map(renderCoachCard)
           )}

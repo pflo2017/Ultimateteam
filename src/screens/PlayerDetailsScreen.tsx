@@ -6,6 +6,7 @@ import type { RouteProp } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { registerEventListener, triggerEvent } from '../utils/events';
+import { useTranslation } from 'react-i18next';
 
 // Placeholder: Replace with your actual theme/colors
 const COLORS = {
@@ -58,9 +59,9 @@ type Attendance = {
 };
 
 // Helper function to get formatted payment status text
-const getPaymentStatusText = (status: string) => {
-  if (!status) return 'Not Paid';
-  return status.toLowerCase() === 'paid' ? 'Paid' : 'Not Paid';
+const getPaymentStatusText = (status: string, t: any) => {
+  if (!status) return t('admin.players.not_paid');
+  return status.toLowerCase() === 'paid' ? t('admin.players.paid') : t('admin.players.not_paid');
 };
 
 // Helper function to get payment status color
@@ -69,21 +70,25 @@ const getPaymentStatusColor = (status: string) => {
 };
 
 // Custom component for status pill display
-const StatusPill: React.FC<{ status: string }> = ({ status }) => (
-  <View style={[
-    styles.statusPill, 
-    { backgroundColor: getPaymentStatusColor(status) + '20' }
-  ]}>
-    <Text style={[
-      styles.statusPillText, 
-      { color: getPaymentStatusColor(status) }
+const StatusPill: React.FC<{ status: string }> = ({ status }) => {
+  const { t } = useTranslation();
+  return (
+    <View style={[
+      styles.statusPill, 
+      { backgroundColor: getPaymentStatusColor(status) + '20' }
     ]}>
-      {getPaymentStatusText(status)}
-    </Text>
-  </View>
-);
+      <Text style={[
+        styles.statusPillText, 
+        { color: getPaymentStatusColor(status) }
+      ]}>
+        {getPaymentStatusText(status, t)}
+      </Text>
+    </View>
+  );
+};
 
 export const PlayerDetailsScreen = () => {
+  const { t } = useTranslation();
   const navigation = useNavigation();
   const route = useRoute<RouteProp<Record<string, PlayerDetailsScreenRouteParams>, string>>();
   const playerId = route?.params?.playerId;
@@ -429,7 +434,7 @@ export const PlayerDetailsScreen = () => {
   if (isLoading) {
     return (
       <SafeAreaView style={[styles.container, styles.centered]}>
-        <Text>Loading player details...</Text>
+        <Text>{t('admin.players.details.loading')}</Text>
       </SafeAreaView>
     );
   }
@@ -437,12 +442,12 @@ export const PlayerDetailsScreen = () => {
   if (error || !player) {
     return (
       <SafeAreaView style={[styles.container, styles.centered]}>
-        <Text style={styles.errorText}>{error || 'Player not found'}</Text>
+        <Text style={styles.errorText}>{error || t('admin.players.details.notFound')}</Text>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Text style={styles.backButtonText}>Go Back</Text>
+          <Text style={styles.backButtonText}>{t('common.back')}</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -455,7 +460,7 @@ export const PlayerDetailsScreen = () => {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <MaterialCommunityIcons name="arrow-left" size={28} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Player Details</Text>
+        <Text style={styles.headerTitle}>{t('admin.players.details.title')}</Text>
         <View style={{ width: 28 }} />
       </View>
 
@@ -463,63 +468,63 @@ export const PlayerDetailsScreen = () => {
         {/* Player Header Info */}
         <View style={styles.centeredSection}>
           <Text style={styles.playerName}>{player.name}</Text>
-          <Text style={styles.teamName}>{player.team_name || 'No team assigned'}</Text>
+          <Text style={styles.teamName}>{player.team_name || t('admin.players.details.noTeam')}</Text>
         </View>
 
         {/* Player Information */}
-        <Section title="Player Information">
+        <Section title={t('admin.players.details.playerInfo')}>
           <InfoRow 
-            label="Join Date" 
+            label={t('admin.players.details.joinDate')} 
             value={formatDate(player.created_at)} 
           />
           <InfoRow 
-            label="Birthdate" 
+            label={t('admin.players.details.birthdate')} 
             value={formatDate(player.birth_date)} 
           />
         </Section>
 
         {/* Payment Information */}
-        <Section title="Payment Information">
+        <Section title={t('admin.players.details.paymentInfo')}>
           <InfoRow 
-            label="Status" 
+            label={t('admin.players.details.status')} 
             value={<StatusPill status={player.payment_status} />} 
           />
           <InfoRow 
-            label="Last Payment Date" 
+            label={t('admin.players.details.lastPaymentDate')} 
             value={formatDate(player.last_payment_date)} 
           />
           <TouchableOpacity style={styles.historyButton} onPress={fetchPaymentHistory}>
             <MaterialCommunityIcons name="history" size={18} color={COLORS.primary} />
-            <Text style={styles.historyButtonText}>View Payment History</Text>
+            <Text style={styles.historyButtonText}>{t('admin.players.details.viewPaymentHistory')}</Text>
           </TouchableOpacity>
         </Section>
 
         {/* Medical Visa Information */}
-        <Section title="Medical Visa Information">
+        <Section title={t('admin.players.details.medicalVisaInfo')}>
           <InfoRow 
-            label="Status" 
+            label={t('admin.players.details.status')} 
             value={player.medical_visa_status ? 
-              player.medical_visa_status.charAt(0).toUpperCase() + player.medical_visa_status.slice(1) : 
-              'Unknown'} 
+              t(`admin.players.details.medicalStatus.${player.medical_visa_status}`) : 
+              t('admin.players.details.unknown')} 
           />
           {player.medical_visa_status === 'valid' && player.medical_visa_issue_date && (
             <>
               <InfoRow 
-                label="Issue Date" 
+                label={t('admin.players.details.issueDate')} 
                 value={formatDate(player.medical_visa_issue_date)} 
               />
               <InfoRow 
-                label="Expiry Date" 
+                label={t('admin.players.details.expiryDate')} 
                 value={(() => {
                   try {
                     const issueDate = new Date(player.medical_visa_issue_date);
-                    if (isNaN(issueDate.getTime())) return 'N/A';
+                    if (isNaN(issueDate.getTime())) return t('admin.players.details.na');
                     const expiryDate = new Date(issueDate);
                     expiryDate.setMonth(expiryDate.getMonth() + 6);
                     return expiryDate.toLocaleDateString('en-GB');
                   } catch (e) {
                     console.error("Error calculating expiry date:", e);
-                    return 'N/A';
+                    return t('admin.players.details.na');
                   }
                 })()} 
               />
@@ -529,25 +534,25 @@ export const PlayerDetailsScreen = () => {
 
         {/* Attendance */}
         {attendance && (
-          <Section title="Attendance">
+          <Section title={t('admin.players.details.attendance')}>
             {attendance.byType.map((item) => (
               <InfoRow 
                 key={item.type} 
-                label={`${item.type.charAt(0).toUpperCase() + item.type.slice(1)} Attendance`} 
+                label={t(`admin.players.details.attendanceType.${item.type}`)} 
                 value={`${item.percent}%`} 
               />
             ))}
-            <InfoRow label="Monthly Attendance" value={`${attendance.monthly}%`} />
-            <InfoRow label="Total Attendance" value={`${attendance.total}%`} />
+            <InfoRow label={t('admin.players.details.monthlyAttendance')} value={`${attendance.monthly}%`} />
+            <InfoRow label={t('admin.players.details.totalAttendance')} value={`${attendance.total}%`} />
           </Section>
         )}
 
         {/* Parent Information */}
         {parent && (
-          <Section title="Parent Information">
-            <InfoRow label="Name" value={parent.name} />
-            <InfoRow label="Phone" value={parent.phone_number} />
-            {parent.email && <InfoRow label="Email" value={parent.email} />}
+          <Section title={t('admin.players.details.parentInfo')}>
+            <InfoRow label={t('admin.players.details.parentName')} value={parent.name} />
+            <InfoRow label={t('admin.players.details.parentPhone')} value={parent.phone_number} />
+            {parent.email && <InfoRow label={t('admin.players.details.parentEmail')} value={parent.email} />}
           </Section>
         )}
         
@@ -559,7 +564,7 @@ export const PlayerDetailsScreen = () => {
             disabled={isDeleting}
           >
             <Text style={styles.deleteButtonText}>
-              {isDeleting ? "Deleting..." : "Delete Player"}
+              {isDeleting ? t('admin.players.details.deleting') : t('admin.players.details.deletePlayer')}
             </Text>
           </TouchableOpacity>
         )}
@@ -575,7 +580,7 @@ export const PlayerDetailsScreen = () => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Payment History</Text>
+              <Text style={styles.modalTitle}>{t('admin.players.details.paymentHistory')}</Text>
               <TouchableOpacity 
                 onPress={() => setIsPaymentHistoryVisible(false)}
                 style={styles.closeButton}
@@ -593,7 +598,7 @@ export const PlayerDetailsScreen = () => {
             ) : (
               <ScrollView style={{ maxHeight: '80%' }}>
                 {paymentHistory.length === 0 ? (
-                  <Text style={styles.emptyText}>No payment history available</Text>
+                  <Text style={styles.emptyText}>{t('admin.players.details.noPaymentHistory')}</Text>
                 ) : (
                   paymentHistory.map((payment, index) => (
                     <View key={index} style={styles.paymentItem}>
@@ -613,9 +618,9 @@ export const PlayerDetailsScreen = () => {
                             marginBottom: 2,
                           }}>
                             <Text style={{ fontSize: 13, color: COLORS.primary }}>
-                              {payment.payment_method === 'cash' && 'Cash'}
-                              {payment.payment_method === 'voucher_cash' && 'Voucher & cash'}
-                              {payment.payment_method === 'bank_transfer' && 'Bank transfer'}
+                              {payment.payment_method === 'cash' && t('admin.players.details.paymentMethod.cash')}
+                              {payment.payment_method === 'voucher_cash' && t('admin.players.details.paymentMethod.voucherCash')}
+                              {payment.payment_method === 'bank_transfer' && t('admin.players.details.paymentMethod.bankTransfer')}
                               {!['cash','voucher_cash','bank_transfer'].includes(payment.payment_method) && payment.payment_method}
                             </Text>
                           </View>

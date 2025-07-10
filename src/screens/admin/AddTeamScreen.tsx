@@ -5,11 +5,13 @@ import { COLORS, SPACING, FONT_SIZES } from '../../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../../lib/supabase';
+import { useTranslation } from 'react-i18next';
 
 export const AddTeamScreen = () => {
   const [teamName, setTeamName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const navigation = useNavigation();
+  const { t } = useTranslation();
 
   const generateAccessCode = () => {
     const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -70,9 +72,9 @@ export const AddTeamScreen = () => {
       if (error) {
         console.error('Database error:', error);
         Alert.alert(
-          'Error',
-          'Failed to create team. Please try again.',
-          [{ text: 'OK' }]
+          t('common.error'),
+          t('admin.addTeam.failedToCreateTeam'),
+          [{ text: t('admin.addCoach.ok') }]
         );
         return;
       }
@@ -84,9 +86,9 @@ export const AddTeamScreen = () => {
     } catch (error) {
       console.error('Error adding team:', error);
       Alert.alert(
-        'Error',
-        'Something went wrong while creating the team.',
-        [{ text: 'OK' }]
+        t('common.error'),
+        t('admin.addTeam.somethingWentWrong'),
+        [{ text: t('admin.addCoach.ok') }]
       );
     } finally {
       setIsLoading(false);
@@ -111,13 +113,13 @@ export const AddTeamScreen = () => {
 
       <View style={styles.content}>
         <View style={styles.header}>
-          <Text style={styles.title}>Create New Team</Text>
-          <Text style={styles.subtitle}>Enter team name to generate access code</Text>
+          <Text style={styles.title}>{t('admin.addTeam.title')}</Text>
+          <Text style={styles.subtitle}>{t('admin.addTeam.subtitle')}</Text>
         </View>
 
         <View style={styles.form}>
           <TextInput
-            label="Team Name"
+            label={t('admin.addTeam.teamName')}
             value={teamName}
             onChangeText={setTeamName}
             mode="outlined"
@@ -135,7 +137,7 @@ export const AddTeamScreen = () => {
             style={[styles.createButton, isLoading && styles.createButtonDisabled]}
           >
             <Text style={styles.buttonText}>
-              {isLoading ? 'Creating Team...' : 'Create Team'}
+              {isLoading ? t('admin.addTeam.creatingTeam') : t('admin.addTeam.createTeam')}
             </Text>
           </Pressable>
         </View>

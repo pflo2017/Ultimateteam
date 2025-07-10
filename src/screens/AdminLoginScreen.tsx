@@ -8,6 +8,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { supabase } from '../lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTranslation } from 'react-i18next';
 
 type RootStackParamList = {
   Home: undefined;
@@ -27,6 +28,7 @@ export const AdminLoginScreen = () => {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const navigation = useNavigation<NavigationProp>();
+  const { t } = useTranslation();
 
   const handleLogin = async () => {
     try {
@@ -34,7 +36,7 @@ export const AdminLoginScreen = () => {
       setError('');
 
       if (!email || !password) {
-        setError('Please enter both email and password');
+        setError(t('auth.emailPasswordRequired'));
         return;
       }
 
@@ -44,7 +46,7 @@ export const AdminLoginScreen = () => {
       });
 
       if (signInError) {
-        setError('Invalid email or password');
+        setError(t('auth.invalidCredentials'));
         return;
       }
 
@@ -56,7 +58,7 @@ export const AdminLoginScreen = () => {
         .single();
 
       if (profileError || !adminProfile) {
-        setError('Account not found');
+        setError(t('auth.accountNotFound'));
         return;
       }
 
@@ -75,7 +77,7 @@ export const AdminLoginScreen = () => {
       }
     } catch (error) {
       console.error('Login error:', error);
-      setError('An error occurred during login');
+      setError(t('auth.loginError'));
     } finally {
       setIsLoading(false);
     }
@@ -107,13 +109,13 @@ export const AdminLoginScreen = () => {
             size={48} 
             color={COLORS.primary}
           />
-          <Text style={styles.title}>Administrator Login</Text>
-          <Text style={styles.subtitle}>Please enter your credentials</Text>
+          <Text style={styles.title}>{t('admin.loginTitle')}</Text>
+          <Text style={styles.subtitle}>{t('admin.loginSubtitle')}</Text>
         </View>
 
         <View style={styles.form}>
           <TextInput
-            label="Email"
+            label={t('auth.email')}
             value={email}
             onChangeText={setEmail}
             mode="flat"
@@ -125,7 +127,7 @@ export const AdminLoginScreen = () => {
           />
 
           <TextInput
-            label="Password"
+            label={t('auth.password')}
             value={password}
             onChangeText={setPassword}
             mode="flat"
@@ -145,7 +147,7 @@ export const AdminLoginScreen = () => {
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
           <Pressable onPress={() => {}}>
-            <Text style={styles.forgotPassword}>Forgot Password?</Text>
+            <Text style={styles.forgotPassword}>{t('auth.forgotPassword')}</Text>
           </Pressable>
 
           <Animated.View 
@@ -161,15 +163,15 @@ export const AdminLoginScreen = () => {
               ]}
             >
               <Text style={styles.buttonText}>
-                {isLoading ? 'Logging in...' : 'Login'}
+                {isLoading ? t('auth.loggingIn') : t('auth.login')}
               </Text>
             </Pressable>
           </Animated.View>
 
           <View style={styles.createAccountContainer}>
-            <Text style={styles.createAccountText}>Don't have an account? </Text>
+            <Text style={styles.createAccountText}>{t('auth.noAccount')}</Text>
             <Pressable onPress={() => navigation.navigate('AdminRegister')}>
-              <Text style={styles.createAccountLink}>Create one</Text>
+              <Text style={styles.createAccountLink}>{t('auth.createOne')}</Text>
             </Pressable>
           </View>
         </View>

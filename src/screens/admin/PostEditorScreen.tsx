@@ -12,6 +12,7 @@ import { Chip } from 'react-native-paper';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { decode } from 'base64-arraybuffer';
+import { useTranslation } from 'react-i18next';
 
 type PostEditorParams = {
   mode: 'create' | 'edit';
@@ -25,6 +26,7 @@ export const PostEditorScreen = () => {
   const navigation = useNavigation();
   const route = useRoute<RouteProp<Record<string, PostEditorParams>, string>>();
   const { mode = 'create', post = {}, availableTeams = [], isAdmin = false } = route.params || {};
+  const { t } = useTranslation();
 
   const [title, setTitle] = useState(post?.title || '');
   const [content, setContent] = useState(post?.content || '');
@@ -65,11 +67,11 @@ export const PostEditorScreen = () => {
   const handleSave = async () => {
     setError(null);
     if (!content.trim()) {
-      setError("Content is required.");
+      setError(t('admin.postEditor.contentRequired'));
       return;
     }
     if (!isAdmin && selectedTeams.length === 0) {
-      setError("Please select at least one team.");
+      setError(t('admin.postEditor.selectAtLeastOneTeam'));
       return;
     }
     setLoading(true);
@@ -84,7 +86,7 @@ export const PostEditorScreen = () => {
       if (mode === "edit") {
         const { error } = await updatePost(post.id, { title, content, media_urls: mediaUrls } as any);
         if (error) throw error;
-        Alert.alert('Success', 'Post updated successfully');
+        Alert.alert(t('common.success'), t('admin.postEditor.postUpdated'));
       } else {
         if (isAdmin) {
           const { data: { user } } = await supabase.auth.getUser();
@@ -110,14 +112,14 @@ export const PostEditorScreen = () => {
             if (ptError) throw ptError;
           }
         }
-        Alert.alert('Success', 'Post created successfully');
+        Alert.alert(t('common.success'), t('admin.postEditor.postCreated'));
       }
 
       if (route.params?.onSave) route.params.onSave();
       navigation.goBack();
     } catch (err) {
       console.error("Error saving post:", err);
-      setError("Failed to save post.");
+      setError(t('admin.postEditor.failedToSavePost'));
     } finally {
       setLoading(false);
     }
@@ -125,19 +127,19 @@ export const PostEditorScreen = () => {
 
   const handleDelete = async () => {
     Alert.alert(
-      'Delete Post',
-      'Are you sure you want to delete this post?',
+      t('admin.postEditor.deletePost'),
+      t('admin.postEditor.deleteConfirmation'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('admin.addCoach.cancel'), style: 'cancel' },
         {
-          text: 'Delete',
+          text: t('admin.addCoach.delete'),
           style: 'destructive',
           onPress: async () => {
             setLoading(true);
             const { error } = await deletePost(post.id);
             setLoading(false);
             if (error) {
-              Alert.alert('Error', 'Failed to delete post.');
+              Alert.alert(t('common.error'), t('admin.postEditor.failedToDeletePost'));
             } else {
               if (route.params && route.params.onSave) route.params.onSave();
               navigation.goBack();
@@ -156,7 +158,7 @@ export const PostEditorScreen = () => {
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
             <Text style={styles.backText}>{'←'}</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{mode === 'edit' ? 'Edit Post' : 'New Post'}</Text>
+          <Text style={styles.headerTitle}>{mode === 'edit' ? t('admin.postEditor.editPost') : t('admin.postEditor.newPost')}</Text>
           <View style={{ width: 40 }} />
         </View>
       </SafeAreaView>
@@ -175,7 +177,7 @@ export const PostEditorScreen = () => {
                 style={{ marginRight: 8 }}
                 mode="outlined"
               >
-                All Teams
+                {t('admin.postEditor.allTeams')}
               </Chip>
               {availableTeams.map(team => (
                 <Chip
@@ -216,28 +218,28 @@ export const PostEditorScreen = () => {
               ))}
             </RNScrollView>
           )}
-          <Text style={styles.label}>Title</Text>
+          <Text style={styles.label}>{t('admin.postEditor.title')}</Text>
           <TextInput
             style={styles.input}
             value={title}
             onChangeText={setTitle}
             editable={!loading}
-            placeholder="Title (optional)"
+            placeholder={t('admin.postEditor.titleOptional')}
             returnKeyType="next"
           />
-          <Text style={styles.label}>Content</Text>
+          <Text style={styles.label}>{t('admin.postEditor.content')}</Text>
           <TextInput
             style={[styles.input, { minHeight: 100 }]}
             value={content}
             onChangeText={setContent}
             editable={!loading}
             multiline
-            placeholder="Share with the team..."
+            placeholder={t('admin.postEditor.shareWithTeam')}
             returnKeyType="default"
           />
           {error && <Text style={styles.error}>{error}</Text>}
           <TouchableOpacity onPress={pickMedia} disabled={loading || isUploading} style={{ marginVertical: SPACING.md, paddingVertical: SPACING.sm, backgroundColor: COLORS.primary, borderRadius: 8, alignItems: "center" }}>
-            <Text style={{ color: COLORS.white, fontWeight: "bold" }}>Attach Photo/Video</Text>
+            <Text style={{ color: COLORS.white, fontWeight: "bold" }}>{t('admin.postEditor.attachPhotoVideo')}</Text>
           </TouchableOpacity>
           {pickedMedia.length > 0 && (
             <View style={{ flexDirection: "row", flexWrap: "wrap", marginBottom: SPACING.md }}>
@@ -270,11 +272,11 @@ export const PostEditorScreen = () => {
             </View>
           )}
           <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={loading || isUploading}>
-            <Text style={styles.saveText}>{mode === "edit" ? "Save" : "Post"}</Text>
+            <Text style={styles.saveText}>{mode === "edit" ? t('admin.postEditor.save') : t('admin.postEditor.post')}</Text>
           </TouchableOpacity>
           {mode === "edit" && (
             <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete} disabled={loading}>
-              <Text style={styles.deleteBtnText}>Delete Post</Text>
+              <Text style={styles.deleteBtnText}>{t('admin.postEditor.deletePost')}</Text>
             </TouchableOpacity>
           )}
         </ScrollView>

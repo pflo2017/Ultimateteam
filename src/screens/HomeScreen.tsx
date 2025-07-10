@@ -16,6 +16,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useTranslation } from 'react-i18next';
+import { LanguageSelector } from '../components/LanguageSelector';
 
 const { width } = Dimensions.get('window');
 const BUTTON_WIDTH = Math.min(380, width - 32);
@@ -32,6 +34,7 @@ type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 export const HomeScreen = () => {
   const navigation = useNavigation<NavigationProp>();
+  const { t } = useTranslation();
 
   // Animation values for each button
   const adminScale = useSharedValue(1);
@@ -68,9 +71,11 @@ export const HomeScreen = () => {
         entering={FadeInDown.duration(1000).springify()} 
         style={styles.header}
       >
-        <Text style={styles.welcomeText}>Welcome to</Text>
-        <Text style={styles.appName}>Ultimate Team</Text>
+        <Text style={styles.welcomeText}>{t('home.welcomeMessage')}</Text>
+        <Text style={styles.appName}>{t('home.title')}</Text>
       </Animated.View>
+
+      <LanguageSelector style={styles.languageSelector} />
 
       <View style={styles.buttonContainer}>
         <Animated.View entering={FadeInUp.delay(200).duration(1000).springify()}>
@@ -83,7 +88,7 @@ export const HomeScreen = () => {
             <View style={styles.iconContainer}>
               <MaterialCommunityIcons name="shield-account" size={24} color={COLORS.white} />
             </View>
-            <Text style={styles.buttonText}>Login As Club Administrator</Text>
+            <Text style={styles.buttonText}>{t('home.loginAsAdmin')}</Text>
           </AnimatedPressable>
         </Animated.View>
 
@@ -97,7 +102,7 @@ export const HomeScreen = () => {
             <View style={styles.iconContainer}>
               <MaterialCommunityIcons name="whistle" size={24} color={COLORS.white} />
             </View>
-            <Text style={styles.buttonText}>Login As Coach</Text>
+            <Text style={styles.buttonText}>{t('home.loginAsCoach')}</Text>
           </AnimatedPressable>
         </Animated.View>
 
@@ -111,7 +116,7 @@ export const HomeScreen = () => {
             <View style={styles.iconContainer}>
               <MaterialCommunityIcons name="account-child" size={24} color={COLORS.white} />
             </View>
-            <Text style={styles.buttonText}>Login As Parent</Text>
+            <Text style={styles.buttonText}>{t('home.loginAsParent')}</Text>
           </AnimatedPressable>
         </Animated.View>
       </View>
@@ -175,5 +180,8 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: 'center',
     ...SHADOWS.text,
+  },
+  languageSelector: {
+    marginBottom: SPACING.lg,
   },
 }); 

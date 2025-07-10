@@ -24,6 +24,7 @@ import { getCoachInternalId } from '../utils/coachUtils';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../types/navigation';
 import { JWTErrorHandler } from '../utils/jwtErrorHandler';
+import { useTranslation } from 'react-i18next';
 
 type Player = {
   id: string;
@@ -168,6 +169,7 @@ export const AttendanceScreen = () => {
 
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute();
+  const { t } = useTranslation();
 
   // Load user role on mount
   useEffect(() => {
@@ -913,7 +915,7 @@ export const AttendanceScreen = () => {
                 {record.records.length === 0 ? (
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
                     <MaterialCommunityIcons name="alert-circle-outline" size={16} color={COLORS.error} style={{ marginRight: 4 }} />
-                    <Text style={styles.noAttendanceText}>No attendance marked yet. Tap to create</Text>
+                    <Text style={styles.noAttendanceText}>{t('attendance.noAttendanceMarked')}</Text>
                   </View>
                 ) : (
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
@@ -1045,7 +1047,7 @@ export const AttendanceScreen = () => {
           style={styles.statisticsButton}
           labelStyle={styles.statisticsButtonLabel}
         >
-          View Statistics
+          {t('attendance.viewStatistics')}
         </Button>
       </View>
     </SafeAreaView>

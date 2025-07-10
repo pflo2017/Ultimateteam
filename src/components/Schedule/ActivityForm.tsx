@@ -5,6 +5,7 @@ import { COLORS, SPACING } from '../../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { format } from 'date-fns';
+import { useTranslation } from 'react-i18next';
 
 type ActivityType = 'practice' | 'match' | 'event';
 
@@ -28,6 +29,7 @@ export type ActivityFormData = {
 };
 
 export const ActivityForm = ({ type, onSubmit, onCancel, initialData }: ActivityFormProps) => {
+  const { t } = useTranslation();
   const [formData, setFormData] = useState<ActivityFormData>({
     title: '',
     description: '',
@@ -154,19 +156,19 @@ export const ActivityForm = ({ type, onSubmit, onCancel, initialData }: Activity
     const newErrors: Record<string, string> = {};
     
     if (!formData.title.trim()) {
-      newErrors.title = 'Title is required';
+      newErrors.title = t('admin.activityForm.titleRequired');
     }
     
     if (!formData.location.trim()) {
-      newErrors.location = 'Location is required';
+      newErrors.location = t('admin.activityForm.locationRequired');
     }
     
     if (formData.teams.length === 0) {
-      newErrors.teams = 'At least one team must be selected';
+      newErrors.teams = t('admin.activityForm.atLeastOneTeam');
     }
     
     if (formData.endDate <= formData.startDate) {
-      newErrors.endDate = 'End time must be after start time';
+      newErrors.endDate = t('admin.activityForm.endTimeAfterStart');
     }
     
     setErrors(newErrors);
@@ -182,20 +184,20 @@ export const ActivityForm = ({ type, onSubmit, onCancel, initialData }: Activity
   const getActivityTypeLabel = () => {
     switch (type) {
       case 'practice':
-        return 'Practice';
+        return t('admin.activityForm.training');
       case 'match':
-        return 'Match';
+        return t('admin.activityForm.game');
       case 'event':
-        return 'Event';
+        return t('admin.activityForm.other');
       default:
-        return 'Activity';
+        return t('admin.activityForm.activity');
     }
   };
 
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>New {getActivityTypeLabel()}</Text>
+        <Text style={styles.title}>{t('admin.activityForm.newActivity', { type: getActivityTypeLabel() })}</Text>
         <IconButton
           icon="close"
           size={24}
@@ -205,7 +207,7 @@ export const ActivityForm = ({ type, onSubmit, onCancel, initialData }: Activity
 
       <View style={styles.formContainer}>
         <TextInput
-          label="Title"
+          label={t('admin.activityForm.title')}
           value={formData.title}
           onChangeText={(text) => handleInputChange('title', text)}
           style={styles.input}
@@ -215,7 +217,7 @@ export const ActivityForm = ({ type, onSubmit, onCancel, initialData }: Activity
         {errors.title && <HelperText type="error">{errors.title}</HelperText>}
 
         <TextInput
-          label="Description"
+          label={t('admin.activityForm.description')}
           value={formData.description}
           onChangeText={(text) => handleInputChange('description', text)}
           style={styles.input}
@@ -225,7 +227,7 @@ export const ActivityForm = ({ type, onSubmit, onCancel, initialData }: Activity
         />
 
         <TextInput
-          label="Location"
+          label={t('admin.activityForm.location')}
           value={formData.location}
           onChangeText={(text) => handleInputChange('location', text)}
           style={styles.input}
@@ -234,10 +236,10 @@ export const ActivityForm = ({ type, onSubmit, onCancel, initialData }: Activity
         />
         {errors.location && <HelperText type="error">{errors.location}</HelperText>}
 
-        <Text style={styles.sectionTitle}>Date and Time</Text>
+        <Text style={styles.sectionTitle}>{t('admin.activityForm.dateAndTime')}</Text>
         
         <View style={styles.dateTimeContainer}>
-          <Text style={styles.dateTimeLabel}>Start</Text>
+          <Text style={styles.dateTimeLabel}>{t('admin.activityForm.start')}</Text>
           <View style={styles.dateTimeButtons}>
             <TouchableOpacity 
               style={styles.dateButton} 
@@ -262,7 +264,7 @@ export const ActivityForm = ({ type, onSubmit, onCancel, initialData }: Activity
         </View>
 
         <View style={styles.dateTimeContainer}>
-          <Text style={styles.dateTimeLabel}>End</Text>
+          <Text style={styles.dateTimeLabel}>{t('admin.activityForm.end')}</Text>
           <View style={styles.dateTimeButtons}>
             <TouchableOpacity 
               style={styles.dateButton} 
@@ -287,7 +289,7 @@ export const ActivityForm = ({ type, onSubmit, onCancel, initialData }: Activity
         </View>
         {errors.endDate && <HelperText type="error">{errors.endDate}</HelperText>}
 
-        <Text style={styles.sectionTitle}>Teams</Text>
+        <Text style={styles.sectionTitle}>{t('admin.activityForm.teams')}</Text>
         
         <View>
           <Menu
@@ -302,8 +304,8 @@ export const ActivityForm = ({ type, onSubmit, onCancel, initialData }: Activity
                 contentStyle={styles.teamsButtonContent}
               >
                 {formData.teams.length > 0
-                  ? `${formData.teams.length} team${formData.teams.length > 1 ? 's' : ''} selected`
-                  : 'Select teams'}
+                  ? `${formData.teams.length} ${t('admin.activityForm.team', { count: formData.teams.length })}`
+                  : t('admin.activityForm.selectTeams')}
               </Button>
             }
           >
@@ -320,14 +322,14 @@ export const ActivityForm = ({ type, onSubmit, onCancel, initialData }: Activity
         </View>
 
         <View style={styles.visibilitySection}>
-          <Text style={styles.visibilityLabel}>Public Activity</Text>
+          <Text style={styles.visibilityLabel}>{t('admin.activityForm.publicActivity')}</Text>
           <Checkbox
             status={formData.isPublic ? 'checked' : 'unchecked'}
             onPress={() => handleInputChange('isPublic', !formData.isPublic)}
           />
         </View>
         <Text style={styles.helperText}>
-          Public activities are visible to all parents
+          {t('admin.activityForm.publicActivityDescription')}
         </Text>
 
         <View style={styles.buttonContainer}>
@@ -336,7 +338,7 @@ export const ActivityForm = ({ type, onSubmit, onCancel, initialData }: Activity
             onPress={handleSubmit}
             style={styles.submitButton}
           >
-            Create {getActivityTypeLabel()}
+            {t('admin.activityForm.createActivity', { type: getActivityTypeLabel() })}
           </Button>
           
           <Button
@@ -344,7 +346,7 @@ export const ActivityForm = ({ type, onSubmit, onCancel, initialData }: Activity
             onPress={onCancel}
             style={styles.cancelButton}
           >
-            Cancel
+            {t('admin.activityForm.cancel')}
           </Button>
         </View>
       </View>

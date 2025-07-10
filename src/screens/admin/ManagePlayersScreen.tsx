@@ -10,6 +10,7 @@ import { supabase } from '../../lib/supabase';
 import { useDataRefresh } from '../../utils/useDataRefresh';
 import { registerEventListener } from '../../utils/events';
 import { getUserClubId } from '../../services/activitiesService';
+import { useTranslation } from 'react-i18next';
 
 interface Team {
   id: string;
@@ -56,6 +57,7 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
   onSearchChange,
 }) => {
   const navigation = useNavigation<NativeStackNavigationProp<AdminStackParamList>>();
+  const { t } = useTranslation();
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [isTeamModalVisible, setIsTeamModalVisible] = useState(false);
   const [isPlayerDetailsModalVisible, setIsPlayerDetailsModalVisible] = useState(false);
@@ -70,10 +72,10 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
   const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
   const medicalStatusOptions = [
-    { value: null, label: 'All Medical' },
-    { value: 'valid', label: 'Valid' },
-    { value: 'pending', label: 'Pending' },
-    { value: 'expired', label: 'Expired' },
+    { value: null, label: t('admin.players.medicalStatus.all') },
+    { value: 'valid', label: t('admin.players.medicalStatus.valid') },
+    { value: 'pending', label: t('admin.players.medicalStatus.pending') },
+    { value: 'expired', label: t('admin.players.medicalStatus.expired') },
   ];
 
   const selectedTeam = teams.find(team => team.id === selectedTeamId);
@@ -96,7 +98,7 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
       });
     } catch (error) {
       console.error('Error opening player details:', error);
-      Alert.alert('Error', 'Could not open player details');
+      Alert.alert(t('admin.players.error'), t('admin.players.couldNotOpenDetails'));
     }
   };
   
@@ -126,10 +128,10 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
       await onRefresh();
       
       setIsPlayerDetailsModalVisible(false);
-      Alert.alert('Success', 'Payment status updated successfully');
+      Alert.alert(t('admin.players.success'), t('admin.players.paymentStatusUpdated'));
     } catch (error) {
       console.error('Error updating payment status:', error);
-      Alert.alert('Error', 'Failed to update payment status');
+      Alert.alert(t('admin.players.error'), t('admin.players.failedToUpdatePayment'));
     } finally {
       setIsUpdatingPayment(false);
     }
@@ -137,15 +139,15 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
 
   const handleDeletePlayer = (playerId: string) => {
     Alert.alert(
-      "Delete Player",
-      "Are you sure you want to delete this player? This action cannot be undone.",
+      t('admin.players.deletePlayer'),
+      t('admin.players.deleteConfirmation'),
       [
         {
-          text: "Cancel",
+          text: t('admin.players.cancel'),
           style: "cancel"
         },
         {
-          text: "Delete",
+          text: t('admin.players.delete'),
           style: "destructive",
           onPress: async () => {
             try {
@@ -162,11 +164,11 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
                 setIsPlayerDetailsModalVisible(false);
               }
               
-              Alert.alert("Success", "Player deleted successfully");
+              Alert.alert(t('admin.players.success'), t('admin.players.playerDeleted'));
               onRefresh();
             } catch (error) {
               console.error('Error deleting player:', error);
-              Alert.alert("Error", "Failed to delete player");
+              Alert.alert(t('admin.players.error'), t('admin.players.failedToDeletePlayer'));
             } finally {
               setIsDeleting(false);
             }
@@ -200,7 +202,9 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
   };
 
   const getPaymentStatusText = (status: string) => {
-    return status?.toLowerCase() === 'paid' ? 'Paid' : 'Not Paid';
+    if (status?.toLowerCase() === 'paid') return t('admin.players.paid');
+    if (status?.toLowerCase() === 'pending') return t('admin.players.pending');
+    return t('admin.players.notPaid');
   };
 
   const getPlayerPaymentStatus = (player: Player): string => {
@@ -247,7 +251,7 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
   // Create a PlayerCard component that fetches fresh status data
   const PlayerCardWithFreshStatus = ({ player }: { player: Player }) => {
     // Format the date if it exists
-    let formattedBirthDate = 'Not available';
+    let formattedBirthDate = t('admin.players.notAvailable');
     if (player.birth_date) {
       try {
         const date = new Date(player.birth_date);
@@ -285,14 +289,14 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
               </View>
               <View>
                 <Text style={styles.playerName}>{player.name}</Text>
-                <Text style={styles.teamName}>{player.team ? player.team.name : 'No team assigned'}</Text>
+                <Text style={styles.teamName}>{player.team ? player.team.name : t('admin.players.noTeamAssigned')}</Text>
               </View>
             </View>
 
             <View style={styles.ageContainer}>
-              <Text style={styles.ageLabel}>Birth Date</Text>
+              <Text style={styles.ageLabel}>{t('admin.players.birthDate')}</Text>
               <Text style={styles.ageValue}>
-                {player.birth_date ? formattedBirthDate : 'Not available'}
+                {player.birth_date ? formattedBirthDate : t('admin.players.notAvailable')}
               </Text>
             </View>
           </View>
@@ -302,7 +306,7 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: SPACING.md }}>
             <MaterialCommunityIcons name="medical-bag" size={20} color={COLORS.primary} />
             <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500' }}>
-              Medical Visa
+              {t('admin.players.medicalVisa')}
             </Text>
             <View style={{
               backgroundColor: getMedicalVisaStatusColor(player.medicalVisaStatus) + '20',
@@ -319,12 +323,12 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
                 color: getMedicalVisaStatusColor(player.medicalVisaStatus)
               }}>
                 {player.medicalVisaStatus === 'no_status' 
-                  ? 'No Status' 
-                  : player.medicalVisaStatus.charAt(0).toUpperCase() + player.medicalVisaStatus.slice(1)}
+                  ? t('admin.players.noStatus') 
+                  : t(`admin.players.medicalStatus.${player.medicalVisaStatus}`)}
               </Text>
             </View>
             <View style={{ alignItems: 'flex-end', marginLeft: 'auto' }}>
-              <Text style={{ fontSize: FONT_SIZES.xs, color: COLORS.grey[600], fontWeight: '500' }}>Until</Text>
+              <Text style={{ fontSize: FONT_SIZES.xs, color: COLORS.grey[600], fontWeight: '500' }}>{t('admin.players.until')}</Text>
               <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '600' }}>
                 {'N/A'}
               </Text>
@@ -333,11 +337,11 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
           
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: SPACING.md }}>
             <MaterialCommunityIcons name="credit-card-outline" size={20} color={COLORS.primary} />
-            {player.paymentStatus === 'paid' && player.last_payment_date ? (
+            {(player.paymentStatus === 'paid' && player.last_payment_date) ? (
               <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginLeft: 8 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500', marginRight: 8 }}>
-                    Payment Status
+                    {t('admin.players.paymentStatus')}
                   </Text>
                   <View style={{
                     backgroundColor: getPaymentStatusColor(player.paymentStatus || '') + '20',
@@ -352,7 +356,7 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
                       fontWeight: '600',
                       color: getPaymentStatusColor(player.paymentStatus || '')
                     }}>
-                      {getPaymentStatusText(player.paymentStatus || '')}
+                      {t(`admin.players.${(player.paymentStatus || '').toLowerCase()}`)}
                     </Text>
                   </View>
                 </View>
@@ -364,7 +368,7 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
               <View style={{ flex: 1, flexDirection: 'column', marginLeft: 8 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500', marginRight: 8 }}>
-                    Payment Status
+                    {t('admin.players.paymentStatus')}
                   </Text>
                   <View style={{
                     backgroundColor: getPaymentStatusColor(player.paymentStatus || '') + '20',
@@ -379,7 +383,7 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
                       fontWeight: '600',
                       color: getPaymentStatusColor(player.paymentStatus || '')
                     }}>
-                      {getPaymentStatusText(player.paymentStatus || '')}
+                      {t(`admin.players.${(player.paymentStatus || '').toLowerCase()}`)}
                     </Text>
                   </View>
                 </View>
@@ -390,29 +394,10 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
                       {new Date(player.last_payment_date).toLocaleDateString('en-GB', { month: 'long' })}
                     </Text>
                     <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.grey[600], fontWeight: '500', marginLeft: 6 }}>
-                      Paid on {new Date(player.last_payment_date).toLocaleDateString('en-GB')}
+                      {t('admin.players.paidOn', { date: new Date(player.last_payment_date).toLocaleDateString('en-GB') })}
                     </Text>
                   </View>
                 )}
-              </View>
-            )}
-            {/* Payment method badge */}
-            {player.paymentStatus === 'paid' && player.paymentMethod && (
-              <View style={{
-                alignSelf: 'flex-start',
-                backgroundColor: COLORS.primary + '15',
-                borderRadius: 8,
-                paddingHorizontal: 8,
-                paddingVertical: 2,
-                marginTop: 2,
-                marginBottom: 2,
-              }}>
-                <Text style={{ fontSize: 13, color: COLORS.primary }}>
-                  {player.paymentMethod === 'cash' && 'Cash'}
-                  {player.paymentMethod === 'voucher_cash' && 'Voucher & cash'}
-                  {player.paymentMethod === 'bank_transfer' && 'Bank transfer'}
-                  {!['cash','voucher_cash','bank_transfer'].includes(player.paymentMethod) && player.paymentMethod}
-                </Text>
               </View>
             )}
           </View>
@@ -427,7 +412,7 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
                 size={16} 
                 color={COLORS.white} 
               />
-              <Text style={styles.buttonText}>Details</Text>
+              <Text style={styles.buttonText}>{t('admin.players.details.viewDetails')}</Text>
             </TouchableOpacity>
           </View>
         </Card.Content>
@@ -443,8 +428,8 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
     <View style={styles.content}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.headerTitle}>Players</Text>
-          <Text style={styles.totalCount}>Total: {filteredPlayers.length} players</Text>
+          <Text style={styles.headerTitle}>{t('admin.players.title')}</Text>
+          <Text style={styles.totalCount}>{t('admin.players.totalCount', { count: filteredPlayers.length })}</Text>
         </View>
         <TouchableOpacity onPress={() => setIsFilterModalVisible(true)}>
           <MaterialCommunityIcons name="filter" size={24} color={COLORS.primary} />
@@ -455,7 +440,7 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
         <MaterialCommunityIcons name="magnify" size={20} color={COLORS.grey[400]} style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search player"
+          placeholder={t('admin.players.searchPlaceholder')}
           placeholderTextColor={COLORS.grey[400]}
           value={searchQuery}
           onChangeText={onSearchChange}
@@ -469,7 +454,7 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
         contentContainerStyle={styles.scrollContent}
       >
         {!filteredPlayers?.length ? (
-          <Text style={styles.emptyText}>No players found</Text>
+          <Text style={styles.emptyText}>{t('admin.players.noPlayersFound')}</Text>
         ) : (
           filteredPlayers.map(player => (
             <PlayerCardWithFreshStatus key={player.id} player={player} />
@@ -486,7 +471,7 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Team</Text>
+              <Text style={styles.modalTitle}>{t('admin.players.selectTeam')}</Text>
               <Pressable 
                 onPress={() => setIsTeamModalVisible(false)}
                 style={styles.closeButton}
@@ -516,7 +501,7 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
                     size={24}
                     color={COLORS.primary}
                   />
-                  <Text style={styles.teamItemText}>All Teams</Text>
+                  <Text style={styles.teamItemText}>{t('admin.players.allTeams')}</Text>
                 </View>
                 {selectedTeamId === null && (
                   <MaterialCommunityIcons
@@ -570,7 +555,7 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Medical Status</Text>
+              <Text style={styles.modalTitle}>{t('admin.players.selectMedicalStatus')}</Text>
               <Pressable 
                 onPress={() => setIsMedicalModalVisible(false)}
                 style={styles.closeButton}
@@ -583,7 +568,7 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
               </Pressable>
             </View>
             <ScrollView>
-              {medicalStatusOptions.map(option => (
+              {medicalStatusOptions.map((option) => (
                 <Pressable
                   key={option.value ?? 'all'}
                   style={[
@@ -627,7 +612,7 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { borderRadius: 16, padding: 24 }]}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <Text style={{ fontSize: 24, fontWeight: 'bold' }}>Filter Players</Text>
+              <Text style={{ fontSize: 24, fontWeight: 'bold' }}>{t('admin.players.filterPlayers')}</Text>
               <Pressable 
                 onPress={() => setIsFilterModalVisible(false)}
               >
@@ -640,7 +625,7 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
             </View>
             
             <ScrollView style={{ maxHeight: '80%' }}>
-              <Text style={{ fontSize: 18, fontWeight: 'bold', marginTop: 8, marginBottom: 16 }}>Teams</Text>
+              <Text style={{ fontSize: 18, fontWeight: 'bold', marginTop: 8, marginBottom: 16 }}>{t('admin.players.teams')}</Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
                 <TouchableOpacity
                   style={{
@@ -659,7 +644,7 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
                     fontWeight: '500',
                     fontSize: 14
                   }}>
-                    All Teams
+                    {t('admin.players.allTeams')}
                   </Text>
                 </TouchableOpacity>
                 
@@ -688,7 +673,7 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
                 ))}
               </View>
               
-              <Text style={{ fontSize: 18, fontWeight: 'bold', marginTop: 8, marginBottom: 16 }}>Medical Status</Text>
+              <Text style={{ fontSize: 18, fontWeight: 'bold', marginTop: 8, marginBottom: 16 }}>{t('admin.players.medicalStatusFilter')}</Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
                 {medicalStatusOptions.map(option => (
                   <TouchableOpacity
@@ -736,7 +721,7 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
                 setIsFilterModalVisible(false);
               }}
             >
-              <Text style={{ color: COLORS.white, fontWeight: '600', fontSize: 16 }}>Apply Filters</Text>
+              <Text style={{ color: COLORS.white, fontWeight: '600', fontSize: 16 }}>{t('admin.players.applyFilters')}</Text>
             </TouchableOpacity>
           </View>
         </View>

@@ -2,11 +2,14 @@ import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
 import { COLORS, SPACING } from '../../constants/theme';
+import { useTranslation } from 'react-i18next';
 
 export const AdminChatScreen = () => {
+  const { t } = useTranslation();
+
   return (
     <View style={styles.container}>
-      <Text style={styles.text}>Team Chat</Text>
+      <Text style={styles.text}>{t('admin.chat.teamChat')}</Text>
     </View>
   );
 };

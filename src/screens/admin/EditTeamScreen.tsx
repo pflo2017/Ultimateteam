@@ -7,6 +7,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { supabase } from '../../lib/supabase';
 import type { RouteProp } from '@react-navigation/native';
 import type { AdminStackParamList } from '../../types/navigation';
+import { useTranslation } from 'react-i18next';
 
 type EditTeamScreenRouteProp = RouteProp<AdminStackParamList, 'EditTeam'>;
 
@@ -24,6 +25,7 @@ export const EditTeamScreen = () => {
   const navigation = useNavigation();
   const route = useRoute<EditTeamScreenRouteProp>();
   const { teamId } = route.params;
+  const { t } = useTranslation();
 
   useEffect(() => {
     console.log('EditTeamScreen mounted');
@@ -80,7 +82,7 @@ export const EditTeamScreen = () => {
       }
     } catch (error) {
       console.error('Error in loadTeamData:', error);
-      Alert.alert('Error', 'Failed to load team data');
+      Alert.alert(t('common.error'), t('admin.editTeam.failedToLoadTeamData'));
     }
   };
 
@@ -124,13 +126,13 @@ export const EditTeamScreen = () => {
       }
     } catch (error) {
       console.error('Error in loadCoaches:', error);
-      Alert.alert('Error', 'Failed to load coaches list');
+      Alert.alert(t('common.error'), t('admin.editTeam.failedToLoadCoaches'));
     }
   };
 
   const handleUpdateTeam = async () => {
     if (!teamName.trim()) {
-      Alert.alert('Error', 'Please fill in the team name');
+      Alert.alert(t('common.error'), t('admin.editTeam.pleaseFillTeamName'));
       return;
     }
 
@@ -146,11 +148,11 @@ export const EditTeamScreen = () => {
 
       if (error) throw error;
 
-      Alert.alert('Success', 'Team updated successfully');
+      Alert.alert(t('common.success'), t('admin.editTeam.teamUpdated'));
       navigation.goBack();
     } catch (error) {
       console.error('Error updating team:', error);
-      Alert.alert('Error', 'Failed to update team');
+      Alert.alert(t('common.error'), t('admin.editTeam.failedToUpdateTeam'));
     } finally {
       setIsLoading(false);
     }
@@ -158,15 +160,15 @@ export const EditTeamScreen = () => {
 
   const handleDeleteTeam = () => {
     Alert.alert(
-      'Delete Team',
-      'Are you sure you want to delete this team? This action cannot be undone.',
+      t('admin.editTeam.deleteTeam'),
+      t('admin.editTeam.deleteConfirmation'),
       [
         {
-          text: 'Cancel',
+          text: t('admin.addCoach.cancel'),
           style: 'cancel',
         },
         {
-          text: 'Delete',
+          text: t('admin.addCoach.delete'),
           style: 'destructive',
           onPress: async () => {
             setIsLoading(true);
@@ -178,11 +180,11 @@ export const EditTeamScreen = () => {
 
               if (error) throw error;
 
-              Alert.alert('Success', 'Team deleted successfully');
+              Alert.alert(t('common.success'), t('admin.editTeam.teamDeleted'));
               navigation.goBack();
             } catch (error) {
               console.error('Error deleting team:', error);
-              Alert.alert('Error', 'Failed to delete team');
+              Alert.alert(t('common.error'), t('admin.editTeam.failedToDeleteTeam'));
             } finally {
               setIsLoading(false);
             }
@@ -220,13 +222,13 @@ export const EditTeamScreen = () => {
 
         <View style={styles.content}>
           <View style={styles.header}>
-            <Text style={styles.title}>Edit Team</Text>
-            <Text style={styles.subtitle}>Update team information or delete team</Text>
+            <Text style={styles.title}>{t('admin.editTeam.title')}</Text>
+            <Text style={styles.subtitle}>{t('admin.editTeam.subtitle')}</Text>
           </View>
 
           <View style={styles.form}>
             <TextInput
-              label="Team Name"
+              label={t('admin.editTeam.teamName')}
               value={teamName}
               onChangeText={setTeamName}
               mode="flat"
@@ -246,7 +248,7 @@ export const EditTeamScreen = () => {
                   color={COLORS.primary}
                 />
                 <Text style={styles.coachSelectorText}>
-                  {selectedCoach ? selectedCoach.name : 'Select Coach'}
+                  {selectedCoach ? selectedCoach.name : t('admin.editTeam.selectCoach')}
                 </Text>
               </View>
               <MaterialCommunityIcons
@@ -262,7 +264,7 @@ export const EditTeamScreen = () => {
               style={[styles.updateButton, isLoading && styles.buttonDisabled]}
             >
               <Text style={styles.buttonText}>
-                {isLoading ? 'Updating...' : 'Update Team'}
+                {isLoading ? t('admin.editTeam.updating') : t('admin.editTeam.updateTeam')}
               </Text>
             </Pressable>
 
@@ -272,7 +274,7 @@ export const EditTeamScreen = () => {
               style={[styles.deleteButton, isLoading && styles.buttonDisabled]}
             >
               <Text style={[styles.buttonText, styles.deleteButtonText]}>
-                Delete Team
+                {t('admin.editTeam.deleteTeam')}
               </Text>
             </Pressable>
           </View>
@@ -290,7 +292,7 @@ export const EditTeamScreen = () => {
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Select Coach</Text>
+                <Text style={styles.modalTitle}>{t('admin.editTeam.selectCoach')}</Text>
                 <Pressable 
                   onPress={() => {
                     console.log('Close button pressed');
@@ -324,7 +326,7 @@ export const EditTeamScreen = () => {
                       size={24}
                       color={COLORS.primary}
                     />
-                    <Text style={styles.coachName}>No Coach</Text>
+                    <Text style={styles.coachName}>{t('admin.editTeam.noCoach')}</Text>
                   </View>
                   {selectedCoachId === null && (
                     <MaterialCommunityIcons
@@ -336,7 +338,7 @@ export const EditTeamScreen = () => {
                 </Pressable>
                 
                 {coaches.length === 0 ? (
-                  <Text style={styles.noCoachesText}>No coaches available</Text>
+                  <Text style={styles.noCoachesText}>{t('admin.editTeam.noCoachesAvailable')}</Text>
                 ) : (
                   coaches.map((coach) => {
                     console.log('Rendering coach:', coach);
