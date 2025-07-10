@@ -25,6 +25,7 @@ import { RouteProp, useRoute } from '@react-navigation/native';
 import { CoachTabParamList } from '../../navigation/CoachNavigator';
 import { getPaymentStatusText, getPaymentStatusColor, updatePlayerPaymentStatus } from '../../services/paymentStatusService';
 import { RadioButton } from 'react-native-paper';
+import { useTranslation } from 'react-i18next';
 
 interface Player {
   id: string;
@@ -86,6 +87,7 @@ interface PaymentCollection {
 }
 
 export const CoachPaymentsScreen = () => {
+  const { t } = useTranslation();
   const route = useRoute<RouteProp<CoachTabParamList, 'Payments'>>();
   const [showCollections, setShowCollections] = useState(route.params?.showCollections === true);
   
@@ -116,12 +118,12 @@ export const CoachPaymentsScreen = () => {
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
   const [isStatusModalVisible, setIsStatusModalVisible] = useState(false);
   const [statusOptions, setStatusOptions] = useState<{ value: string; label: string }[]>([
-    { value: 'select_status', label: 'Select Status' },
-    { value: 'on_trial', label: 'On Trial' },
-    { value: 'trial_ended', label: 'Trial Ended' },
-    { value: 'pending', label: 'Pending' },
-    { value: 'unpaid', label: 'Not Paid' },
-    { value: 'paid', label: 'Paid' },
+    { value: 'select_status', label: t('coach.payments.select_status') },
+    { value: 'on_trial', label: t('coach.payments.on_trial') },
+    { value: 'trial_ended', label: t('coach.payments.trial_ended') },
+    { value: 'pending', label: t('coach.payments.pending') },
+    { value: 'unpaid', label: t('coach.payments.not_paid') },
+    { value: 'paid', label: t('coach.payments.paid') },
   ]);
   const selectedStatusOption = statusOptions.find(option => option.value === selectedStatus);
   const [isStatusChangeModalVisible, setIsStatusChangeModalVisible] = useState(false);
@@ -159,9 +161,9 @@ export const CoachPaymentsScreen = () => {
 
   // Payment method options
   const paymentMethodOptions = [
-    { value: 'cash', label: 'Cash' },
-    { value: 'voucher_cash', label: 'Voucher & cash' },
-    { value: 'bank_transfer', label: 'Bank transfer' },
+    { value: 'cash', label: t('coach.payments.cash') },
+    { value: 'voucher_cash', label: t('coach.payments.voucher_cash') },
+    { value: 'bank_transfer', label: t('coach.payments.bank_transfer') },
   ];
 
   useEffect(() => {
@@ -469,10 +471,25 @@ export const CoachPaymentsScreen = () => {
       
       console.log(`Current date: ${currentMonth}/${currentYear}, Selected: ${month}/${year}, isFutureMonth: ${isFutureMonth}`);
       
-      // For future months, set all players to 'unpaid' without querying the database
+      // For future months, always show not_all_paid (red flag), but do not set all players to unpaid
       if (isFutureMonth) {
-        console.log("Future month selected - setting all players to unpaid by default");
-        const transformedPlayers = playersData.map((player: any) => ({
+        // Build statusMap for future months (all not_all_paid)
+        const statusMap: { [key: string]: { paid: number; total: number } } = {};
+        playersData.forEach((player: any) => {
+          for (let m = 1; m <= 12; m++) {
+            const key = `${year}-${m}`;
+            if (!statusMap[key]) statusMap[key] = { paid: 0, total: 0 };
+            statusMap[key].total++;
+          }
+        });
+        const newMonthStatusMap: { [key: string]: 'all_paid' | 'not_all_paid' } = {};
+        Object.entries(statusMap).forEach(([key, val]) => {
+          if (val.total > 0) {
+            newMonthStatusMap[key] = 'not_all_paid';
+          }
+        });
+        setMonthStatusMap(newMonthStatusMap);
+        setPlayers(playersData.map((player: any) => ({
           id: player.id,
           player_id: player.id,
           player_name: player.name,
@@ -482,38 +499,23 @@ export const CoachPaymentsScreen = () => {
           payment_updated_at: null,
           payment_updated_by: null,
           payment_updated_by_name: null
-        }));
-        
-        setPlayers(transformedPlayers);
-        
-        // All unpaid for future months
+        })));
         setStats({
-          totalPlayers: transformedPlayers.length,
+          totalPlayers: playersData.length,
           paidPlayers: 0,
-          unpaidPlayers: transformedPlayers.length
+          unpaidPlayers: playersData.length
         });
-        
-        // Build statusMap for future months (all unpaid)
-        const statusMap: { [key: string]: { paid: number; total: number } } = {};
-        playersData.forEach((player: any) => {
-          for (let m = 1; m <= 12; m++) {
-            const key = `${year}-${m}`;
-            if (!statusMap[key]) statusMap[key] = { paid: 0, total: 0 };
-            statusMap[key].total++;
-          }
-        });
-        
-        // Build monthStatusMap for future months (all not_all_paid)
-        const newMonthStatusMap: { [key: string]: 'all_paid' | 'not_all_paid' } = {};
-        Object.entries(statusMap).forEach(([key, val]) => {
-          if (val.total > 0) {
-            newMonthStatusMap[key] = 'not_all_paid';
-          }
-        });
-        setMonthStatusMap(newMonthStatusMap);
-        
-        // Now fetch attendance data for these players
-        await fetchAttendanceDataForTeam(year, month, teamId, transformedPlayers);
+        await fetchAttendanceDataForAllTeams(year, month, [teamId], playersData.map((player: any) => ({
+          id: player.id,
+          player_id: player.id,
+          player_name: player.name,
+          team_id: player.team_id,
+          team_name: player.teams?.name || 'Unknown Team',
+          payment_status: 'unpaid',
+          payment_updated_at: null,
+          payment_updated_by: null,
+          payment_updated_by_name: null
+        })));
         setIsLoading(false);
         return;
       }
@@ -565,6 +567,8 @@ export const CoachPaymentsScreen = () => {
         .select('player_id, year, month, status')
         .in('player_id', playersData.map((p: any) => p.id));
       if (allPaymentsError) throw allPaymentsError;
+      // Debug: print all payment statuses for the selected year
+      console.log('[DEBUG] Payment statuses for year', year, ':', (allPayments || []).map(p => `${p.player_id} ${p.year}-${p.month}: ${p.status}`));
       // Build a map: { 'YYYY-M': { paid: X, total: Y } }
       const statusMap: { [key: string]: { paid: number; total: number } } = {};
       playersData.forEach((player: any) => {
@@ -576,8 +580,9 @@ export const CoachPaymentsScreen = () => {
       });
       (allPayments || []).forEach((payment: any) => {
         const key = `${payment.year}-${payment.month}`;
+        // Normalize status: only 'paid' (case-insensitive) counts as paid
         if (statusMap[key]) {
-          if (payment.status === 'paid') statusMap[key].paid++;
+          if (typeof payment.status === 'string' && payment.status.trim().toLowerCase() === 'paid') statusMap[key].paid++;
         }
       });
       // Now build monthStatusMap
@@ -781,6 +786,10 @@ export const CoachPaymentsScreen = () => {
       setToastMessage(`${player.player_name} marked as ${newStatus}`);
       setShowToast(true);
       triggerEvent('payment_status_changed', player.id, newStatus, now);
+      // Immediately refresh payment data and monthStatusMap
+      if (selectedMonth && selectedTeamId) {
+        fetchMonthlyPaymentsForTeam(selectedMonth.year, selectedMonth.value, selectedTeamId);
+      }
     } catch (error) {
       Alert.alert('Error', 'Failed to update payment status.');
     }
@@ -1444,10 +1453,25 @@ export const CoachPaymentsScreen = () => {
       
       console.log(`[DEBUG] fetchAllTeamsPayments - Current date: ${currentMonth}/${currentYear}, Selected: ${month}/${year}, isFutureMonth: ${isFutureMonth}`);
       
-      // For future months, set all players to 'unpaid' without querying the database
+      // For future months, always show not_all_paid (red flag), but do not set all players to unpaid
       if (isFutureMonth) {
-        console.log("[DEBUG] fetchAllTeamsPayments - Future month selected - setting all players to unpaid by default");
-        const transformedPlayers = playersData.map((player: any) => ({
+        // Build statusMap for future months (all not_all_paid)
+        const statusMap: { [key: string]: { paid: number; total: number } } = {};
+        playersData.forEach((player: any) => {
+          for (let m = 1; m <= 12; m++) {
+            const key = `${year}-${m}`;
+            if (!statusMap[key]) statusMap[key] = { paid: 0, total: 0 };
+            statusMap[key].total++;
+          }
+        });
+        const newMonthStatusMap: { [key: string]: 'all_paid' | 'not_all_paid' } = {};
+        Object.entries(statusMap).forEach(([key, val]) => {
+          if (val.total > 0) {
+            newMonthStatusMap[key] = 'not_all_paid';
+          }
+        });
+        setMonthStatusMap(newMonthStatusMap);
+        setPlayers(playersData.map((player: any) => ({
           id: player.id,
           player_id: player.id,
           player_name: player.name,
@@ -1457,20 +1481,23 @@ export const CoachPaymentsScreen = () => {
           payment_updated_at: null,
           payment_updated_by: null,
           payment_updated_by_name: null
-        }));
-        
-        console.log(`[DEBUG] fetchAllTeamsPayments - Setting ${transformedPlayers.length} players with default unpaid status`);
-        setPlayers(transformedPlayers);
-        
-        // All unpaid for future months
+        })));
         setStats({
-          totalPlayers: transformedPlayers.length,
+          totalPlayers: playersData.length,
           paidPlayers: 0,
-          unpaidPlayers: transformedPlayers.length
+          unpaidPlayers: playersData.length
         });
-        
-        // Now fetch attendance data for all teams
-        await fetchAttendanceDataForAllTeams(year, month, teamIds, transformedPlayers);
+        await fetchAttendanceDataForAllTeams(year, month, [teamIds[0]], playersData.map((player: any) => ({
+          id: player.id,
+          player_id: player.id,
+          player_name: player.name,
+          team_id: player.team_id,
+          team_name: player.teams?.name || 'Unknown Team',
+          payment_status: 'unpaid',
+          payment_updated_at: null,
+          payment_updated_by: null,
+          payment_updated_by_name: null
+        })));
         setIsLoading(false);
         return;
       }
@@ -1519,7 +1546,7 @@ export const CoachPaymentsScreen = () => {
       setStats({ totalPlayers, paidPlayers, unpaidPlayers });
       
       // Now fetch attendance data for all teams
-      await fetchAttendanceDataForAllTeams(year, month, teamIds, transformedPlayers);
+      await fetchAttendanceDataForAllTeams(year, month, [teamIds[0]], transformedPlayers);
       
     } catch (error) {
       console.error('[DEBUG] fetchAllTeamsPayments - Error fetching payments for all teams:', error);
@@ -1709,7 +1736,7 @@ export const CoachPaymentsScreen = () => {
               style={styles.teamSelectorIcon} 
             />
             <Text style={styles.teamSelectorText} numberOfLines={1}>
-              {selectedTeamId ? teams.find(t => t.id === selectedTeamId)?.name : 'Select Team'}
+              {selectedTeamId ? teams.find(t => t.id === selectedTeamId)?.name : t('coach.payments.select_team')}
             </Text>
             <MaterialCommunityIcons name="chevron-down" size={20} color={COLORS.grey[400]} />
           </TouchableOpacity>
@@ -1718,7 +1745,7 @@ export const CoachPaymentsScreen = () => {
           {!selectedTeamId && (
             <View style={styles.emptyStateContainer}>
               <MaterialCommunityIcons name="arrow-up-drop-circle" size={48} color={COLORS.primary} />
-              <Text style={styles.emptyStateTextCentered}>Please select a team to view payments</Text>
+              <Text style={styles.emptyStateTextCentered}>{t('coach.payments.please_select_team')}</Text>
             </View>
           )}
           
@@ -1728,7 +1755,7 @@ export const CoachPaymentsScreen = () => {
               <MaterialCommunityIcons name="magnify" size={20} color={COLORS.grey[400]} style={styles.searchIcon} />
               <TextInput
                 style={styles.searchInput}
-                placeholder="Search player"
+                placeholder={t('coach.payments.search_player')}
                 placeholderTextColor={COLORS.grey[400]}
                 value={searchQuery}
                 onChangeText={handleSearchChange}
@@ -1742,19 +1769,19 @@ export const CoachPaymentsScreen = () => {
               <View style={styles.statsContainer}>
                 <View style={styles.statItem}>
                   <MaterialCommunityIcons name="check-circle" size={24} color={COLORS.success} />
-                  <Text style={styles.statLabel}>Paid</Text>
+                  <Text style={styles.statLabel}>{t('coach.payments.paid')}</Text>
                   <Text style={styles.statValue}>{stats.paidPlayers}</Text>
                 </View>
                 <View style={styles.statDivider} />
                 <View style={styles.statItem}>
                   <MaterialCommunityIcons name="close-circle" size={24} color={COLORS.error} />
-                  <Text style={styles.statLabel}>Not Paid</Text>
+                  <Text style={styles.statLabel}>{t('coach.payments.not_paid')}</Text>
                   <Text style={styles.statValue}>{stats.unpaidPlayers}</Text>
                 </View>
                 <View style={styles.statDivider} />
                 <View style={styles.statItem}>
                   <MaterialCommunityIcons name="account-group" size={24} color={COLORS.primary} />
-                  <Text style={styles.statLabel}>Total</Text>
+                  <Text style={styles.statLabel}>{t('coach.payments.total')}</Text>
                   <Text style={styles.statValue}>{stats.totalPlayers}</Text>
                 </View>
               </View>
@@ -1763,7 +1790,7 @@ export const CoachPaymentsScreen = () => {
                 {filteredPlayers.length === 0 ? (
                   <View style={styles.emptyState}>
                     <MaterialCommunityIcons name="account-off" size={48} color={COLORS.grey[400]} />
-                    <Text style={styles.emptyStateText}>No players found</Text>
+                    <Text style={styles.emptyStateText}>{t('coach.payments.no_players_found')}</Text>
                   </View>
                 ) : (
                   filteredPlayers.map(player => (
@@ -1803,7 +1830,7 @@ export const CoachPaymentsScreen = () => {
                                 styles.statusText,
                                 { color: player.payment_status === 'paid' ? COLORS.success : COLORS.error }
                               ]}>
-                                {player.payment_status === 'paid' ? 'Paid' : 'Not Paid'}
+                                {player.payment_status === 'paid' ? t('coach.payments.paid') : t('coach.payments.not_paid')}
                               </Text>
                             </View>
                             
@@ -1812,7 +1839,7 @@ export const CoachPaymentsScreen = () => {
                               <TouchableOpacity 
                                 style={styles.reminderButton}
                                 onPress={() => sendPaymentReminder(player)}
-                                accessibilityLabel="Send payment reminder"
+                                accessibilityLabel={t('coach.payments.send_payment_reminder')}
                               >
                                 <MaterialCommunityIcons 
                                   name="bell" 
@@ -1826,7 +1853,7 @@ export const CoachPaymentsScreen = () => {
                             <TouchableOpacity
                               onPress={() => setExpandedPlayerId(expandedPlayerId === player.id ? null : player.id)}
                               style={{ marginLeft: 8 }}
-                              accessibilityLabel={expandedPlayerId === player.id ? 'Collapse actions' : 'Expand actions'}
+                              accessibilityLabel={expandedPlayerId === player.id ? t('coach.payments.collapse_actions') : t('coach.payments.expand_actions')}
                             >
                               <MaterialCommunityIcons 
                                 name={expandedPlayerId === player.id ? 'chevron-up' : 'chevron-down'} 
@@ -1841,7 +1868,7 @@ export const CoachPaymentsScreen = () => {
                           <View style={styles.paymentUpdateContainer}>
                             <MaterialCommunityIcons name="clock-outline" size={16} color={COLORS.grey[600]} />
                             <Text style={styles.paymentUpdateText}>
-                              Paid on {formatDate(player.payment_updated_at)}
+                              {t('coach.payments.paid_on')} {formatDate(player.payment_updated_at)}
                             </Text>
                             {player.payment_method && (
                               <View style={{
@@ -1878,7 +1905,7 @@ export const CoachPaymentsScreen = () => {
                               styles.paymentToggleText,
                               { color: player.payment_status === 'paid' ? COLORS.error : COLORS.success }
                             ]}>
-                              Mark as {player.payment_status === 'paid' ? 'Not Paid' : 'Paid'}
+                              {t('coach.payments.mark_as')} {player.payment_status === 'paid' ? t('coach.payments.not_paid') : t('coach.payments.paid')}
                             </Text>
                           </TouchableOpacity>
                         )}
@@ -1903,7 +1930,7 @@ export const CoachPaymentsScreen = () => {
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Select Team</Text>
+                <Text style={styles.modalTitle}>{t('coach.payments.select_team')}</Text>
                 <TouchableOpacity 
                   onPress={() => setIsTeamModalVisible(false)}
                 >
@@ -1949,7 +1976,7 @@ export const CoachPaymentsScreen = () => {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { borderRadius: 0, padding: 24, width: '100%', maxWidth: undefined, alignSelf: undefined, margin: 0 }]}> 
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <Text style={{ fontSize: 20, fontWeight: 'bold', textAlign: 'center', flex: 1 }}>Select Month</Text>
+              <Text style={{ fontSize: 20, fontWeight: 'bold', textAlign: 'center', flex: 1 }}>{t('coach.payments.select_month')}</Text>
               <TouchableOpacity onPress={() => setIsMonthPickerVisible(false)} style={{ marginLeft: 8 }}>
                 <MaterialCommunityIcons name="close" size={28} color={COLORS.grey[600]} />
               </TouchableOpacity>
@@ -1999,7 +2026,7 @@ export const CoachPaymentsScreen = () => {
       >
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'flex-end' }}>
           <View style={{ backgroundColor: 'white', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 24 }}>
-            <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 16 }}>Select Payment Method</Text>
+            <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 16 }}>{t('coach.payments.select_payment_method')}</Text>
             <RadioButton.Group
               onValueChange={value => setSelectedPaymentMethod(value)}
               value={selectedPaymentMethod ?? ''}
@@ -2036,7 +2063,7 @@ export const CoachPaymentsScreen = () => {
               style={{ backgroundColor: COLORS.primary, borderRadius: 8, padding: 12, marginTop: 16, alignItems: 'center' }}
               onPress={handleConfirmPaymentMethod}
             >
-              <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>Confirm</Text>
+              <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>{t('coach.payments.confirm')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={{ marginTop: 12, alignItems: 'center' }}
@@ -2046,7 +2073,7 @@ export const CoachPaymentsScreen = () => {
                 setPendingPaymentPlayer(null);
               }}
             >
-              <Text style={{ color: COLORS.error, fontSize: 16 }}>Cancel</Text>
+              <Text style={{ color: COLORS.error, fontSize: 16 }}>{t('coach.payments.cancel')}</Text>
             </TouchableOpacity>
           </View>
         </View>

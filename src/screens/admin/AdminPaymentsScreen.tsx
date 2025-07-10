@@ -378,10 +378,13 @@ export const AdminPaymentsScreen = () => {
       });
       (paymentsData || []).forEach((payment: any) => {
         const key = `${payment.year}-${payment.month}`;
+        // Normalize status: only 'paid' (case-insensitive) counts as paid
         if (statusMap[key]) {
-          if (payment.status === 'paid') statusMap[key].paid++;
+          if (typeof payment.status === 'string' && payment.status.trim().toLowerCase() === 'paid') statusMap[key].paid++;
         }
       });
+      // Debug: print all payment statuses for the selected year
+      console.log('[DEBUG] Payment statuses for year', year, ':', (paymentsData || []).map(p => `${p.player_id} ${p.year}-${p.month}: ${p.status}`));
       
       // Now build monthStatusMap
       const newMonthStatusMap: { [key: string]: 'all_paid' | 'not_all_paid' } = {};
