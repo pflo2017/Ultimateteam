@@ -208,6 +208,7 @@ const styles = StyleSheet.create({
     marginTop: SPACING.md,
     marginBottom: SPACING.xs,
     fontFamily: 'Urbanist',
+    textAlign: 'center',
   },
   subtitle: {
     fontSize: FONT_SIZES.md,

@@ -344,7 +344,7 @@
       "schedule": "Program",
       "attendance": "Prezență",
       "payments": "Plăți",
-      "news": "Noutăți"
+      "news": "Știri"
     },
     "schedule": {
       "activities": "Activități",
@@ -431,6 +431,28 @@
       "see_all": "Vezi tot >",
       "no_recent_posts": "Nicio postare recentă.",
       "latest_news": "Ultimele Știri"
+    },
+    "login": {
+      "title": "Autentificare Antrenor",
+      "enter_phone_to_continue": "Introduceți numărul de telefon pentru a continua.",
+      "phone_number": "Număr de telefon",
+      "phone_helper": "Vă rugăm să introduceți numărul de telefon în format internațional, ex: +40 734 108 108",
+      "continue": "Continuă",
+      "invalidPhone": "Vă rugăm să introduceți un număr de telefon valid",
+      "invalidFormat": "Vă rugăm să introduceți numărul de telefon în format internațional, ex: +40 734 108 108",
+      "error": "A apărut o eroare. Vă rugăm să încercați din nou.",
+      "welcomeBack": "Bine ați revenit",
+      "enterPassword": "Introduceți parola pentru a continua",
+      "password": "Parolă",
+      "show": "Afișează",
+      "hide": "Ascunde",
+      "login": "Autentificare",
+      "forgotPassword": "Ați uitat parola?",
+      "enterPasswordError": "Vă rugăm să introduceți parola",
+      "invalidCredentials": "Număr de telefon sau parolă incorecte",
+      "coachNotFound": "Profilul de antrenor nu a fost găsit",
+      "migrateFailed": "Migrarea contului a eșuat. Vă rugăm să contactați suportul.",
+      "migrateLoginFailed": "Contul a fost migrat, dar autentificarea a eșuat. Vă rugăm să încercați din nou."
     },
     "manage": {
       "players": "Jucători",
@@ -529,58 +551,84 @@
       "title": "Știri",
       "loading_club_information": "Se încarcă informațiile clubului...",
       "loading_teams": "Se încarcă echipele..."
-    },
-    "login": {
-      "title": "Autentificare Antrenor",
-      "enter_phone_to_continue": "Introdu numărul tău de telefon pentru a continua.",
-      "complete_profile_to_finish_registration": "Completează-ți profilul pentru a finaliza înregistrarea",
-      "enter_password_to_log_in": "Introdu parola pentru a te autentifica",
-      "phone_number": "Număr de telefon",
-      "phone_number_placeholder": "ex: +40 734 108 108",
-      "phone_helper": "Te rugăm să introduci numărul de telefon în format internațional, ex: +40 734 108 108",
-      "phone_number_format_error": "Te rugăm să introduci numărul de telefon în format internațional, ex: +40 734 108 108",
-      "continue": "Continuă",
-      "register": "Înregistrează-te",
-      "registering": "Se înregistrează...",
-      "success": "Succes",
-      "registration_completed_successfully": "Înregistrare finalizată cu succes!",
-      "login": "Autentificare",
-      "no_coach_found": "Nu a fost găsit niciun antrenor cu acest număr de telefon. Te rugăm să contactezi administratorul.",
-      "unexpected_error": "Eroare neașteptată. Te rugăm să încerci din nou.",
-      "coach_info_not_found": "Informațiile antrenorului nu au fost găsite. Te rugăm să încerci din nou.",
-      "passwords_do_not_match": "Parolele nu se potrivesc.",
-      "phone_number_must_start_with_plus": "Numărul de telefon trebuie să înceapă cu + și codul de țară.",
-      "already_registered": {
-        "title": "Deja înregistrat",
-        "message": "Acest număr de telefon este deja înregistrat. Te rugăm să folosești parola existentă pentru autentificare."
-      },
-      "failed_to_retrieve_user_data_after_sign_in": "Nu s-au putut prelua datele utilizatorului după autentificare.",
-      "warning": "Atenție",
-      "login_successful_but_failed_to_link_coach_profile": "Autentificare reușită, dar nu s-a putut asocia profilul de antrenor. Te rugăm să contactezi suportul.",
-      "login_successful_but_could_not_find_coach_profile_to_link": "Autentificare reușită, dar nu s-a putut găsi profilul de antrenor pentru asociere. Te rugăm să contactezi suportul.",
-      "login_successful_but_could_not_link_coach_profile": "Autentificare reușită, dar nu s-a putut asocia profilul de antrenor. Unele funcții pot fi limitate.",
-      "registration_successful": {
-        "title": "Înregistrare reușită",
-        "message": "Contul tău a fost asociat cu succes! Te poți autentifica acum cu numărul de telefon și parola."
-      },
-      "error_during_linking_process": "A apărut o eroare la asocierea contului.",
-      "registration_error": { "title": "Eroare la înregistrare" },
-      "no_user_returned_from_supabase_sign_up": "Nu a fost returnat niciun utilizator la înregistrare.",
-      "registration_succeeded_but_automatic_login_failed": "Înregistrarea a reușit, dar autentificarea automată a eșuat. Te rugăm să te deconectezi și să te autentifici din nou.",
-      "account_created_but_could_not_link_to_your_coach_profile": "Contul a fost creat, dar nu s-a putut asocia cu profilul de antrenor. Te rugăm să contactezi suportul sau să încerci din nou mai târziu.",
-      "login_successful_but_could_not_link_your_coach_profile": "Autentificare reușită, dar nu s-a putut asocia profilul de antrenor. Unele funcții pot fi limitate.",
-      "login_successful_but_could_not_fully_link_your_coach_profile": "Autentificare reușită, dar nu s-a putut asocia complet profilul de antrenor. Unele funcții pot fi limitate.",
-      "registration_failed": "Înregistrarea a eșuat.",
-      "login_failed": "Autentificarea a eșuat."
     }
   },
   "parent": {
     "title": "Panou Părinte",
     "myChildren": "Copiii Mei",
     "attendance": "Prezență",
-    "payments": "Plăți",
+    "payments": {
+      "title": "Plăți",
+      "subtitle": "Gestionează și vizualizează istoricul plăților copiilor tăi",
+      "statusSection": "Status Plată",
+      "currentStatus": "Statusul curent al plății:",
+      "lastPayment": "Ultima plată:",
+      "viewHistory": "Vezi istoricul plăților",
+      "paid": "Plătit",
+      "notPaid": "Neplătit",
+      "na": "N/A",
+      "noChildren": "Nu ai adăugat încă niciun copil"
+    },
     "chat": "Chat cu Antrenorul",
-    "activities": "Activități"
+    "activities": "Activități",
+    "editChild": "Editează Copilul",
+    "addChild": "Adaugă Copilul",
+    "logout": {
+      "failed": "Deconectarea a eșuat. Te rugăm să încerci din nou."
+    },
+    "dashboard": {
+      "welcome": "Bun venit, {{name}}",
+      "subtitle": "Rămâi conectat cu călătoria sportivă a copilului tău",
+      "loading": "Se încarcă...",
+      "loadingDashboard": "Se încarcă panoul tău...",
+      "yourDashboard": "Panoul Tău",
+      "upcomingEvents": "Evenimente Viitoare",
+      "upcomingEventsDescription": "Vezi meciurile și antrenamentele viitoare ale copilului tău",
+      "teamNews": "Știri Echipa",
+      "teamNewsDescription": "Rămâi la curent cu ultimele anunțuri și știri ale echipei",
+      "myChildren": "Copiii Mei",
+      "myChildrenDescription": "Gestionează informațiile și înregistrările copiilor tăi",
+      "payments": "Plăți",
+      "paymentsDescription": "Vezi istoricul și statusul plăților pentru copiii tăi"
+    },
+    "accountIssue": "Se pare că există o problemă cu contul tău. Te rugăm să contactezi suportul.",
+    "manage": {
+      "children": "Copii",
+      "team": "Echipă",
+      "manage": "Gestionează",
+      "addChild": "Adaugă copil",
+      "edit": "Editează",
+      "delete": "Șterge",
+      "medicalVisaStatus": {
+        "valid": "Validă",
+        "pending": "În așteptare",
+        "expired": "Expirată"
+      },
+      "birthDate": "Data nașterii"
+    },
+    "login": {
+      "title": "Autentificare Părinte",
+      "subtitle": "Introduceți numărul de telefon pentru a continua.",
+      "phoneLabel": "Număr de telefon",
+      "phonePlaceholder": "ex: +40 734 108 108",
+      "phoneHelper": "Vă rugăm să introduceți numărul de telefon în format internațional, ex: +40 734 108 108",
+      "continue": "Continuă",
+      "invalidPhone": "Vă rugăm să introduceți un număr de telefon valid",
+      "invalidFormat": "Vă rugăm să introduceți numărul de telefon în format internațional, ex: +40 734 108 108",
+      "error": "A apărut o eroare. Vă rugăm să încercați din nou.",
+      "welcomeBack": "Bine ați revenit",
+      "enterPassword": "Introduceți parola pentru a continua",
+      "password": "Parolă",
+      "show": "Afișează",
+      "hide": "Ascunde",
+      "login": "Autentificare",
+      "forgotPassword": "Ați uitat parola?",
+      "enterPasswordError": "Vă rugăm să introduceți parola",
+      "invalidCredentials": "Număr de telefon sau parolă incorecte",
+      "parentNotFound": "Profilul de părinte nu a fost găsit",
+      "migrateFailed": "Migrarea contului a eșuat. Vă rugăm să contactați suportul.",
+      "migrateLoginFailed": "Contul a fost migrat, dar autentificarea a eșuat. Vă rugăm să încercați din nou."
+    }
   },
   "teams": {
     "title": "Echipe",
