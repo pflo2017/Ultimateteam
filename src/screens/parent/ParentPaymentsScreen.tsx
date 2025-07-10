@@ -11,6 +11,7 @@ import { registerEventListener } from '../../utils/events';
 import { useDataRefresh } from '../../utils/useDataRefresh';
 import { getPlayerPaymentStatus, getPlayerPaymentHistory, getPaymentStatusText, getPaymentStatusColor, getCurrentMonthPaymentStatus } from '../../services/paymentStatusService';
 import { PaymentHistoryModal } from '../../components/PaymentHistoryModal';
+import { useTranslation } from 'react-i18next';
 
 interface Child {
   id: string;
@@ -52,6 +53,7 @@ interface Player {
 }
 
 export const ParentPaymentsScreen = () => {
+  const { t } = useTranslation();
   const [isLoading, setIsLoading] = useState(true);
   const [children, setChildren] = useState<Child[]>([]);
   const [selectedChild, setSelectedChild] = useState<Child | null>(null);
@@ -540,9 +542,9 @@ export const ParentPaymentsScreen = () => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Payments</Text>
+        <Text style={styles.title}>{t('parent.payments.title')}</Text>
         <Text style={styles.subtitle}>
-          Manage and view your children's payment history
+          {t('parent.payments.subtitle')}
         </Text>
       </View>
 
@@ -558,12 +560,12 @@ export const ParentPaymentsScreen = () => {
           />
         }
       >
-        <Text style={styles.sectionTitle}>Payment Status</Text>
+        <Text style={styles.sectionTitle}>{t('parent.payments.statusSection')}</Text>
         
         {children.length === 0 ? (
           <View style={styles.emptyState}>
             <MaterialCommunityIcons name="account-off" size={48} color={COLORS.grey[400]} />
-            <Text style={styles.emptyStateText}>No children added yet</Text>
+            <Text style={styles.emptyStateText}>{t('parent.payments.noChildren')}</Text>
           </View>
         ) : (
           children.map((child) => {
@@ -585,7 +587,7 @@ export const ParentPaymentsScreen = () => {
                   
                   <View style={styles.paymentSection}>
                     <View style={styles.paymentRow}>
-                      <Text style={styles.paymentLabel}>Current Payment Status:</Text>
+                      <Text style={styles.paymentLabel}>{t('parent.payments.currentStatus')}</Text>
                       <View style={[
                         styles.statusBadge,
                         { backgroundColor: getPaymentStatusColor(child.payment_status || 'pending') + '20' }
@@ -594,17 +596,17 @@ export const ParentPaymentsScreen = () => {
                           styles.statusText,
                           { color: getPaymentStatusColor(child.payment_status || 'pending') }
                         ]}>
-                          {getPaymentStatusText(child.payment_status || 'pending')}
+                          {child.payment_status === 'paid' ? t('parent.payments.paid') : child.payment_status === 'unpaid' || child.payment_status === 'not_paid' ? t('parent.payments.notPaid') : getPaymentStatusText(child.payment_status || 'pending')}
                         </Text>
                       </View>
                     </View>
                     
                     <View style={styles.paymentRow}>
-                      <Text style={styles.paymentLabel}>Last Payment:</Text>
+                      <Text style={styles.paymentLabel}>{t('parent.payments.lastPayment')}</Text>
                       <Text style={styles.paymentValue}>
                         {child.last_payment_date && isValidDate(child.last_payment_date) 
                           ? formatDate(child.last_payment_date) 
-                          : 'N/A'}
+                          : t('parent.payments.na')}
                       </Text>
                     </View>
                     
@@ -616,7 +618,7 @@ export const ParentPaymentsScreen = () => {
                       }}
                     >
                       <MaterialCommunityIcons name="history" size={20} color={COLORS.white} />
-                      <Text style={styles.viewHistoryText}>View Payment History</Text>
+                      <Text style={styles.viewHistoryText}>{t('parent.payments.viewHistory')}</Text>
                     </TouchableOpacity>
                   </View>
                 </Card.Content>

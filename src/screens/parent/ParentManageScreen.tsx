@@ -8,6 +8,7 @@ import { supabase } from '../../lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { ParentStackParamList } from '../../types/navigation';
+import { useTranslation } from 'react-i18next';
 
 type ParentManageScreenNavigationProp = NativeStackNavigationProp<ParentStackParamList>;
 
@@ -65,6 +66,7 @@ export const ParentManageScreen = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [expandedTeamId, setExpandedTeamId] = useState<string | null>(null);
   const navigation = useNavigation<ParentManageScreenNavigationProp>();
+  const { t } = useTranslation();
   
   useFocusEffect(
     useCallback(() => {
@@ -145,7 +147,7 @@ export const ParentManageScreen = () => {
       setChildren(formattedChildren);
     } catch (error) {
       console.error('Error loading children:', error);
-      Alert.alert('Error', 'Failed to load children');
+      Alert.alert(t('parent.manage.error'), t('parent.manage.failedToLoadChildren'));
     } finally {
       setIsLoading(false);
     }
@@ -292,16 +294,13 @@ export const ParentManageScreen = () => {
 
   const handleDeleteChild = (childId: string) => {
     Alert.alert(
-      "Delete Child",
-      "Are you sure you want to delete this child? This action cannot be undone.",
+      t('parent.manage.deleteChild'),
+      t('parent.manage.deleteChildConfirmation'),
       [
+        { text: t('parent.manage.cancel'), style: 'cancel' },
         {
-          text: "Cancel",
-          style: "cancel"
-        },
-        { 
-          text: "Delete", 
-          style: "destructive",
+          text: t('parent.manage.delete'),
+          style: 'destructive',
           onPress: async () => {
             try {
               setIsLoading(true);
@@ -381,7 +380,7 @@ export const ParentManageScreen = () => {
                 }
               }
               
-              Alert.alert("Success", "Child deleted successfully");
+              Alert.alert(t('common.success'), t('parent.manage.childDeleted'));
               
               // Force reload from database with a slight delay to ensure DB consistency
               setTimeout(async () => {
@@ -390,7 +389,7 @@ export const ParentManageScreen = () => {
               }, 500);
             } catch (error) {
               console.error('Error in delete process:', error);
-              Alert.alert("Error", error instanceof Error ? error.message : "Failed to delete child");
+              Alert.alert(t('common.error'), error instanceof Error ? error.message : t('parent.manage.failedToDeleteChild'));
               setIsLoading(false);
             }
           }
@@ -430,13 +429,13 @@ export const ParentManageScreen = () => {
             size={24} 
             color={COLORS.white} 
           />
-          <Text style={styles.addButtonText}>Add Child</Text>
+          <Text style={styles.addButtonText}>{t('parent.manage.addChild')}</Text>
         </Pressable>
 
         {isLoading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={COLORS.primary} />
-            <Text style={styles.loadingText}>Loading children...</Text>
+            <Text style={styles.loadingText}>{t('parent.manage.loadingChildren')}</Text>
           </View>
         ) : children.length === 0 ? (
           <View style={styles.emptyContainer}>
@@ -445,9 +444,9 @@ export const ParentManageScreen = () => {
               size={64} 
               color={COLORS.grey[300]} 
             />
-            <Text style={styles.emptyText}>No children added yet</Text>
+            <Text style={styles.emptyText}>{t('parent.manage.noChildrenAdded')}</Text>
             <Text style={styles.emptySubtext}>
-              Add your children to manage their profiles
+              {t('parent.manage.noChildrenSubtext')}
             </Text>
           </View>
         ) : (
@@ -474,7 +473,7 @@ export const ParentManageScreen = () => {
                     </View>
 
                     <View style={styles.ageContainer}>
-                      <Text style={styles.ageLabel}>Birth Date</Text>
+                      <Text style={styles.ageLabel}>{t('parent.manage.birthDate')}</Text>
                       <Text style={styles.ageValue}>
                         {new Date(child.birth_date).toLocaleDateString()}
                       </Text>
@@ -485,20 +484,20 @@ export const ParentManageScreen = () => {
 
                   <View style={styles.infoRow}>
                     <View style={styles.infoItem}>
-                      <Text style={styles.infoLabel}>Medical Visa</Text>
+                      <Text style={styles.infoLabel}>{t('parent.manage.medicalVisa')}</Text>
                       <View style={[
                         styles.statusBadge, 
                         { backgroundColor: getMedicalVisaColor(child.medical_visa_status) }
                       ]}>
                         <Text style={styles.statusText}>
-                          {child.medical_visa_status.charAt(0).toUpperCase() + child.medical_visa_status.slice(1)}
+                          {t(`parent.manage.medicalVisaStatus.${child.medical_visa_status}`)}
                         </Text>
                       </View>
                     </View>
 
                     {child.medical_visa_issue_date && (
                       <View style={styles.infoItem}>
-                        <Text style={styles.infoLabel}>Issue Date</Text>
+                        <Text style={styles.infoLabel}>{t('parent.manage.issueDate')}</Text>
                         <Text style={styles.infoValue}>
                           {new Date(child.medical_visa_issue_date).toLocaleDateString()}
                         </Text>
@@ -516,7 +515,7 @@ export const ParentManageScreen = () => {
                         size={16} 
                         color={COLORS.white} 
                       />
-                      <Text style={styles.buttonText}>Edit</Text>
+                      <Text style={styles.buttonText}>{t('parent.manage.edit')}</Text>
                     </Pressable>
 
                     <Pressable 
@@ -528,7 +527,7 @@ export const ParentManageScreen = () => {
                         size={16} 
                         color={COLORS.white} 
                       />
-                      <Text style={styles.buttonText}>Delete</Text>
+                      <Text style={styles.buttonText}>{t('parent.manage.delete')}</Text>
                     </Pressable>
                   </View>
                 </Card.Content>
@@ -546,7 +545,7 @@ export const ParentManageScreen = () => {
         {isLoading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={COLORS.primary} />
-            <Text style={styles.loadingText}>Loading team information...</Text>
+            <Text style={styles.loadingText}>{t('parent.manage.loadingTeamInfo')}</Text>
           </View>
         ) : teams.length === 0 ? (
           <View style={styles.emptyContainer}>
@@ -555,9 +554,9 @@ export const ParentManageScreen = () => {
               size={64} 
               color={COLORS.grey[300]} 
             />
-            <Text style={styles.emptyText}>No teams found</Text>
+            <Text style={styles.emptyText}>{t('parent.manage.noTeamsFound')}</Text>
             <Text style={styles.emptySubtext}>
-              Your children are not assigned to any teams yet
+              {t('parent.manage.noTeamsSubtext')}
             </Text>
           </View>
         ) : (
@@ -586,77 +585,61 @@ export const ParentManageScreen = () => {
                   </View>
                   
                   <View style={styles.teamCodeContainer}>
-                    <Text style={styles.teamCodeLabel}>Team Access Code:</Text>
+                    <Text style={styles.teamCodeLabel}>{t('parent.manage.teamAccessCode')}</Text>
                     <Text style={styles.teamCodeValue}>{team.access_code}</Text>
                   </View>
 
                   <Divider style={styles.divider} />
                   
-                  <Text style={styles.sectionTitle}>Coaches</Text>
-                  {team.coaches.length === 0 ? (
-                    <View style={styles.noCoachContainer}>
-                      <MaterialCommunityIcons 
-                        name="account-alert-outline" 
-                        size={24} 
-                        color={COLORS.grey[500]} 
-                      />
-                      <Text style={styles.noCoachText}>No coaches assigned to this team yet</Text>
-                    </View>
-                  ) : (
-                    team.coaches.map((coach) => (
-                      <View key={coach.id} style={styles.coachItem}>
-                        <View style={styles.coachInfo}>
+                  <Text style={styles.sectionTitle}>{t('parent.manage.coaches')}</Text>
+                  <View style={styles.playersList}>
+                    {team.coaches.length === 0 ? (
+                      <View style={styles.noCoachContainer}>
+                        <MaterialCommunityIcons 
+                          name="account-alert-outline" 
+                          size={24} 
+                          color={COLORS.grey[400]} 
+                        />
+                        <Text style={styles.noCoachText}>{t('parent.manage.noCoaches')}</Text>
+                      </View>
+                    ) : (
+                      team.coaches.map(coach => (
+                        <View key={coach.id} style={[styles.coachItem, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}> 
                           <MaterialCommunityIcons 
-                            name="whistle" 
+                            name="account" 
                             size={20} 
                             color={COLORS.primary} 
                           />
                           <Text style={styles.coachName}>{coach.name}</Text>
+                          <Text style={styles.coachPhone}>{coach.phone_number}</Text>
                         </View>
-                        <View style={styles.coachContact}>
-                          <MaterialCommunityIcons 
-                            name="phone" 
-                            size={16} 
-                            color={COLORS.grey[700]} 
-                          />
-                          <Text style={styles.phoneNumber}>{coach.phone_number}</Text>
-                        </View>
+                      ))
+                    )}
+                  </View>
+
+                  <Divider style={styles.divider} />
+                  
+                  <Text style={styles.sectionTitle}>{t('parent.manage.players')}</Text>
+                  {team.players.length === 0 ? (
+                    <View style={styles.noPlayersContainer}>
+                      <MaterialCommunityIcons 
+                        name="account-multiple-outline" 
+                        size={24} 
+                        color={COLORS.grey[400]} 
+                      />
+                      <Text style={styles.noPlayersText}>{t('parent.manage.noPlayers')}</Text>
+                    </View>
+                  ) : (
+                    team.players.map(player => (
+                      <View key={player.id} style={styles.playerItem}>
+                        <MaterialCommunityIcons 
+                          name="account" 
+                          size={20} 
+                          color={COLORS.primary} 
+                        />
+                        <Text style={styles.playerName}>{player.name}</Text>
                       </View>
                     ))
-                  )}
-                  
-                  <TouchableOpacity 
-                    style={styles.playersToggle}
-                    onPress={() => toggleTeamExpanded(team.id)}
-                  >
-                    <View style={styles.playersHeaderContainer}>
-                      <Text style={styles.sectionTitle}>Players</Text>
-                      <Text style={styles.playerCount}>({team.players.length})</Text>
-                    </View>
-                    <MaterialCommunityIcons 
-                      name={expandedTeamId === team.id ? "chevron-up" : "chevron-down"} 
-                      size={24} 
-                      color={COLORS.primary} 
-                    />
-                  </TouchableOpacity>
-                  
-                  {expandedTeamId === team.id && (
-                    <View style={styles.playersList}>
-                      {team.players.length === 0 ? (
-                        <Text style={styles.noPlayersText}>No players in this team</Text>
-                      ) : (
-                        team.players.map(player => (
-                          <View key={player.id} style={styles.playerItem}>
-                            <MaterialCommunityIcons 
-                              name="account" 
-                              size={20} 
-                              color={COLORS.primary} 
-                            />
-                            <Text style={styles.playerName}>{player.name}</Text>
-                          </View>
-                        ))
-                      )}
-                    </View>
                   )}
                 </Card.Content>
               </Card>
@@ -676,12 +659,12 @@ export const ParentManageScreen = () => {
           buttons={[
             { 
               value: 'children', 
-              label: 'Children',
+              label: t('parent.manage.children'),
               icon: 'account-multiple'
             },
             { 
               value: 'team', 
-              label: 'Team',
+              label: t('parent.manage.team'),
               icon: 'account-group'
             }
           ]}
@@ -897,10 +880,7 @@ const styles = StyleSheet.create({
     marginVertical: SPACING.sm,
   },
   coachItem: {
-    marginBottom: SPACING.md,
-    padding: SPACING.sm,
-    backgroundColor: COLORS.grey[100],
-    borderRadius: 8,
+    marginBottom: SPACING.sm,
   },
   coachInfo: {
     flexDirection: 'row',
@@ -911,17 +891,10 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.md,
     fontWeight: '500',
     color: COLORS.text,
-    marginLeft: SPACING.sm,
   },
-  coachContact: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginLeft: SPACING.xl + SPACING.xs,
-  },
-  phoneNumber: {
-    fontSize: FONT_SIZES.sm,
+  coachPhone: {
+    fontSize: FONT_SIZES.md,
     color: COLORS.grey[700],
-    marginLeft: SPACING.xs,
   },
   noCoachContainer: {
     flexDirection: 'row',
@@ -996,5 +969,13 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     color: COLORS.grey[600],
     marginLeft: SPACING.xs,
+  },
+  noPlayersContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: SPACING.md,
+    padding: SPACING.md,
+    backgroundColor: COLORS.grey[100],
+    borderRadius: 8,
   },
 }); 

@@ -9,6 +9,7 @@ import { supabase } from '../lib/supabase';
 import type { RootStackParamList } from '../types/navigation';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTranslation } from 'react-i18next';
 
 // Add global type declaration for reloadRole
 declare global {
@@ -28,6 +29,7 @@ export const ParentPasswordLoginScreen = () => {
   const navigation = useNavigation<ParentPasswordLoginScreenNavigationProp>();
   const route = useRoute<ParentPasswordLoginScreenRouteProp>();
   const { phoneNumber } = route.params;
+  const { t } = useTranslation();
 
   // Handle back button press with improved navigation
   const handleBackPress = () => {
@@ -196,51 +198,40 @@ export const ParentPasswordLoginScreen = () => {
             size={48} 
             color={COLORS.primary}
           />
-          <Text style={styles.title}>Welcome Back</Text>
-          <Text style={styles.subtitle}>Enter your password to continue</Text>
+          <Text style={styles.title}>{t('parent.login.welcomeBack')}</Text>
+          <Text style={styles.subtitle}>{t('parent.login.enterPassword')}</Text>
         </View>
 
         <View style={styles.form}>
           <TextInput
-            label="Password"
+            label={t('parent.login.password')}
             value={password}
             onChangeText={(text) => {
               setPassword(text);
               if (error) setError('');
             }}
-            mode="outlined"
-            style={styles.input}
-            outlineStyle={styles.inputOutline}
-            contentStyle={styles.inputContent}
-            theme={{ colors: { primary: COLORS.primary }}}
+            mode="flat"
             secureTextEntry={!showPassword}
-            error={!!error}
-            disabled={isLoading}
-            textContentType="oneTimeCode"
-            autoComplete="off"
-            autoCapitalize="none"
-            autoCorrect={false}
-            spellCheck={false}
-            blurOnSubmit={true}
-            keyboardType="visible-password"
-            right={
-              <TextInput.Icon 
-                icon={showPassword ? "eye-off" : "eye"} 
-                onPress={() => setShowPassword(!showPassword)}
-                color={COLORS.grey[400]}
-              />
-            }
+            style={styles.input}
+            theme={{ colors: { primary: COLORS.primary }}}
+            left={<TextInput.Icon icon="lock" color={COLORS.primary} style={{ marginRight: 30 }} />}
+            right={<TextInput.Icon icon={showPassword ? 'eye-off' : 'eye'} color={COLORS.primary} onPress={() => setShowPassword(!showPassword)} />}
+            placeholder={t('parent.login.password')}
           />
           
           {error ? (
-            <Text style={styles.errorText}>{error}</Text>
+            <Text style={styles.errorText}>{
+              error === 'Please enter your password' ? t('parent.login.enterPasswordError') :
+              error === 'Invalid phone or password' ? t('parent.login.invalidCredentials') :
+              error === 'Parent profile not found' ? t('parent.login.parentNotFound') :
+              error === 'Failed to migrate account. Please contact support.' ? t('parent.login.migrateFailed') :
+              error === 'Account migrated but login failed. Please try again.' ? t('parent.login.migrateLoginFailed') :
+              error === 'An error occurred. Please try again.' ? t('parent.login.error') : error
+            }</Text>
           ) : null}
 
-          <Pressable
-            onPress={handleForgotPassword}
-            style={styles.forgotPasswordButton}
-          >
-            <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+          <Pressable onPress={handleForgotPassword} style={styles.forgotPasswordBtn}>
+            <Text style={styles.forgotPasswordText}>{t('parent.login.forgotPassword')}</Text>
           </Pressable>
 
           <Animated.View 
@@ -250,15 +241,15 @@ export const ParentPasswordLoginScreen = () => {
               style={[
                 styles.loginButton, 
                 SHADOWS.button,
-                (isLoading || !password.trim()) && styles.buttonDisabled
+                isLoading && styles.loginButtonDisabled
               ]}
               onPress={handleLogin}
-              disabled={isLoading || !password.trim()}
+              disabled={isLoading}
             >
               {isLoading ? (
                 <ActivityIndicator color={COLORS.white} />
               ) : (
-                <Text style={styles.buttonText}>Login</Text>
+                <Text style={styles.buttonText}>{t('parent.login.login')}</Text>
               )}
             </Pressable>
           </Animated.View>
@@ -350,6 +341,13 @@ const styles = StyleSheet.create({
     color: COLORS.error,
     fontSize: FONT_SIZES.sm,
     fontFamily: 'Urbanist',
+    marginTop: -SPACING.md,
+  },
+  loginButtonDisabled: {
+    backgroundColor: COLORS.grey[300],
+  },
+  forgotPasswordBtn: {
+    alignSelf: 'flex-end',
     marginTop: -SPACING.md,
   },
 }); 

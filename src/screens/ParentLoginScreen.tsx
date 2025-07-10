@@ -9,6 +9,7 @@ import { supabase } from '../lib/supabase';
 import type { RootStackParamList } from '../types/navigation';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import PhoneInput from 'react-native-phone-number-input';
+import { useTranslation } from 'react-i18next';
 
 type ParentLoginScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'ParentLogin'>;
 
@@ -18,6 +19,7 @@ export const ParentLoginScreen = () => {
   const [error, setError] = useState('');
   const navigation = useNavigation<ParentLoginScreenNavigationProp>();
   const phoneInputRef = React.useRef<PhoneInput>(null);
+  const { t } = useTranslation();
 
   // Handle back button press with improved navigation
   const handleBackPress = () => {
@@ -36,7 +38,7 @@ export const ParentLoginScreen = () => {
     console.log('Checking phone number:', cleanedPhoneNumber);
 
     if (!isValidPhoneNumber()) {
-      setError('Please enter a valid phone number');
+      setError(t('parent.login.invalidPhone'));
       return;
     }
 
@@ -78,7 +80,7 @@ export const ParentLoginScreen = () => {
       }
     } catch (error) {
       console.error('Error checking phone number:', error);
-      setError('An error occurred. Please try again.');
+      setError(t('parent.login.error'));
     } finally {
       setIsLoading(false);
     }
@@ -116,14 +118,14 @@ export const ParentLoginScreen = () => {
             size={48} 
             color={COLORS.primary}
           />
-          <Text style={styles.title}>Parent Login</Text>
-          <Text style={styles.subtitle}>Enter your phone number to continue.</Text>
+          <Text style={styles.title}>{t('parent.login.title')}</Text>
+          <Text style={styles.subtitle}>{t('parent.login.subtitle')}</Text>
         </View>
 
         <View style={styles.form}>
           {/* Phone Number Input with Country Picker */}
           <TextInput
-            label="Phone Number"
+            label={t('parent.login.phoneLabel')}
             value={phoneNumber}
             onChangeText={text => {
               let formatted = text;
@@ -139,10 +141,10 @@ export const ParentLoginScreen = () => {
             theme={{ colors: { primary: COLORS.primary }}}
             left={<TextInput.Icon icon="phone" color={COLORS.primary} style={{ marginRight: 30 }} />}
             underlineColor={COLORS.primary}
-            placeholder="e.g. +40 734 108 108"
+            placeholder={t('parent.login.phonePlaceholder')}
           />
           <Text style={styles.helperText}>
-            Please enter your phone number in international format, e.g. +40 734 108 108
+            {t('parent.login.phoneHelper')}
           </Text>
           
           {error ? (
@@ -161,7 +163,7 @@ export const ParentLoginScreen = () => {
               onPress={() => {
                 const cleaned = phoneNumber.replace(/\s/g, '');
                 if (!/^\+[0-9]{10,}$/.test(cleaned)) {
-                  setError('Please enter your phone number in international format, e.g. +40 734 108 108');
+                  setError(t('parent.login.invalidFormat'));
                   return;
                 }
                 handleContinue();
@@ -171,7 +173,7 @@ export const ParentLoginScreen = () => {
               {isLoading ? (
                 <ActivityIndicator color={COLORS.white} />
               ) : (
-                <Text style={styles.buttonText}>Continue</Text>
+                <Text style={styles.buttonText}>{t('parent.login.continue')}</Text>
               )}
             </Pressable>
           </Animated.View>

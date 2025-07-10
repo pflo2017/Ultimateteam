@@ -8,6 +8,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { ParentTabParamList } from '../../types/navigation';
 import { supabase } from '../../lib/supabase';
+import { useTranslation } from 'react-i18next';
 
 type ParentDashboardScreenNavigationProp = BottomTabNavigationProp<ParentTabParamList>;
 
@@ -16,6 +17,7 @@ export const ParentDashboardScreen = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const navigation = useNavigation<ParentDashboardScreenNavigationProp>();
+  const { t } = useTranslation();
   
   // Load parent data when the component mounts and when the screen comes into focus
   useEffect(() => {
@@ -102,9 +104,9 @@ export const ParentDashboardScreen = () => {
       if (!parentData) {
         console.error('No parent data found for this user');
         Alert.alert(
-          'Account Issue',
-          'There seems to be an issue with your account. Please contact support.',
-          [{ text: 'OK' }]
+          t('common.error'),
+          t('parent.accountIssue'),
+          [{ text: t('common.ok') }]
         );
       }
     } catch (error) {
@@ -124,10 +126,10 @@ export const ParentDashboardScreen = () => {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text variant="headlineMedium" style={styles.title}>
-          {isLoading ? 'Loading...' : `Welcome, ${parentName || 'Parent'}`}
+          {isLoading ? t('parent.dashboard.loading') : t('parent.dashboard.welcome', { name: parentName || 'Parent' })}
         </Text>
         <Text variant="bodyLarge" style={styles.subtitle}>
-          Stay connected with your child's sports journey
+          {t('parent.dashboard.subtitle')}
         </Text>
       </View>
 
@@ -141,11 +143,11 @@ export const ParentDashboardScreen = () => {
         {isLoading && !refreshing ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={COLORS.primary} />
-            <Text style={styles.loadingText}>Loading your dashboard...</Text>
+            <Text style={styles.loadingText}>{t('parent.dashboard.loadingDashboard')}</Text>
           </View>
         ) : (
         <View style={styles.dashboardContent}>
-          <Text style={styles.sectionTitle}>Your Dashboard</Text>
+          <Text style={styles.sectionTitle}>{t('parent.dashboard.yourDashboard')}</Text>
           
           <TouchableOpacity
             onPress={() => navigation.navigate('Events')}
@@ -156,9 +158,9 @@ export const ParentDashboardScreen = () => {
                 <View style={styles.dashboardCardContent}>
                   <MaterialCommunityIcons name="calendar-month" size={40} color={COLORS.primary} />
                   <View style={styles.cardTextContainer}>
-                    <Text style={styles.cardTitle}>Upcoming Events</Text>
+                    <Text style={styles.cardTitle}>{t('parent.dashboard.upcomingEvents')}</Text>
                     <Text style={styles.cardDescription}>
-                      View your child's upcoming matches and training sessions
+                      {t('parent.dashboard.upcomingEventsDescription')}
                     </Text>
                   </View>
                 </View>
@@ -175,9 +177,9 @@ export const ParentDashboardScreen = () => {
                 <View style={styles.dashboardCardContent}>
                   <MaterialCommunityIcons name="clipboard-text" size={40} color={COLORS.primary} />
                   <View style={styles.cardTextContainer}>
-                    <Text style={styles.cardTitle}>Team News</Text>
+                    <Text style={styles.cardTitle}>{t('parent.dashboard.teamNews')}</Text>
                     <Text style={styles.cardDescription}>
-                      Stay updated with the latest team announcements and news
+                      {t('parent.dashboard.teamNewsDescription')}
                     </Text>
                   </View>
                 </View>
@@ -194,9 +196,9 @@ export const ParentDashboardScreen = () => {
                 <View style={styles.dashboardCardContent}>
                   <MaterialCommunityIcons name="account-group" size={40} color={COLORS.primary} />
                   <View style={styles.cardTextContainer}>
-                    <Text style={styles.cardTitle}>My Children</Text>
+                    <Text style={styles.cardTitle}>{t('parent.dashboard.myChildren')}</Text>
                     <Text style={styles.cardDescription}>
-                      Manage your children's information and registrations
+                      {t('parent.dashboard.myChildrenDescription')}
                     </Text>
                   </View>
                 </View>
@@ -213,9 +215,9 @@ export const ParentDashboardScreen = () => {
                 <View style={styles.dashboardCardContent}>
                   <MaterialCommunityIcons name="cash-multiple" size={40} color={COLORS.primary} />
                   <View style={styles.cardTextContainer}>
-                    <Text style={styles.cardTitle}>Payments</Text>
+                    <Text style={styles.cardTitle}>{t('parent.dashboard.payments')}</Text>
                     <Text style={styles.cardDescription}>
-                      View payment history and status for your children
+                      {t('parent.dashboard.paymentsDescription')}
                     </Text>
                   </View>
                 </View>

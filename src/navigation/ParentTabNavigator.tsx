@@ -23,6 +23,7 @@ import { supabase } from '../lib/supabase';
 import { ActivityDetailsScreen } from '../screens/ActivityDetailsScreen';
 import { EditActivityScreen } from '../screens/EditActivityScreen';
 import { PostEditorScreen } from '../screens/admin/PostEditorScreen';
+import { useTranslation } from 'react-i18next';
 
 // Add global type declaration for reloadRole
 declare global {
@@ -86,6 +87,7 @@ const ParentHeader = () => {
   const [visible, setVisible] = useState(false);
   const [parentName, setParentName] = useState<string>('');
   const navigation = useNavigation<ParentNavigationProp>();
+  const { t } = useTranslation();
 
   useEffect(() => {
     loadParentInfo();
@@ -117,7 +119,7 @@ const ParentHeader = () => {
       // No need to reload or navigate; the root navigator will handle it
     } catch (error) {
       console.error('Error logging out:', error);
-      Alert.alert('Error', 'Failed to log out. Please try again.');
+      Alert.alert(t('common.error'), t('parent.logout.failed'));
     }
   };
 
@@ -148,7 +150,7 @@ const ParentHeader = () => {
               setVisible(false);
               navigation.navigate('Settings');
             }}
-            title="Settings"
+            title={t('navigation.settings')}
             leadingIcon="cog"
             titleStyle={{ color: COLORS.text }}
           />
@@ -157,7 +159,7 @@ const ParentHeader = () => {
               setVisible(false);
               handleLogout();
             }}
-            title="Logout"
+            title={t('auth.logout')}
             leadingIcon="logout"
             titleStyle={{ color: COLORS.text }}
             style={{ borderTopWidth: 1, borderTopColor: COLORS.grey[200] }}
@@ -169,6 +171,8 @@ const ParentHeader = () => {
 };
 
 const TabNavigator = () => {
+  const { t } = useTranslation();
+  
   return (
     <Tab.Navigator
       screenOptions={{
@@ -189,7 +193,7 @@ const TabNavigator = () => {
         name="Dashboard"
         component={ParentDashboardScreen}
         options={{
-          tabBarLabel: 'Dashboard',
+          tabBarLabel: t('navigation.dashboard'),
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="view-dashboard-outline" size={24} color={color} />
           ),
@@ -199,7 +203,7 @@ const TabNavigator = () => {
         name="Manage"
         component={ParentManageScreen}
         options={{
-          tabBarLabel: 'Manage',
+          tabBarLabel: t('parent.manage.manage'),
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="account-multiple-plus-outline" size={24} color={color} />
           ),
@@ -209,7 +213,7 @@ const TabNavigator = () => {
         name="Payments"
         component={ParentPaymentsScreen}
         options={{
-          tabBarLabel: 'Payments',
+          tabBarLabel: t('navigation.payments'),
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="credit-card-outline" size={24} color={color} />
           ),
@@ -219,7 +223,7 @@ const TabNavigator = () => {
         name="Events"
         component={ParentEventsScreen}
         options={{
-          tabBarLabel: 'Events',
+          tabBarLabel: t('navigation.activities'),
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="calendar-outline" size={24} color={color} />
           ),
@@ -229,7 +233,7 @@ const TabNavigator = () => {
         name="Chat"
         component={ParentChatScreen}
         options={{
-          tabBarLabel: 'Chat',
+          tabBarLabel: t('navigation.chat'),
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="message-text-outline" size={24} color={color} />
           ),
@@ -239,7 +243,7 @@ const TabNavigator = () => {
         name="News"
         component={ParentNewsScreen}
         options={{
-          tabBarLabel: 'News',
+          tabBarLabel: t('navigation.news'),
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="bullhorn-outline" size={24} color={color} />
           ),
@@ -250,6 +254,8 @@ const TabNavigator = () => {
 };
 
 export const ParentNavigator = () => {
+  const { t } = useTranslation();
+  
   return (
     <SafeAreaView style={[styles.container, styles.safeArea]} edges={['right', 'left', 'bottom']}>
       <View style={styles.container}>
@@ -265,24 +271,24 @@ export const ParentNavigator = () => {
             name="Settings"
             component={ParentSettingsScreen}
             options={{
-              headerTitle: 'Settings',
-              headerBackTitle: 'Back',
+              headerTitle: t('navigation.settings'),
+              headerBackTitle: t('common.back'),
             }}
           />
           <Stack.Screen
             name="EditChild"
             component={EditChildScreen}
             options={{
-              headerTitle: 'Edit Child',
-              headerBackTitle: 'Back',
+              headerTitle: t('parent.editChild'),
+              headerBackTitle: t('common.back'),
             }}
           />
           <Stack.Screen
             name="AddChild"
             component={AddChildScreen}
             options={{
-              headerTitle: 'Add Child',
-              headerBackTitle: 'Back',
+              headerTitle: t('parent.addChild'),
+              headerBackTitle: t('common.back'),
             }}
           />
           <Stack.Screen
@@ -296,8 +302,8 @@ export const ParentNavigator = () => {
             name="EditActivity"
             component={EditActivityScreen}
             options={{
-              headerTitle: 'Edit Activity',
-              headerBackTitle: 'Back',
+              headerTitle: t('activity.editActivity'),
+              headerBackTitle: t('common.back'),
             }}
           />
           <Stack.Screen
