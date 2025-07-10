@@ -5,8 +5,10 @@ import { COLORS, SPACING, FONT_SIZES } from '../../constants/theme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../../lib/supabase';
 import { getCoachData, getCoachInternalId } from '../../utils/coachUtils';
+import { useTranslation } from 'react-i18next';
 
 export const CoachSettingsScreen = () => {
+  const { t } = useTranslation();
   const [profile, setProfile] = useState({
     name: '',
     phone_number: '',
@@ -67,15 +69,15 @@ export const CoachSettingsScreen = () => {
 
   const handleChangePassword = async () => {
     if (!currentPassword || !newPassword || !confirmNewPassword) {
-      Alert.alert('Error', 'Please fill in all password fields');
+      Alert.alert(t('common.error'), t('coach.settings.fill_all_password_fields'));
       return;
     }
     if (newPassword !== confirmNewPassword) {
-      Alert.alert('Error', 'New passwords do not match');
+      Alert.alert(t('common.error'), t('coach.settings.new_passwords_do_not_match'));
       return;
     }
     if (newPassword.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters long');
+      Alert.alert(t('common.error'), t('coach.settings.password_must_be_at_least_6_characters_long'));
       return;
     }
     setIsLoading(true);
@@ -88,24 +90,24 @@ export const CoachSettingsScreen = () => {
         password: currentPassword
       });
       if (signInError) {
-        Alert.alert('Error', 'Current password is incorrect');
+        Alert.alert(t('common.error'), t('coach.settings.current_password_is_incorrect'));
         setIsLoading(false);
         return;
       }
       // Update password
       const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
       if (updateError) {
-        Alert.alert('Error', updateError.message || 'Failed to change password');
+        Alert.alert(t('common.error'), updateError.message || t('coach.settings.failed_to_change_password'));
         setIsLoading(false);
         return;
       }
       setCurrentPassword('');
       setNewPassword('');
       setConfirmNewPassword('');
-      Alert.alert('Success', 'Password updated successfully');
+      Alert.alert(t('common.success'), t('coach.settings.password_updated_successfully'));
     } catch (error) {
       console.error('Error changing password:', error);
-      Alert.alert('Error', 'Failed to change password');
+      Alert.alert(t('common.error'), t('coach.settings.failed_to_change_password'));
     } finally {
       setIsLoading(false);
     }
@@ -113,7 +115,7 @@ export const CoachSettingsScreen = () => {
 
   const handleSaveEmail = async () => {
     if (!emailInput.trim()) {
-      Alert.alert('Error', 'Please enter a valid email address');
+      Alert.alert(t('common.error'), t('coach.settings.please_enter_a_valid_email_address'));
       return;
     }
     setIsSavingEmail(true);
@@ -121,7 +123,7 @@ export const CoachSettingsScreen = () => {
       // Update email in Supabase Auth
       const { error: authError } = await supabase.auth.updateUser({ email: emailInput.trim() });
       if (authError) {
-        Alert.alert('Error', authError.message || 'Failed to update email');
+        Alert.alert(t('common.error'), authError.message || t('coach.settings.failed_to_update_email'));
         setIsSavingEmail(false);
         return;
       }
@@ -130,7 +132,7 @@ export const CoachSettingsScreen = () => {
       const coachId = await getCoachInternalId();
       if (!coachId) {
         console.error('No coach ID found in stored data');
-        Alert.alert('Error', 'Could not identify coach record');
+        Alert.alert(t('common.error'), t('coach.settings.could_not_identify_coach_record'));
         setIsSavingEmail(false);
         return;
       }
@@ -167,10 +169,10 @@ export const CoachSettingsScreen = () => {
         setProfile((prev) => ({ ...prev, email: emailInput.trim() }));
       }
       
-      Alert.alert('Success', 'Email updated successfully');
+      Alert.alert(t('common.success'), t('coach.settings.email_updated_successfully'));
     } catch (error) {
       console.error('Error updating email:', error);
-      Alert.alert('Error', 'Failed to update email');
+      Alert.alert(t('common.error'), t('coach.settings.failed_to_update_email'));
     } finally {
       setIsSavingEmail(false);
     }
@@ -190,16 +192,16 @@ export const CoachSettingsScreen = () => {
         >
           <View style={styles.form}>
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Profile Information</Text>
+              <Text style={styles.sectionTitle}>{t('coach.settings.profile_information')}</Text>
               
               <View style={styles.infoMessageContainer}>
                 <Text style={styles.infoMessage}>
-                  To change your phone number, please contact your administrator.
+                  {t('coach.settings.to_change_your_phone_number_please_contact_your_administrator')}
                 </Text>
               </View>
 
               <TextInput
-                label="Name"
+                label={t('coach.settings.name')}
                 value={profile.name}
                 mode="flat"
                 style={styles.input}
@@ -208,7 +210,7 @@ export const CoachSettingsScreen = () => {
                 disabled
               />
               <TextInput
-                label="Phone Number"
+                label={t('coach.settings.phone_number')}
                 value={profile.phone_number}
                 mode="flat"
                 style={styles.input}
@@ -217,7 +219,7 @@ export const CoachSettingsScreen = () => {
                 disabled
               />
               <TextInput
-                label="Email"
+                label={t('coach.settings.email')}
                 value={emailInput}
                 onChangeText={setEmailInput}
                 mode="flat"
@@ -233,14 +235,14 @@ export const CoachSettingsScreen = () => {
                 style={[styles.input, { backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center', marginTop: 8, borderRadius: 100, opacity: isSavingEmail ? 0.7 : 1 }]}
               >
                 <Text style={{ color: COLORS.white, fontWeight: 'bold', fontSize: 16 }}>
-                  {isSavingEmail ? 'Saving...' : 'Save Email'}
+                  {isSavingEmail ? t('coach.settings.saving') : t('coach.settings.save_email')}
                 </Text>
               </Pressable>
             </View>
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Change Password</Text>
+              <Text style={styles.sectionTitle}>{t('coach.settings.change_password')}</Text>
               <TextInput
-                label="Current Password"
+                label={t('coach.settings.current_password')}
                 value={currentPassword}
                 onChangeText={setCurrentPassword}
                 mode="flat"
@@ -250,7 +252,7 @@ export const CoachSettingsScreen = () => {
                 left={<TextInput.Icon icon="lock" color={COLORS.primary} style={{ marginRight: 30 }} />}
               />
               <TextInput
-                label="New Password"
+                label={t('coach.settings.new_password')}
                 value={newPassword}
                 onChangeText={setNewPassword}
                 mode="flat"
@@ -260,7 +262,7 @@ export const CoachSettingsScreen = () => {
                 left={<TextInput.Icon icon="lock-plus" color={COLORS.primary} style={{ marginRight: 30 }} />}
               />
               <TextInput
-                label="Confirm New Password"
+                label={t('coach.settings.confirm_new_password')}
                 value={confirmNewPassword}
                 onChangeText={setConfirmNewPassword}
                 mode="flat"
@@ -275,7 +277,7 @@ export const CoachSettingsScreen = () => {
                 style={[styles.input, { backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center', marginTop: 8, borderRadius: 100, opacity: isLoading ? 0.7 : 1 }]}
               >
                 <Text style={{ color: COLORS.white, fontWeight: 'bold', fontSize: 16 }}>
-                  {isLoading ? 'Changing Password...' : 'Change Password'}
+                  {isLoading ? t('coach.settings.changing_password') : t('coach.settings.change_password')}
                 </Text>
               </Pressable>
             </View>

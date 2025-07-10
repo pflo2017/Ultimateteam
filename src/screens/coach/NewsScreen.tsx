@@ -11,6 +11,7 @@ import { useNavigation, CommonActions } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { CoachStackParamList } from '../../navigation/CoachNavigator';
 import { getCoachInternalId } from '../../utils/coachUtils';
+import { useTranslation } from 'react-i18next';
 
 // Mocked available teams for coach
 const MOCK_TEAMS = [
@@ -105,6 +106,7 @@ const onSubmitComment = async (postId: string, content: string): Promise<void> =
 };
 
 export const CoachNewsScreen = () => {
+  const { t } = useTranslation();
   const [showModal, setShowModal] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [showCommentModal, setShowCommentModal] = useState(false);
@@ -198,7 +200,7 @@ export const CoachNewsScreen = () => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>News</Text>
+        <Text style={styles.headerTitle}>{t('coach.news.title')}</Text>
       </View>
       
       {clubId ? (
@@ -219,13 +221,13 @@ export const CoachNewsScreen = () => {
         </>
       ) : (
         <View style={styles.centered}>
-          <Text>Loading club information...</Text>
+          <Text>{t('coach.news.loading_club_information')}</Text>
         </View>
       )}
       
       {loadingTeams && (
         <View style={{ position: 'absolute', top: 100, left: 0, right: 0, alignItems: 'center' }}>
-          <Text>Loading teams...</Text>
+          <Text>{t('coach.news.loading_teams')}</Text>
         </View>
       )}
       {selectedPost && (

@@ -13,6 +13,7 @@ import { EventCard } from '../../components/Schedule/ScheduleCalendar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Post } from '../../components/news/types';
+import { useTranslation } from 'react-i18next';
 
 // Define a composite navigation type that can access both stack and tab navigators
 type CoachNavigationProp = CompositeNavigationProp<
@@ -21,6 +22,7 @@ type CoachNavigationProp = CompositeNavigationProp<
 >;
 
 export const CoachDashboardScreen = () => {
+  const { t } = useTranslation();
   const [coachName, setCoachName] = useState<string>('');
   const [activities, setActivities] = useState<Activity[]>([]);
   const [latestPost, setLatestPost] = useState<Post | null>(null);
@@ -190,7 +192,7 @@ export const CoachDashboardScreen = () => {
     if (activities.length === 0) {
       return (
         <View style={styles.emptyCarousel}>
-          <Text style={styles.emptyText}>No upcoming activities in the next 7 days.</Text>
+          <Text style={styles.emptyText}>{t('coach.dashboard.no_upcoming_activities')}</Text>
         </View>
       );
     }
@@ -198,10 +200,10 @@ export const CoachDashboardScreen = () => {
       <>
         <View style={styles.divider} />
         <View style={styles.carouselHeaderRow}>
-          <Text style={styles.carouselTitle}>Future activities</Text>
+          <Text style={styles.carouselTitle}>{t('coach.dashboard.future_activities')}</Text>
           {activities.length > 3 && (
             <TouchableOpacity onPress={handleSeeAll} style={styles.seeAllButton} activeOpacity={0.7}>
-              <Text style={styles.seeAllText}>See all &gt;</Text>
+              <Text style={styles.seeAllText}>{t('coach.dashboard.see_all')}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -230,7 +232,7 @@ export const CoachDashboardScreen = () => {
     if (!latestPost) {
       return (
         <View style={styles.emptyPost}>
-          <Text style={styles.emptyText}>No recent posts.</Text>
+          <Text style={styles.emptyText}>{t('coach.dashboard.no_recent_posts')}</Text>
         </View>
       );
     }
@@ -239,9 +241,9 @@ export const CoachDashboardScreen = () => {
       <>
         <View style={styles.divider} />
         <View style={styles.postHeaderRow}>
-          <Text style={styles.postTitle}>Latest Post</Text>
+          <Text style={styles.postTitle}>{t('coach.dashboard.latest_news')}</Text>
           <TouchableOpacity onPress={handlePostPress} style={styles.seeAllButton}>
-            <Text style={styles.seeAllText}>See all &gt;</Text>
+            <Text style={styles.seeAllText}>{t('coach.dashboard.see_all')}</Text>
           </TouchableOpacity>
         </View>
         <TouchableOpacity 
@@ -289,10 +291,8 @@ export const CoachDashboardScreen = () => {
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
-        <Text variant="headlineMedium" style={styles.title}>Welcome, {coachName}</Text>
-        <Text variant="bodyLarge" style={styles.subtitle}>
-          Manage and stay connected with your teams
-        </Text>
+        <Text variant="headlineMedium" style={styles.title}>{t('coach.dashboard.welcome', { name: coachName })}</Text>
+        <Text variant="bodyLarge" style={styles.subtitle}>{t('coach.dashboard.subtitle')}</Text>
       </View>
       {/* Carousel at the top */}
       {renderCarousel()}

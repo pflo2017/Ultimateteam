@@ -22,6 +22,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PostEditorScreen } from '../screens/admin/PostEditorScreen';
 import { PlayerDetailsScreen } from '../screens/PlayerDetailsScreen';
+import { useTranslation } from 'react-i18next';
 
 export type CoachStackParamList = {
   CoachTabs: undefined;
@@ -192,6 +193,7 @@ const CoachHeader = () => {
 };
 
 const TabNavigator = () => {
+  const { t } = useTranslation();
   return (
     <Tab.Navigator
       screenOptions={{
@@ -212,7 +214,7 @@ const TabNavigator = () => {
         name="CoachDashboard"
         component={CoachDashboardScreen}
         options={{
-          tabBarLabel: 'Dashboard',
+          tabBarLabel: t('admin.tabs.dashboard'),
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="view-dashboard-outline" size={size} color={color} />
           ),
@@ -222,7 +224,7 @@ const TabNavigator = () => {
         name="Manage"
         component={CoachManageScreen}
         options={{
-          tabBarLabel: 'Manage',
+          tabBarLabel: t('admin.tabs.manage'),
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="account-multiple-plus-outline" size={size} color={color} />
           ),
@@ -232,7 +234,7 @@ const TabNavigator = () => {
         name="Schedule"
         component={CoachScheduleScreen}
         options={{
-          tabBarLabel: 'Schedule',
+          tabBarLabel: t('admin.tabs.schedule'),
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="calendar-outline" size={size} color={color} />
           ),
@@ -242,7 +244,7 @@ const TabNavigator = () => {
         name="Attendance"
         component={AttendanceScreen}
         options={{
-          tabBarLabel: 'Attendance',
+          tabBarLabel: t('admin.tabs.attendance'),
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="clipboard-check-outline" size={size} color={color} />
           ),
@@ -252,7 +254,7 @@ const TabNavigator = () => {
         name="Payments"
         component={CoachPaymentsScreen}
         options={{
-          tabBarLabel: 'Payments',
+          tabBarLabel: t('admin.tabs.payments'),
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="credit-card-outline" size={size} color={color} />
           ),
@@ -274,7 +276,7 @@ const TabNavigator = () => {
         name="News"
         component={CoachNewsScreen}
         options={{
-          tabBarLabel: 'News',
+          tabBarLabel: t('admin.tabs.news'),
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="bullhorn-outline" size={24} color={color} />
           ),

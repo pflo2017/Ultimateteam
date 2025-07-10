@@ -38,7 +38,8 @@
     "loginError": "An error occurred during login",
     "loggingIn": "Logging in...",
     "noAccount": "Don't have an account? ",
-    "createOne": "Create one"
+    "createOne": "Create one",
+    "password_placeholder": "Enter your password"
   },
   "navigation": {
     "home": "Home",
@@ -422,12 +423,151 @@
     }
   },
   "coach": {
-    "title": "Coach Panel",
-    "myTeams": "My Teams",
-    "myPlayers": "My Players",
-    "attendance": "Attendance",
-    "activities": "Activities",
-    "chat": "Chat with Parents"
+    "dashboard": {
+      "welcome": "Welcome, {{name}}",
+      "subtitle": "Manage and stay connected with your teams",
+      "no_upcoming_activities": "No upcoming activities in the next 7 days.",
+      "future_activities": "Future activities",
+      "see_all": "See all >",
+      "no_recent_posts": "No recent posts.",
+      "latest_news": "Latest News"
+    },
+    "manage": {
+      "players": "Players",
+      "teams_label": "Teams",
+      "teams": {
+        "players": "Players",
+        "team_code": "Team Code",
+        "no_teams_assigned": "No teams assigned yet"
+      }
+    },
+    "players": {
+      "status": {
+        "paid": "Paid",
+        "not_paid": "Not Paid",
+        "pending": "Pending",
+        "on_trial": "On Trial",
+        "trial_ended": "Trial Ended",
+        "unknown": "Unknown"
+      },
+      "no_players_found": "No players found",
+      "filter": {
+        "title": "Filter Players",
+        "teams": "Teams",
+        "all_teams": "All Teams",
+        "medical_status": "Medical Status",
+        "apply_filters": "Apply Filters"
+      },
+      "select_team": "Select Team",
+      "all_teams": "All Teams",
+      "update_medical_visa_status": {
+        "title": "Update Medical Visa Status",
+        "change_status_for": "Change medical visa status for {{playerName}}",
+        "valid": "Valid",
+        "medical_visa_issue_date": "Medical Visa Issue Date:",
+        "hide_calendar": "Hide Calendar",
+        "change_date": "Change Date",
+        "confirm_valid_status": "Confirm Valid Status",
+        "expired": "Expired"
+      }
+    },
+    "payments": {
+      "select_status": "Select Status",
+      "on_trial": "On Trial",
+      "trial_ended": "Trial Ended",
+      "pending": "Pending",
+      "not_paid": "Not Paid",
+      "paid": "Paid",
+      "cash": "Cash",
+      "voucher_cash": "Voucher & cash",
+      "bank_transfer": "Bank transfer",
+      "select_team": "Select Team",
+      "please_select_team": "Please select a team to view payments",
+      "search_player": "Search player",
+      "total": "Total",
+      "no_players_found": "No players found",
+      "send_payment_reminder": "Send payment reminder",
+      "collapse_actions": "Collapse actions",
+      "expand_actions": "Expand actions",
+      "paid_on": "Paid on",
+      "mark_as": "Mark as",
+      "select_month": "Select Month",
+      "select_payment_method": "Select Payment Method",
+      "confirm": "Confirm",
+      "cancel": "Cancel"
+    },
+    "settings": {
+      "fill_all_password_fields": "Please fill in all password fields",
+      "new_passwords_do_not_match": "New passwords do not match",
+      "password_must_be_at_least_6_characters_long": "Password must be at least 6 characters long",
+      "current_password_is_incorrect": "Current password is incorrect",
+      "failed_to_change_password": "Failed to change password",
+      "password_updated_successfully": "Password updated successfully",
+      "please_enter_a_valid_email_address": "Please enter a valid email address",
+      "failed_to_update_email": "Failed to update email",
+      "could_not_identify_coach_record": "Could not identify coach record",
+      "email_updated_successfully": "Email updated successfully",
+      "profile_information": "Profile Information",
+      "to_change_your_phone_number_please_contact_your_administrator": "To change your phone number, please contact your administrator.",
+      "name": "Name",
+      "phone_number": "Phone Number",
+      "email": "Email",
+      "saving": "Saving...",
+      "save_email": "Save Email",
+      "change_password": "Change Password",
+      "current_password": "Current Password",
+      "new_password": "New Password",
+      "confirm_new_password": "Confirm New Password",
+      "changing_password": "Changing Password..."
+    },
+    "news": {
+      "title": "News",
+      "loading_club_information": "Loading club information...",
+      "loading_teams": "Loading teams..."
+    },
+    "login": {
+      "title": "Coach Login",
+      "enter_phone_to_continue": "Enter your phone number to continue.",
+      "complete_profile_to_finish_registration": "Complete your profile to finish registration",
+      "enter_password_to_log_in": "Enter your password to log in",
+      "phone_number": "Phone Number",
+      "phone_number_placeholder": "e.g. +40 734 108 108",
+      "phone_helper": "Please enter your phone number in international format, e.g. +40 734 108 108",
+      "phone_number_format_error": "Please enter your phone number in international format, e.g. +40 734 108 108",
+      "continue": "Continue",
+      "register": "Register",
+      "registering": "Registering...",
+      "success": "Success",
+      "registration_completed_successfully": "Registration completed successfully!",
+      "login": "Login",
+      "no_coach_found": "No coach found with this phone number. Please contact your administrator.",
+      "unexpected_error": "Unexpected error. Please try again.",
+      "coach_info_not_found": "Coach information not found. Please try again.",
+      "passwords_do_not_match": "Passwords do not match.",
+      "phone_number_must_start_with_plus": "Phone number must start with + and country code.",
+      "already_registered": {
+        "title": "Already Registered",
+        "message": "This phone number is already registered. Please use your existing password to log in."
+      },
+      "failed_to_retrieve_user_data_after_sign_in": "Failed to retrieve user data after sign-in.",
+      "warning": "Warning",
+      "login_successful_but_failed_to_link_coach_profile": "Login successful, but failed to link your coach profile. Please contact support.",
+      "login_successful_but_could_not_find_coach_profile_to_link": "Login successful, but could not find your coach profile to link. Please contact support.",
+      "login_successful_but_could_not_link_coach_profile": "Login successful, but could not link your coach profile. Some features may be limited.",
+      "registration_successful": {
+        "title": "Registration Successful",
+        "message": "Your account has been linked successfully! You can now log in with your phone number and password."
+      },
+      "error_during_linking_process": "An error occurred while trying to link your account.",
+      "registration_error": { "title": "Registration Error" },
+      "no_user_returned_from_supabase_sign_up": "No user returned from Supabase sign up.",
+      "registration_succeeded_but_automatic_login_failed": "Registration succeeded but automatic login failed. Please log out and log in again.",
+      "account_created_but_could_not_link_to_your_coach_profile": "Account created but could not link to your coach profile. Please contact support or try logging in again later.",
+      "login_successful_but_could_not_link_your_coach_profile": "Login successful, but could not link your coach profile. Some features may be limited.",
+      "login_successful_but_could_not_fully_link_your_coach_profile": "Login successful, but could not fully link your coach profile. Some features may be limited.",
+      "registration_failed": "Registration failed.",
+      "login_failed": "Login failed."
+    }
   },
   "parent": {
     "title": "Parent Panel",
@@ -542,5 +682,66 @@
     "message": "Your account has been suspended. Please contact support for assistance.",
     "contactSupport": "Contact Support",
     "logout": "Logout"
+  },
+  "activity": {
+    "detailsTitle": "Activity Details",
+    "type": {
+      "training": "Training",
+      "game": "Game",
+      "tournament": "Tournament",
+      "other": "Other"
+    },
+    "recurring": "Recurring",
+    "duration": "Duration: {{duration}}",
+    "recurrence": "Recurrence",
+    "repeatsDaily": "Repeats daily",
+    "repeatsWeekly": "Repeats weekly",
+    "repeatsMonthly": "Repeats monthly",
+    "until": "until {{date}}",
+    "repeatsOn": "Repeats on:",
+    "days": {
+      "S": "S",
+      "M": "M",
+      "T": "T",
+      "W": "W",
+      "T2": "T",
+      "F": "F",
+      "S2": "S"
+    },
+    "additionalInfo": "Additional Information",
+    "privateNotes": "Private Notes (Coaches Only)",
+    "homeGame": "Home Game",
+    "awayGame": "Away Game",
+    "score": "Score",
+    "updateScore": "Update Game Score",
+    "cancel": "Cancel",
+    "save": "Save",
+    "deleteActivity": "Delete Activity",
+    "deleteConfirmation": "Are you sure you want to delete this activity? This action cannot be undone.",
+    "deleteWarning": "All attendance records and statistics associated with this activity will also be deleted.",
+    "deleteAllInstancesWarning": "This will delete all recurring instances of this activity.",
+    "edit": "Edit",
+    "delete": "Delete",
+    "confirmPresence": "Confirm Presence",
+    "confirmPresenceSubtitle": "Will your child attend this game?",
+    "going": "Going",
+    "notGoing": "Not Going",
+    "childWillAttend": "Child will attend this game",
+    "childWillNotAttend": "Child will not attend this game",
+    "reasonForNotGoing": "Reason for not going",
+    "reasons": {
+      "sick": "Sick",
+      "injured": "Injured",
+      "vacation": "Vacation",
+      "school": "School",
+      "work": "Work",
+      "other": "Other"
+    },
+    "notFound": "Activity not found",
+    "goBack": "Go Back",
+    "update": "Update",
+    "respond": "Respond",
+    "gameLineup": "Game Lineup",
+    "playersSelected": "players selected"
   }
 } 

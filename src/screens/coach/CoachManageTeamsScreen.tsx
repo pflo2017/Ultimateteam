@@ -7,6 +7,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { CoachTabParamList } from '../../navigation/CoachNavigator';
 import * as Clipboard from 'expo-clipboard';
+import { useTranslation } from 'react-i18next';
 
 interface Team {
   id: string;
@@ -23,6 +24,7 @@ interface CoachManageTeamsScreenProps {
 }
 
 const TeamCard = ({ team, onPress }: { team: Team; onPress: () => void }) => {
+  const { t } = useTranslation();
   const handleCopyCode = async () => {
     try {
       await Clipboard.setStringAsync(team.access_code);
@@ -45,11 +47,11 @@ const TeamCard = ({ team, onPress }: { team: Team; onPress: () => void }) => {
           <View style={styles.cardContent}>
             <View style={styles.infoRow}>
               <MaterialCommunityIcons name="run" size={20} color={COLORS.primary} />
-              <Text style={styles.infoLabel}>Players: <Text style={styles.infoValue}>{team.players_count}</Text></Text>
+              <Text style={styles.infoLabel}>{t('coach.manage.teams.players')}: <Text style={styles.infoValue}>{team.players_count}</Text></Text>
             </View>
             <View style={styles.infoRow}>
               <MaterialCommunityIcons name="key" size={20} color={COLORS.primary} />
-              <Text style={styles.infoLabel}>Team Code: <Text style={styles.infoValue}>{team.access_code ? team.access_code : '—'}</Text></Text>
+              <Text style={styles.infoLabel}>{t('coach.manage.teams.team_code')}: <Text style={styles.infoValue}>{team.access_code ? team.access_code : '\u2014'}</Text></Text>
               {team.access_code ? (
                 <IconButton
                   icon="content-copy"
@@ -77,6 +79,7 @@ export const CoachManageTeamsScreen: React.FC<CoachManageTeamsScreenProps> = ({
   refreshing
 }) => {
   const navigation = useNavigation<NativeStackNavigationProp<CoachTabParamList>>();
+  const { t } = useTranslation();
 
   const handleTeamPress = (team: Team) => {
     navigation.navigate('Manage', { 
@@ -101,7 +104,7 @@ export const CoachManageTeamsScreen: React.FC<CoachManageTeamsScreenProps> = ({
           />
         ))}
         {teams.length === 0 && !isLoading && (
-          <Text style={styles.emptyText}>No teams assigned yet</Text>
+          <Text style={styles.emptyText}>{t('coach.manage.teams.no_teams_assigned')}</Text>
         )}
       </ScrollView>
     </View>

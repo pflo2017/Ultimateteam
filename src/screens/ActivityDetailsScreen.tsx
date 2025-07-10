@@ -11,6 +11,7 @@ import { StatusBar } from 'expo-status-bar';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
+import { useTranslation } from 'react-i18next';
 
 type ActivityDetailsScreenRouteProp = RouteProp<RootStackParamList | ParentStackParamList, 'ActivityDetails'>;
 type ActivityDetailsScreenNavigationProp = NativeStackNavigationProp<
@@ -63,6 +64,8 @@ export const ActivityDetailsScreen = () => {
   const [parentChildren, setParentChildren] = useState<{id: string, name: string}[]>([]);
   const [isUpdatingPresence, setIsUpdatingPresence] = useState(false);
   const [presenceStatus, setPresenceStatus] = useState<'going' | 'not-going'>('going');
+  
+  const { t } = useTranslation();
   
   useEffect(() => {
     loadActivity();
@@ -502,8 +505,8 @@ export const ActivityDetailsScreen = () => {
     
     return (
       <View style={styles.lineupContainer}>
-        <Text style={styles.sectionTitle}>Game Lineup</Text>
-        <Text style={styles.lineupCount}>{activity.lineup_players.length} players selected</Text>
+        <Text style={styles.sectionTitle}>{t('activity.gameLineup')}</Text>
+        <Text style={styles.lineupCount}>{activity.lineup_players.length} {t('activity.playersSelected')}</Text>
         
         <View style={{ marginTop: 8 }}>
           {lineupNames.length > 0 ? (
@@ -537,7 +540,7 @@ export const ActivityDetailsScreen = () => {
                             fontWeight: '500',
                             fontSize: 14
                           }}>
-                            {status === 'going' ? 'Going' : 'Not Going'}
+                            {status === 'going' ? t('activity.going') : t('activity.notGoing')}
                           </Text>
                           {/* Show reason for not going if available and user is coach/admin */}
                           {status === 'not-going' && note && (userRole === 'coach' || userRole === 'admin') && (
@@ -558,7 +561,7 @@ export const ActivityDetailsScreen = () => {
                           uppercase={false}
                           icon={status ? "pencil" : "check-circle-outline"}
                         >
-                          {status ? 'Update' : 'Respond'}
+                          {status ? t('activity.update') : t('activity.respond')}
                         </Button>
                       )}
                     </View>
@@ -595,7 +598,7 @@ export const ActivityDetailsScreen = () => {
                             fontWeight: '500',
                             fontSize: 14
                           }}>
-                            {status === 'going' ? 'Going' : 'Not Going'}
+                            {status === 'going' ? t('activity.going') : t('activity.notGoing')}
                           </Text>
                           {/* Show reason for not going if available and user is coach/admin */}
                           {status === 'not-going' && note && (userRole === 'coach' || userRole === 'admin') && (
@@ -615,7 +618,7 @@ export const ActivityDetailsScreen = () => {
                           uppercase={false}
                           icon={status ? "pencil" : "check-circle-outline"}
                         >
-                          {status ? 'Update' : 'Respond'}
+                          {status ? t('activity.update') : t('activity.respond')}
                         </Button>
                       )}
                     </View>
@@ -640,9 +643,9 @@ export const ActivityDetailsScreen = () => {
   if (error || !activity) {
     return (
       <SafeAreaView style={styles.errorContainer}>
-        <Text style={styles.errorText}>{error || 'Activity not found'}</Text>
+        <Text style={styles.errorText}>{error || t('activity.notFound')}</Text>
         <Button mode="contained" onPress={() => navigation.goBack()} style={styles.backButton}>
-          Go Back
+          {t('activity.goBack')}
         </Button>
       </SafeAreaView>
     );
@@ -659,7 +662,7 @@ export const ActivityDetailsScreen = () => {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <MaterialCommunityIcons name="arrow-left" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Activity Details</Text>
+        <Text style={styles.headerTitle}>{t('activity.detailsTitle')}</Text>
         {userRole !== 'parent' && (
           <IconButton
             icon="dots-vertical"
@@ -679,14 +682,14 @@ export const ActivityDetailsScreen = () => {
             size={24}
             color={getActivityColor(activity.type)}
           />
-          <Text style={[styles.typeText, { color: getActivityColor(activity.type) }]}>
-            {getActivityTypeLabel(activity.type)}
+          <Text style={[styles.typeText, { color: getActivityColor(activity.type) }]}> 
+            {t(`activity.type.${activity.type}`)}
           </Text>
           
           {activity.is_repeating && (
             <View style={[styles.recurringBadge, { backgroundColor: getActivityColor(activity.type) }]}>
               <MaterialCommunityIcons name="repeat" size={14} color={COLORS.white} />
-              <Text style={styles.recurringText}>Recurring</Text>
+              <Text style={styles.recurringText}>{t('activity.recurring')}</Text>
             </View>
           )}
         </View>
@@ -706,7 +709,7 @@ export const ActivityDetailsScreen = () => {
               color={COLORS.grey[700]} 
             />
             <Text style={styles.detailText}>
-              {activity.home_away === 'home' ? 'Home Game' : 'Away Game'}
+              {activity.home_away === 'home' ? t('activity.homeGame') : t('activity.awayGame')}
             </Text>
           </View>
         )}
@@ -717,16 +720,15 @@ export const ActivityDetailsScreen = () => {
             {format(parseISO(activity.start_time), 'EEE, MMM d, yyyy • h:mm a')}
           </Text>
         </View>
-        
         <View style={styles.detailRow}>
           <MaterialCommunityIcons name="clock-outline" size={20} color={COLORS.grey[700]} />
-          <Text style={styles.detailText}>Duration: {activity.duration}</Text>
+          <Text style={styles.detailText}>{t('activity.duration', { duration: activity.duration })}</Text>
         </View>
         
         {/* Display score for games */}
         {activity.type === 'game' && (
           <View style={styles.scoreContainer}>
-            <Text style={styles.sectionTitle}>Score</Text>
+            <Text style={styles.sectionTitle}>{t('activity.score')}</Text>
             <View style={styles.recordScoreRow}>
               <View style={styles.scoreColumn}>
                 <Text style={styles.scoreLabel}>{scoreLabels.left}</Text>
@@ -786,7 +788,7 @@ export const ActivityDetailsScreen = () => {
                 style={styles.updateScoreButton}
                 icon="pencil"
               >
-                Update Score
+                {t('activity.updateScore')}
               </Button>
             )}
           </View>
@@ -798,20 +800,20 @@ export const ActivityDetailsScreen = () => {
         {/* Recurrence display */}
         {activity.is_repeating && (
           <View style={styles.recurrenceContainer}>
-            <Text style={styles.sectionTitle}>Recurrence</Text>
+            <Text style={styles.sectionTitle}>{t('activity.recurrence')}</Text>
             <View style={styles.detailRow}>
               <MaterialCommunityIcons name="repeat" size={20} color={COLORS.grey[700]} />
               <Text style={styles.detailText}>
-                {activity.repeat_type === 'daily' && 'Repeats daily'}
-                {activity.repeat_type === 'weekly' && 'Repeats weekly'}
-                {activity.repeat_type === 'monthly' && 'Repeats monthly'}
-                {activity.repeat_until && ` until ${format(parseISO(activity.repeat_until), 'MMM d, yyyy')}`}
+                {activity.repeat_type === 'daily' && t('activity.repeatsDaily')}
+                {activity.repeat_type === 'weekly' && t('activity.repeatsWeekly')}
+                {activity.repeat_type === 'monthly' && t('activity.repeatsMonthly')}
+                {activity.repeat_until && ` ${t('activity.until', { date: format(parseISO(activity.repeat_until), 'MMM d, yyyy') })}`}
               </Text>
             </View>
             
             {activity.repeat_type === 'weekly' && activity.repeat_days && activity.repeat_days.length > 0 && (
               <View style={styles.daysContainer}>
-                <Text style={styles.smallLabel}>Repeats on:</Text>
+                <Text style={styles.smallLabel}>{t('activity.repeatsOn')}</Text>
                 <View style={styles.daysRow}>
                   {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, index) => (
                     <View 
@@ -829,7 +831,7 @@ export const ActivityDetailsScreen = () => {
                           activity.repeat_days!.includes(index) ? styles.activeDayText : {}
                         ]}
                       >
-                        {day}
+                        {t(`activity.days.${day}`)}
                       </Text>
                     </View>
                   ))}
@@ -841,14 +843,14 @@ export const ActivityDetailsScreen = () => {
         
         {activity.additional_info && (
           <View style={styles.infoContainer}>
-            <Text style={styles.sectionTitle}>Additional Information</Text>
+            <Text style={styles.sectionTitle}>{t('activity.additionalInfo')}</Text>
             <Text style={styles.infoText}>{activity.additional_info}</Text>
           </View>
         )}
         
         {activity.private_notes && (
           <View style={styles.privateNotesContainer}>
-            <Text style={styles.sectionTitle}>Private Notes (Coaches Only)</Text>
+            <Text style={styles.sectionTitle}>{t('activity.privateNotes')}</Text>
             <Text style={styles.privateNotesText}>{activity.private_notes}</Text>
           </View>
         )}
@@ -857,7 +859,7 @@ export const ActivityDetailsScreen = () => {
       {/* Score Update Dialog */}
       <Portal>
         <Dialog visible={showScoreDialog} onDismiss={() => setShowScoreDialog(false)}>
-          <Dialog.Title>Update Game Score</Dialog.Title>
+          <Dialog.Title>{t('activity.updateScore')}</Dialog.Title>
           <Dialog.Content>
             <View style={styles.recordScoreRow}>
               <View style={styles.scoreColumn}>
@@ -912,13 +914,13 @@ export const ActivityDetailsScreen = () => {
             </View>
           </Dialog.Content>
           <Dialog.Actions>
-            <Button onPress={() => setShowScoreDialog(false)}>Cancel</Button>
+            <Button onPress={() => setShowScoreDialog(false)}>{t('activity.cancel')}</Button>
             <Button 
               onPress={handleUpdateScore} 
               loading={isUpdatingScore}
               disabled={isUpdatingScore}
             >
-              Save
+              {t('activity.save')}
             </Button>
           </Dialog.Actions>
         </Dialog>
@@ -927,27 +929,27 @@ export const ActivityDetailsScreen = () => {
       {/* Delete confirmation dialog */}
       <Portal>
         <Dialog visible={showDeleteDialog} onDismiss={() => setShowDeleteDialog(false)}>
-          <Dialog.Title>Delete Activity</Dialog.Title>
+          <Dialog.Title>{t('activity.deleteActivity')}</Dialog.Title>
           <Dialog.Content>
-            <Text>Are you sure you want to delete this activity? This action cannot be undone.</Text>
+            <Text>{t('activity.deleteConfirmation')}</Text>
             <Text style={styles.warningText}>
-              All attendance records and statistics associated with this activity will also be deleted.
+              {t('activity.deleteWarning')}
             </Text>
             {activity?.is_repeating && !activity.is_recurring_instance && (
               <Text style={styles.warningText}>
-                This will delete all recurring instances of this activity.
+                {t('activity.deleteAllInstancesWarning')}
               </Text>
             )}
           </Dialog.Content>
           <Dialog.Actions>
-            <Button onPress={() => setShowDeleteDialog(false)}>Cancel</Button>
+            <Button onPress={() => setShowDeleteDialog(false)}>{t('activity.cancel')}</Button>
             <Button 
               onPress={confirmDelete} 
               loading={isLoading}
               disabled={isLoading}
               labelStyle={{ color: COLORS.error }}
             >
-              Delete
+              {t('activity.delete')}
             </Button>
           </Dialog.Actions>
         </Dialog>
@@ -976,7 +978,7 @@ export const ActivityDetailsScreen = () => {
                   size={24}
                   color={COLORS.primary}
                 />
-                <Text style={styles.modalOptionText}>Edit</Text>
+                <Text style={styles.modalOptionText}>{t('activity.edit')}</Text>
               </TouchableOpacity>
               <TouchableOpacity 
                 style={styles.modalOption} 
@@ -987,7 +989,7 @@ export const ActivityDetailsScreen = () => {
                   size={24}
                   color={COLORS.error}
                 />
-                <Text style={[styles.modalOptionText, { color: COLORS.error }]}>Delete</Text>
+                <Text style={[styles.modalOptionText, { color: COLORS.error }]}>{t('activity.delete')}</Text>
               </TouchableOpacity>
             </View>
           </TouchableOpacity>
@@ -997,9 +999,9 @@ export const ActivityDetailsScreen = () => {
       {/* Presence Dialog */}
       <Portal>
         <Dialog visible={showPresenceDialog} onDismiss={closePresenceDialog} style={styles.dialog}>
-          <Dialog.Title style={styles.dialogTitle}>Confirm Presence</Dialog.Title>
+          <Dialog.Title style={styles.dialogTitle}>{t('activity.confirmPresence')}</Dialog.Title>
           <Dialog.Content>
-            <Text style={styles.dialogSubtitle}>Will your child attend this game?</Text>
+            <Text style={styles.dialogSubtitle}>{t('activity.confirmPresenceSubtitle')}</Text>
             <View style={styles.presenceOptions}>
               <TouchableOpacity
                 style={[
@@ -1020,10 +1022,10 @@ export const ActivityDetailsScreen = () => {
                     styles.presenceOptionTitle,
                     presenceStatus === 'going' && { color: COLORS.primary, fontWeight: '600' }
                   ]}>
-                    Going
+                    {t('activity.going')}
                   </Text>
                   <Text style={styles.presenceOptionDescription}>
-                    Child will attend this game
+                    {t('activity.childWillAttend')}
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -1047,10 +1049,10 @@ export const ActivityDetailsScreen = () => {
                     styles.presenceOptionTitle,
                     presenceStatus === 'not-going' && { color: COLORS.error, fontWeight: '600' }
                   ]}>
-                    Not Going
+                    {t('activity.notGoing')}
                   </Text>
                   <Text style={styles.presenceOptionDescription}>
-                    Child will not attend this game
+                    {t('activity.childWillNotAttend')}
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -1058,7 +1060,7 @@ export const ActivityDetailsScreen = () => {
             
             {presenceStatus === 'not-going' && (
               <View style={{ marginTop: 16 }}>
-                <Text style={{ fontSize: 15, fontWeight: '500', marginBottom: 8 }}>Reason for not going</Text>
+                <Text style={{ fontSize: 15, fontWeight: '500', marginBottom: 8 }}>{t('activity.reasonForNotGoing')}</Text>
                 {['sick', 'injured', 'vacation', 'school', 'work', 'other'].map(reason => (
                   <TouchableOpacity
                     key={reason}
@@ -1071,7 +1073,7 @@ export const ActivityDetailsScreen = () => {
                       color={presenceNote === reason ? COLORS.primary : COLORS.grey[400]}
                       style={{ marginRight: 8 }}
                     />
-                    <Text style={{ fontSize: 15, color: COLORS.text }}>{reason.charAt(0).toUpperCase() + reason.slice(1)}</Text>
+                    <Text style={{ fontSize: 15, color: COLORS.text }}>{t(`activity.reasons.${reason}`)}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -1083,7 +1085,7 @@ export const ActivityDetailsScreen = () => {
               style={styles.dialogButton}
               labelStyle={styles.dialogButtonLabel}
             >
-              Cancel
+              {t('activity.cancel')}
             </Button>
             <Button 
               onPress={handleUpdatePresence} 
@@ -1093,7 +1095,7 @@ export const ActivityDetailsScreen = () => {
               style={styles.dialogButtonPrimary}
               labelStyle={styles.dialogButtonLabel}
             >
-              Confirm
+              {t('activity.confirm')}
             </Button>
           </Dialog.Actions>
         </Dialog>

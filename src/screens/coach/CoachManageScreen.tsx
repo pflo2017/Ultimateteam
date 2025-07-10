@@ -10,6 +10,7 @@ import { useRoute, RouteProp } from '@react-navigation/native';
 import type { CoachTabParamList } from '../../navigation/CoachNavigator';
 import { useDataRefresh } from '../../utils/useDataRefresh';
 import { registerEventListener } from '../../utils/events';
+import { useTranslation } from 'react-i18next';
 
 interface Team {
   id: string;
@@ -34,6 +35,7 @@ interface Player {
 }
 
 export const CoachManageScreen = () => {
+  const { t } = useTranslation();
   const route = useRoute<RouteProp<CoachTabParamList, 'Manage'>>();
   const [activeTab, setActiveTab] = useState<'teams' | 'players'>(route.params?.activeTab || 'teams');
   const [teams, setTeams] = useState<Team[]>([]);
@@ -418,14 +420,14 @@ export const CoachManageScreen = () => {
             style={styles.horizontalTabButton}
             onPress={() => setActiveTab('teams')}
           >
-            <Text style={[styles.horizontalTabText, activeTab === 'teams' && styles.horizontalTabTextActive]}>Teams</Text>
+            <Text style={[styles.horizontalTabText, activeTab === 'teams' && styles.horizontalTabTextActive]}>{t('coach.manage.teams_label')}</Text>
             {activeTab === 'teams' && <View style={styles.horizontalTabUnderline} />}
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.horizontalTabButton}
             onPress={() => setActiveTab('players')}
           >
-            <Text style={[styles.horizontalTabText, activeTab === 'players' && styles.horizontalTabTextActive]}>Players</Text>
+            <Text style={[styles.horizontalTabText, activeTab === 'players' && styles.horizontalTabTextActive]}>{t('coach.manage.players')}</Text>
             {activeTab === 'players' && <View style={styles.horizontalTabUnderline} />}
           </TouchableOpacity>
         </View>

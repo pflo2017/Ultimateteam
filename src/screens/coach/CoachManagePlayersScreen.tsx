@@ -10,6 +10,7 @@ import { forceRefresh, triggerEvent, registerEventListener } from '../../utils/e
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { CoachStackParamList } from '../../navigation/CoachNavigator';
+import { useTranslation } from 'react-i18next';
 
 interface Team {
   id: string;
@@ -67,25 +68,24 @@ const getPaymentStatusColor = (status: string) => {
   return status.toLowerCase() === 'paid' ? COLORS.success : COLORS.error;
 };
 
-const getPaymentStatusText = (status: string) => {
-  // Normalize all different spellings of the "not paid" status
-  if (!status) return 'Not Paid';
+const getPaymentStatusText = (status: string, t?: any) => {
+  if (!status) return t ? t('coach.players.status.not_paid') : 'Not Paid';
   
   const normalizedStatus = status.toLowerCase();
   
   switch (normalizedStatus) {
     case 'paid':
-      return 'Paid';
+      return t ? t('coach.players.status.paid') : 'Paid';
     case 'not_paid':
     case 'unpaid':
     case 'not paid':
-      return 'Not Paid';
+      return t ? t('coach.players.status.not_paid') : 'Not Paid';
     case 'pending':
-      return 'Pending';
+      return t ? t('coach.players.status.pending') : 'Pending';
     case 'on_trial':
-      return 'On Trial';
+      return t ? t('coach.players.status.on_trial') : 'On Trial';
     case 'trial_ended':
-      return 'Trial Ended';
+      return t ? t('coach.players.status.trial_ended') : 'Trial Ended';
     default:
       // For any unknown value, try to make it presentable 
       // Replace underscores with spaces and capitalize first letter
@@ -111,6 +111,7 @@ const PlayerCard = ({ player, onDetailsPress, onDelete, onUpdateMedicalVisa }: {
   onDelete: (player: Player) => void;
   onUpdateMedicalVisa: (player: Player) => void;
 }) => {
+  const { t } = useTranslation();
   const [refreshedStatus, setRefreshedStatus] = useState<string | null>(null);
   const [refreshedPaidDate, setRefreshedPaidDate] = useState<string | null>(null);
   const [refreshedLastPaidMonth, setRefreshedLastPaidMonth] = useState<string | null>(null);
@@ -273,14 +274,14 @@ const PlayerCard = ({ player, onDetailsPress, onDelete, onUpdateMedicalVisa }: {
             </View>
             <View>
               <Text style={styles.playerName}>{player.player_name || player.name}</Text>
-              <Text style={styles.teamName}>{player.team_name || 'No team assigned'}</Text>
+              <Text style={styles.teamName}>{player.team_name || t('coach.players.no_team_assigned')}</Text>
             </View>
           </View>
 
           <View style={styles.ageContainer}>
-            <Text style={styles.ageLabel}>Birth Date</Text>
+            <Text style={styles.ageLabel}>{t('coach.players.birth_date')}</Text>
             <Text style={styles.ageValue}>
-              {player.birth_date ? formattedBirthDate : 'Not available'}
+              {player.birth_date ? formattedBirthDate : t('coach.players.not_available')}
             </Text>
           </View>
         </View>
@@ -293,7 +294,7 @@ const PlayerCard = ({ player, onDetailsPress, onDelete, onUpdateMedicalVisa }: {
         >
           <MaterialCommunityIcons name="medical-bag" size={20} color={COLORS.primary} />
           <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500' }}>
-            Medical Visa
+            {t('coach.players.medical_visa')}
           </Text>
           <View style={{
             backgroundColor: getMedicalVisaStatusColor(displayMedicalVisaStatus) + '20',
@@ -309,13 +310,13 @@ const PlayerCard = ({ player, onDetailsPress, onDelete, onUpdateMedicalVisa }: {
               fontWeight: '600',
               color: getMedicalVisaStatusColor(displayMedicalVisaStatus)
             }}>
-              {displayMedicalVisaStatus.charAt(0).toUpperCase() + displayMedicalVisaStatus.slice(1)}
+              {t(`coach.players.status.${displayMedicalVisaStatus}`)}
             </Text>
           </View>
           
           {displayMedicalVisaStatus === 'valid' && displayMedicalVisaIssueDate && (
             <View style={{ alignItems: 'flex-end', marginLeft: 'auto' }}>
-              <Text style={{ fontSize: FONT_SIZES.xs, color: COLORS.grey[600], fontWeight: '500' }}>Until</Text>
+              <Text style={{ fontSize: FONT_SIZES.xs, color: COLORS.grey[600], fontWeight: '500' }}>{t('coach.players.medical_visa_until')}</Text>
               <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '600' }}>
                 {(() => {
                   try {
@@ -341,7 +342,7 @@ const PlayerCard = ({ player, onDetailsPress, onDelete, onUpdateMedicalVisa }: {
               <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginLeft: 8 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500', marginRight: 8 }}>
-                    Payment Status
+                    {t('coach.players.payment_status')}
                   </Text>
                   <View style={{
                     backgroundColor: getPaymentStatusColor(displayStatus) + '20',
@@ -356,7 +357,7 @@ const PlayerCard = ({ player, onDetailsPress, onDelete, onUpdateMedicalVisa }: {
                       fontWeight: '600',
                       color: getPaymentStatusColor(displayStatus)
                     }}>
-                      {getPaymentStatusText(displayStatus)}
+                      {getPaymentStatusText(displayStatus, t)}
                     </Text>
                   </View>
                 </View>
@@ -368,7 +369,7 @@ const PlayerCard = ({ player, onDetailsPress, onDelete, onUpdateMedicalVisa }: {
               <View style={{ flex: 1, flexDirection: 'column', marginLeft: 8 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500', marginRight: 8 }}>
-                    Payment Status
+                    {t('coach.players.payment_status')}
                   </Text>
                   <View style={{
                     backgroundColor: getPaymentStatusColor(displayStatus) + '20',
@@ -383,7 +384,7 @@ const PlayerCard = ({ player, onDetailsPress, onDelete, onUpdateMedicalVisa }: {
                       fontWeight: '600',
                       color: getPaymentStatusColor(displayStatus)
                     }}>
-                      {getPaymentStatusText(displayStatus)}
+                      {getPaymentStatusText(displayStatus, t)}
                     </Text>
                   </View>
                 </View>
@@ -394,7 +395,7 @@ const PlayerCard = ({ player, onDetailsPress, onDelete, onUpdateMedicalVisa }: {
                       {displayLastPaidMonth}
                     </Text>
                     <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.grey[600], fontWeight: '500', marginLeft: 6 }}>
-                      Paid on {displayLastPaidExactDate}
+                      {t('coach.players.paid_on', { date: displayLastPaidExactDate })}
                     </Text>
                   </View>
                 )}
@@ -408,12 +409,8 @@ const PlayerCard = ({ player, onDetailsPress, onDelete, onUpdateMedicalVisa }: {
             style={styles.viewButton}
             onPress={() => onDetailsPress(player)}
           >
-            <MaterialCommunityIcons 
-              name="account-details" 
-              size={16} 
-              color={COLORS.white} 
-            />
-            <Text style={styles.buttonText}>Details</Text>
+            <MaterialCommunityIcons name="account-details" size={18} color={COLORS.white} />
+            <Text style={styles.buttonText}>{t('coach.players.details')}</Text>
           </TouchableOpacity>
         </View>
       </Card.Content>
@@ -432,6 +429,7 @@ export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> =
   onSearchChange,
   onTeamSelect,
 }) => {
+  const { t } = useTranslation();
   const [isTeamModalVisible, setIsTeamModalVisible] = useState(false);
   const selectedTeam = teams.find(team => team.id === selectedTeamId);
   
@@ -454,10 +452,10 @@ export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> =
   const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
   const [selectedMedicalStatus, setSelectedMedicalStatus] = useState<string | null>(null);
   const medicalStatusOptions = [
-    { value: null, label: 'All Medical' },
-    { value: 'valid', label: 'Valid' },
-    { value: 'pending', label: 'Pending' },
-    { value: 'expired', label: 'Expired' },
+    { value: null, label: t('coach.players.filter.all_medical') },
+    { value: 'valid', label: t('coach.players.filter.valid') },
+    { value: 'pending', label: t('coach.players.filter.pending') },
+    { value: 'expired', label: t('coach.players.filter.expired') },
   ];
 
   const filteredPlayers = players.filter(player => {
@@ -643,8 +641,8 @@ export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> =
         <View style={styles.playersContainer}>
           <View style={styles.header}>
             <View>
-              <Text style={styles.headerTitle}>Players</Text>
-              <Text style={styles.totalCount}>Total: {filteredPlayers.length} players</Text>
+              <Text style={styles.headerTitle}>{t('coach.players.title')}</Text>
+              <Text style={styles.totalCount}>{t('coach.players.total_count', { count: filteredPlayers.length })}</Text>
             </View>
             <TouchableOpacity onPress={() => setIsFilterModalVisible(true)}>
               <MaterialCommunityIcons name="filter" size={24} color={COLORS.primary} />
@@ -655,7 +653,7 @@ export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> =
             <MaterialCommunityIcons name="magnify" size={20} color={COLORS.grey[400]} style={styles.searchIcon} />
             <TextInput
               style={styles.searchInput}
-              placeholder="Search player"
+              placeholder={t('coach.players.search_placeholder')}
               placeholderTextColor={COLORS.grey[400]}
               value={searchQuery}
               onChangeText={onSearchChange}
@@ -678,7 +676,7 @@ export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> =
               />
             ))}
             {filteredPlayers.length === 0 && !isLoading && (
-              <Text style={styles.emptyText}>No players found</Text>
+              <Text style={styles.emptyText}>{t('coach.players.no_players_found')}</Text>
             )}
           </ScrollView>
 
@@ -691,7 +689,7 @@ export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> =
             <View style={styles.modalOverlay}>
               <View style={[styles.modalContent, { borderRadius: 16, padding: 24 }]}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                  <Text style={{ fontSize: 24, fontWeight: 'bold' }}>Filter Players</Text>
+                  <Text style={{ fontSize: 24, fontWeight: 'bold' }}>{t('coach.players.filter.title')}</Text>
                   <Pressable 
                     onPress={() => setIsFilterModalVisible(false)}
                   >
@@ -704,7 +702,7 @@ export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> =
                 </View>
                 
                 <ScrollView style={{ maxHeight: '80%' }}>
-                  <Text style={{ fontSize: 18, fontWeight: 'bold', marginTop: 8, marginBottom: 16 }}>Teams</Text>
+                  <Text style={{ fontSize: 18, fontWeight: 'bold', marginTop: 8, marginBottom: 16 }}>{t('coach.players.filter.teams')}</Text>
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
                     <TouchableOpacity
                       style={{
@@ -726,7 +724,7 @@ export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> =
                         fontWeight: '500',
                         fontSize: 14
                       }}>
-                        All Teams
+                        {t('coach.players.filter.all_teams')}
                       </Text>
                     </TouchableOpacity>
                     
@@ -758,7 +756,7 @@ export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> =
                     ))}
                   </View>
                   
-                  <Text style={{ fontSize: 18, fontWeight: 'bold', marginTop: 8, marginBottom: 16 }}>Medical Status</Text>
+                  <Text style={{ fontSize: 18, fontWeight: 'bold', marginTop: 8, marginBottom: 16 }}>{t('coach.players.filter.medical_status')}</Text>
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
                     {medicalStatusOptions.map(option => (
                       <TouchableOpacity
@@ -806,7 +804,7 @@ export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> =
                     setIsFilterModalVisible(false);
                   }}
                 >
-                  <Text style={{ color: COLORS.white, fontWeight: '600', fontSize: 16 }}>Apply Filters</Text>
+                  <Text style={{ color: COLORS.white, fontWeight: '600', fontSize: 16 }}>{t('coach.players.filter.apply_filters')}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -821,7 +819,7 @@ export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> =
             <View style={styles.modalOverlay}>
               <View style={styles.modalContent}>
                 <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>Select Team</Text>
+                  <Text style={styles.modalTitle}>{t('coach.players.select_team')}</Text>
                   <Pressable 
                     onPress={() => setIsTeamModalVisible(false)}
                     style={styles.closeButton}
@@ -847,7 +845,7 @@ export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> =
                   >
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                       <MaterialCommunityIcons name="account-group" size={20} color={COLORS.primary} style={{ marginRight: 8 }} />
-                      <Text style={styles.teamItemText}>All Teams</Text>
+                      <Text style={styles.teamItemText}>{t('coach.players.all_teams')}</Text>
                     </View>
                     {selectedTeamId === null && (
                       <MaterialCommunityIcons
@@ -894,7 +892,7 @@ export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> =
             <View style={styles.modalOverlay}>
               <View style={[styles.modalContent, { padding: 24, borderRadius: 16 }]}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-                  <Text style={{ fontSize: 20, fontWeight: 'bold' }}>Update Medical Visa Status</Text>
+                  <Text style={{ fontSize: 20, fontWeight: 'bold' }}>{t('coach.players.update_medical_visa_status.title')}</Text>
                   <Pressable 
                     onPress={() => setIsMedicalVisaModalVisible(false)}
                   >
@@ -908,7 +906,7 @@ export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> =
                 
                 {updatingPlayer && (
                   <Text style={{ fontSize: 16, marginBottom: 20 }}>
-                    Change medical visa status for {updatingPlayer.player_name}
+                    {t('coach.players.update_medical_visa_status.change_status_for', { playerName: updatingPlayer.player_name })}
                   </Text>
                 )}
                 
@@ -934,7 +932,7 @@ export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> =
                       color={COLORS.success}
                       style={{ marginRight: 12 }}
                     />
-                    <Text style={{ fontSize: 16, fontWeight: '600', color: COLORS.success }}>Valid</Text>
+                    <Text style={{ fontSize: 16, fontWeight: '600', color: COLORS.success }}>{t('coach.players.update_medical_visa_status.valid')}</Text>
                   </TouchableOpacity>
                   
                   {/* This section appears when Valid is clicked */}
@@ -947,7 +945,7 @@ export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> =
                       borderWidth: 1,
                       borderColor: 'rgba(75, 181, 67, 0.2)'
                     }}>
-                      <Text style={{ fontSize: 14, color: COLORS.grey[600], marginBottom: 8 }}>Medical Visa Issue Date:</Text>
+                      <Text style={{ fontSize: 14, color: COLORS.grey[600], marginBottom: 8 }}>{t('coach.players.update_medical_visa_status.medical_visa_issue_date')}</Text>
                       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                         <Text style={{ fontSize: 16, fontWeight: '500' }}>
                           {selectedMedicalVisaDate.toLocaleDateString()}
@@ -962,7 +960,7 @@ export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> =
                           onPress={() => setShowCalendar(!showCalendar)}
                         >
                           <Text style={{ color: COLORS.white, fontWeight: '500' }}>
-                            {showCalendar ? 'Hide Calendar' : 'Change Date'}
+                            {showCalendar ? t('coach.players.update_medical_visa_status.hide_calendar') : t('coach.players.update_medical_visa_status.change_date')}
                           </Text>
                         </TouchableOpacity>
                       </View>
@@ -1019,7 +1017,7 @@ export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> =
                         onPress={() => handleUpdateMedicalVisaStatus('valid')}
                         disabled={isUpdatingMedicalVisa}
                       >
-                        <Text style={{ color: COLORS.white, fontWeight: '600' }}>Confirm Valid Status</Text>
+                        <Text style={{ color: COLORS.white, fontWeight: '600' }}>{t('coach.players.update_medical_visa_status.confirm_valid_status')}</Text>
                       </TouchableOpacity>
                     </View>
                   )}
@@ -1042,7 +1040,7 @@ export const CoachManagePlayersScreen: React.FC<CoachManagePlayersScreenProps> =
                       color={COLORS.error}
                       style={{ marginRight: 12 }}
                     />
-                    <Text style={{ fontSize: 16, fontWeight: '600', color: COLORS.error }}>Expired</Text>
+                    <Text style={{ fontSize: 16, fontWeight: '600', color: COLORS.error }}>{t('coach.players.update_medical_visa_status.expired')}</Text>
                   </TouchableOpacity>
                 </View>
                 

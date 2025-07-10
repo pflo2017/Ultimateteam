@@ -9,6 +9,7 @@ import { supabase } from '../lib/supabase';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import PhoneInput from 'react-native-phone-number-input';
+import { useTranslation } from 'react-i18next';
 
 type RootStackParamList = {
   Home: undefined;
@@ -156,6 +157,7 @@ const checkCoachNeedsRegistration = async (phoneNumber: string): Promise<{needsR
 };
 
 export const CoachLoginScreen = () => {
+  const { t } = useTranslation();
   // Hide "User already registered" errors from the UI since we handle them gracefully
   useEffect(() => {
     // Check if running in development and LogBox is available
@@ -260,7 +262,7 @@ export const CoachLoginScreen = () => {
       
       // If no coach found, show error
       if (!coachData) {
-        setError('No coach found with this phone number. Please contact your administrator.');
+        setError(t('coach.login.no_coach_found'));
         setIsLoading(false);
         return;
       }
@@ -278,7 +280,7 @@ export const CoachLoginScreen = () => {
       }
     } catch (err) {
       console.error('Login error:', err);
-      setError('Unexpected error. Please try again.');
+      setError(t('coach.login.unexpected_error'));
     } finally {
       setIsLoading(false);
     }
@@ -289,7 +291,7 @@ export const CoachLoginScreen = () => {
     setError('');
     
     if (!coach) {
-      setError('Coach information not found. Please try again.');
+      setError(t('coach.login.coach_info_not_found'));
       setIsLoading(false);
       return;
     }
@@ -297,7 +299,7 @@ export const CoachLoginScreen = () => {
     console.log('Starting registration for coach:', coach);
     
     if (password.trim() !== confirmPassword.trim()) {
-      setError('Passwords do not match.');
+      setError(t('coach.login.passwords_do_not_match'));
       setIsLoading(false);
       return;
     }
@@ -306,7 +308,7 @@ export const CoachLoginScreen = () => {
       // Ensure phone is in E.164 format
       const formattedPhone = normalizePhoneNumber(phone);
       if (!formattedPhone.startsWith('+')) {
-        setError('Phone number must start with + and country code.');
+        setError(t('coach.login.phone_number_must_start_with_plus'));
         setIsLoading(false);
         return;
       }
@@ -339,15 +341,15 @@ export const CoachLoginScreen = () => {
             if (signInError) {
               console.error('Error signing in after "already registered" error:', signInError);
               Alert.alert(
-                'Already Registered', 
-                'This phone number is already registered. Please use your existing password to log in.',
-                [{ text: 'OK', onPress: () => setStep('login') }]
+                t('coach.login.already_registered.title'), 
+                t('coach.login.already_registered.message'),
+                [{ text: t('common.ok'), onPress: () => setStep('login') }]
               );
               return;
             }
             
             if (!signInData.user) {
-              setError('Failed to retrieve user data after sign-in');
+              setError(t('coach.login.failed_to_retrieve_user_data_after_sign_in'));
               return;
             }
             
@@ -383,8 +385,8 @@ export const CoachLoginScreen = () => {
               if (phoneUpdateError) {
                 console.error('Error calling update_coach_user_id_by_phone:', phoneUpdateError);
                 Alert.alert(
-                  'Warning',
-                  'Login successful, but failed to link your coach profile. Please contact support.'
+                  t('coach.login.warning'),
+                  t('coach.login.login_successful_but_failed_to_link_coach_profile')
                 );
                 return;
               } else {
@@ -393,8 +395,8 @@ export const CoachLoginScreen = () => {
                 if (phoneUpdateResult === 0) {
                   console.error('No rows updated by phone update function');
                   Alert.alert(
-                    'Warning',
-                    'Login successful, but could not find your coach profile to link. Please contact support.'
+                    t('coach.login.warning'),
+                    t('coach.login.login_successful_but_could_not_find_coach_profile_to_link')
                   );
                   return;
                 }
@@ -416,8 +418,8 @@ export const CoachLoginScreen = () => {
                 if (phoneUpdateError || phoneUpdateResult === 0) {
                   console.error('Error or no rows updated by phone update function:', phoneUpdateError);
                   Alert.alert(
-                    'Warning',
-                    'Login successful, but could not link your coach profile. Some features may be limited.'
+                    t('coach.login.warning'),
+                    t('coach.login.login_successful_but_could_not_link_coach_profile')
                   );
                 } else {
                   console.log('Successfully linked coach record to auth user by phone number function:', phoneUpdateResult);
@@ -466,11 +468,11 @@ export const CoachLoginScreen = () => {
               setIsLoading(false); // First ensure loading state is cleared
               
               Alert.alert(
-                'Registration Successful', 
-                'Your account has been linked successfully! You can now log in with your phone number and password.',
+                t('coach.login.registration_successful.title'), 
+                t('coach.login.registration_successful.message'),
                 [
                   { 
-                    text: 'OK', 
+                    text: t('common.ok'), 
                     onPress: () => {
                       console.log("Alert OK pressed - resetting form and going to login");
                       // Reset form fields
@@ -487,18 +489,18 @@ export const CoachLoginScreen = () => {
             return;
           } catch (err) {
             console.error('Error during linking process:', err);
-            setError('An error occurred while trying to link your account.');
+            setError(t('coach.login.error_during_linking_process'));
             return;
           }
         }
         
         // If not a "user already registered" error, show the general error
-        Alert.alert('Registration Error', error.message);
+        Alert.alert(t('coach.login.registration_error.title'), error.message);
         return;
       }
       
       if (!data || !data.user) {
-        setError('No user returned from Supabase signUp.');
+        setError(t('coach.login.no_user_returned_from_supabase_sign_up'));
         return;
       }
       
@@ -514,7 +516,7 @@ export const CoachLoginScreen = () => {
       
       if (signInError) {
         console.error('Error signing in after registration:', signInError);
-        Alert.alert('Warning', 'Registration succeeded but automatic login failed. Please log out and log in again.');
+        Alert.alert(t('coach.login.warning'), t('coach.login.registration_succeeded_but_automatic_login_failed'));
       }
       
       // Update coaches.user_id using our new database function
@@ -544,8 +546,8 @@ export const CoachLoginScreen = () => {
           
         if (phoneUpdateError) {
           console.error('Error calling update_coach_user_id_by_phone:', phoneUpdateError);
-          Alert.alert('Warning', 
-            'Account created but could not link to your coach profile. Please contact support or try logging in again later.'
+          Alert.alert(t('coach.login.warning'), 
+            t('coach.login.account_created_but_could_not_link_to_your_coach_profile')
           );
           return;
         } else {
@@ -565,8 +567,8 @@ export const CoachLoginScreen = () => {
             if (phoneUpdateError || phoneUpdateResult === 0) {
               console.error('Error or no rows updated by phone update function:', phoneUpdateError);
               Alert.alert(
-                'Warning',
-                'Login successful, but could not link your coach profile. Some features may be limited.'
+                t('coach.login.warning'),
+                t('coach.login.login_successful_but_could_not_link_your_coach_profile')
               );
             } else {
               console.log('Successfully linked coach record to auth user by phone number function:', phoneUpdateResult);
@@ -612,11 +614,11 @@ export const CoachLoginScreen = () => {
           setIsLoading(false); // First ensure loading state is cleared
           
           Alert.alert(
-            'Registration Successful', 
-            'Your account has been created successfully! You can now log in with your phone number and password.',
+            t('coach.login.registration_successful.title'), 
+            t('coach.login.registration_successful.message'),
             [
               { 
-                text: 'OK', 
+                text: t('common.ok'), 
                 onPress: () => {
                   console.log("Alert OK pressed - resetting form and going to login");
                   // Reset form fields
@@ -633,9 +635,9 @@ export const CoachLoginScreen = () => {
         return;
       }
     } catch (err: any) {
-      setError(err.message || 'Registration failed.');
+      setError(err.message || t('coach.login.registration_failed'));
       console.error('Registration error:', err);
-      Alert.alert('Registration Error', err.message || 'Registration failed.');
+      Alert.alert(t('coach.login.registration_error.title'), err.message || t('coach.login.registration_failed'));
     }
   };
 
@@ -644,7 +646,7 @@ export const CoachLoginScreen = () => {
     setError('');
     
     if (!coach) {
-      setError('Coach information not found. Please try again.');
+      setError(t('coach.login.coach_info_not_found'));
       setIsLoading(false);
       return;
     }
@@ -705,9 +707,9 @@ export const CoachLoginScreen = () => {
             if (phoneUpdateError) {
               console.error('Error calling update_coach_user_id_by_phone:', phoneUpdateError);
               Alert.alert(
-                'Warning',
-                'Login successful, but could not fully link your coach profile. Some features may be limited.',
-                [{ text: 'OK' }]
+                t('coach.login.warning'),
+                t('coach.login.login_successful_but_could_not_fully_link_your_coach_profile'),
+                [{ text: t('common.ok') }]
               );
             } else {
               console.log('Successfully linked coach record to auth user by phone number function:', phoneUpdateResult);
@@ -838,7 +840,7 @@ export const CoachLoginScreen = () => {
         }
       }
     } catch (err: any) {
-      setError(err.message || 'Login failed.');
+      setError(err.message || t('coach.login.login_failed'));
       console.error('Login error:', err);
     } finally {
       setIsLoading(false);
@@ -871,11 +873,11 @@ export const CoachLoginScreen = () => {
             size={48} 
             color={COLORS.primary}
           />
-          <Text style={styles.title}>Coach Login</Text>
+          <Text style={styles.title}>{t('coach.login.title')}</Text>
           <Text style={styles.subtitle}>
-            {step === 'phone' && 'Enter your phone number to continue.'}
-            {step === 'register' && 'Complete your profile to finish registration'}
-            {step === 'login' && 'Enter your password to log in'}
+            {step === 'phone' && t('coach.login.enter_phone_to_continue')}
+            {step === 'register' && t('coach.login.complete_profile_to_finish_registration')}
+            {step === 'login' && t('coach.login.enter_password_to_log_in')}
           </Text>
         </View>
 
@@ -883,7 +885,7 @@ export const CoachLoginScreen = () => {
           {step === 'phone' && (
             <>
               <TextInput
-                label="Phone Number"
+                label={t('coach.login.phone_number')}
                 value={phone}
                 onChangeText={text => {
                   let formatted = text;
@@ -899,16 +901,14 @@ export const CoachLoginScreen = () => {
                 theme={{ colors: { primary: COLORS.primary }}}
                 left={<TextInput.Icon icon="phone" color={COLORS.primary} style={{ marginRight: 30 }} />}
                 underlineColor={COLORS.primary}
-                placeholder="e.g. +40 734 108 108"
+                placeholder={t('coach.login.phone_number_placeholder')}
               />
-              <Text style={styles.helperText}>
-                Please enter your phone number in international format, e.g. +40 734 108 108
-              </Text>
+              <Text style={styles.helperText}>{t('coach.login.phone_helper')}</Text>
               <Pressable 
                 onPress={() => {
                   const cleaned = phone.replace(/\s/g, '');
                   if (!/^\+[0-9]{10,}$/.test(cleaned)) {
-                    setError('Please enter your phone number in international format, e.g. +40 734 108 108');
+                    setError(t('coach.login.phone_number_format_error'));
                     return;
                   }
                   handlePhoneSubmit();
@@ -916,16 +916,14 @@ export const CoachLoginScreen = () => {
                 disabled={isLoading}
                 style={[styles.loginButton, SHADOWS.button, isLoading && styles.loginButtonDisabled]}
               >
-                <Text style={styles.buttonText}>
-                  {isLoading ? 'Checking...' : 'Continue'}
-                </Text>
+                <Text style={styles.buttonText}>{isLoading ? t('common.loading') : t('coach.login.continue')}</Text>
               </Pressable>
             </>
           )}
           {step === 'register' && (
             <>
               <TextInput
-                label="Password"
+                label={t('auth.password')}
                 value={password}
                 onChangeText={setPassword}
                 mode="flat"
@@ -961,7 +959,7 @@ export const CoachLoginScreen = () => {
                   
                   // Simple validation
                   if (password !== confirmPassword) {
-                    Alert.alert('Error', 'Passwords do not match');
+                    Alert.alert(t('coach.login.error'), t('coach.login.passwords_do_not_match'));
                     setIsLoading(false);
                     return;
                   }
@@ -977,7 +975,7 @@ export const CoachLoginScreen = () => {
                       });
                       
                       if (error) {
-                        Alert.alert('Error', error.message);
+                        Alert.alert(t('coach.login.error'), error.message);
                         setIsLoading(false);
                         return;
                       }
@@ -985,11 +983,11 @@ export const CoachLoginScreen = () => {
                       // Success - show alert
                       setIsLoading(false);
                       Alert.alert(
-                        'Success', 
-                        'Registration completed successfully!',
+                        t('coach.login.success'), 
+                        t('coach.login.registration_completed_successfully'),
                         [
                           {
-                            text: 'Login',
+                            text: t('coach.login.login'),
                             onPress: () => {
                               setPassword('');
                               setConfirmPassword('');
@@ -1000,7 +998,7 @@ export const CoachLoginScreen = () => {
                       );
                     } catch (err) {
                       setIsLoading(false);
-                      Alert.alert('Error', 'Registration failed');
+                      Alert.alert(t('coach.login.error'), t('coach.login.registration_failed'));
                     }
                   };
                   
@@ -1010,38 +1008,34 @@ export const CoachLoginScreen = () => {
                 disabled={isLoading}
                 style={[styles.loginButton, SHADOWS.button, isLoading && styles.loginButtonDisabled]}
               >
-                <Text style={styles.buttonText}>
-                  {isLoading ? 'Registering...' : 'Register'}
-                </Text>
+                <Text style={styles.buttonText}>{isLoading ? t('coach.login.registering') : t('coach.login.register')}</Text>
               </Pressable>
             </>
           )}
           {step === 'login' && (
             <>
               <TextInput
-                label="Password"
+                label={t('auth.password')}
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry
                 style={styles.input}
                 editable={!isLoading}
-                placeholder="Password"
+                placeholder={t('auth.password_placeholder')}
                 returnKeyType="done"
               />
               <Pressable
                 style={{ alignSelf: 'flex-end', marginTop: 8, marginBottom: 16 }}
                 onPress={() => navigation.navigate('CoachResetPassword', { phone: phone.trim() })}
               >
-                <Text style={{ color: COLORS.primary, fontWeight: 'bold' }}>Forgot Password?</Text>
+                <Text style={{ color: COLORS.primary, fontWeight: 'bold' }}>{t('auth.forgotPassword')}</Text>
               </Pressable>
               <Pressable 
                 onPress={handleLogin}
                 disabled={isLoading}
                 style={[styles.loginButton, SHADOWS.button, isLoading && styles.loginButtonDisabled]}
               >
-                <Text style={styles.buttonText}>
-                  {isLoading ? 'Logging in...' : 'Login'}
-                </Text>
+                <Text style={styles.buttonText}>{isLoading ? t('auth.loggingIn') : t('auth.login')}</Text>
               </Pressable>
             </>
           )}
@@ -1068,10 +1062,13 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: SPACING.xl,
     justifyContent: 'center',
+    alignItems: 'center', // Add this to center horizontally
   },
   header: {
     alignItems: 'center',
+    justifyContent: 'center', // Add this to center vertically within content
     marginBottom: SPACING.xl * 2,
+    width: '100%', // Ensure header takes full width for centering
   },
   title: {
     fontSize: FONT_SIZES.xxl,
@@ -1080,6 +1077,7 @@ const styles = StyleSheet.create({
     marginTop: SPACING.md,
     marginBottom: SPACING.xs,
     fontFamily: 'Urbanist',
+    textAlign: 'center', // Force center alignment
   },
   subtitle: {
     fontSize: FONT_SIZES.md,
@@ -1089,6 +1087,9 @@ const styles = StyleSheet.create({
   },
   form: {
     gap: SPACING.lg,
+    width: '100%',
+    maxWidth: 400,
+    alignSelf: 'center',
   },
   input: {
     backgroundColor: COLORS.background,

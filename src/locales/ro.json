@@ -38,20 +38,22 @@
     "loginError": "A apărut o eroare la autentificare",
     "loggingIn": "Se autentifică...",
     "noAccount": "Nu ai un cont? ",
-    "createOne": "Creează unul"
+    "createOne": "Creează unul",
+    "password_placeholder": "Introdu parola"
   },
   "navigation": {
     "home": "Acasă",
     "profile": "Profil",
     "settings": "Setări",
-    "dashboard": "Panou de control",
+    "dashboard": "Acasă",
     "teams": "Echipe",
     "players": "Jucători",
     "activities": "Activități",
     "attendance": "Prezență",
     "payments": "Plăți",
     "news": "Știri",
-    "chat": "Chat"
+    "chat": "Chat",
+    "manage": "Gestionare"
   },
   "home": {
     "title": "Ultimate Team",
@@ -337,8 +339,8 @@
       "teamChat": "Chat Echipă"
     },
     "tabs": {
-      "dashboard": "Tablou de bord",
-      "manage": "Administrează",
+      "dashboard": "Acasă",
+      "manage": "Gestionare",
       "schedule": "Program",
       "attendance": "Prezență",
       "payments": "Plăți",
@@ -421,12 +423,156 @@
     }
   },
   "coach": {
-    "title": "Panou Antrenor",
-    "myTeams": "Echipele Mele",
-    "myPlayers": "Jucătorii Mei",
-    "attendance": "Prezență",
-    "activities": "Activități",
-    "chat": "Chat cu Părinții"
+    "dashboard": {
+      "welcome": "Bun venit, {{name}}",
+      "subtitle": "Gestionează și rămâi conectat cu echipele tale",
+      "no_upcoming_activities": "Nu există activități viitoare în următoarele 7 zile.",
+      "future_activities": "Activități viitoare",
+      "see_all": "Vezi tot >",
+      "no_recent_posts": "Nicio postare recentă.",
+      "latest_news": "Ultimele Știri"
+    },
+    "manage": {
+      "players": "Jucători",
+      "teams_label": "Echipe",
+      "teams": {
+        "players": "Jucători",
+        "team_code": "Codul Echipei",
+        "no_teams_assigned": "Fără echipe atribuite încă"
+      }
+    },
+    "players": {
+      "title": "Jucători",
+      "total_count": "Total: {{count}} jucători",
+      "search_placeholder": "Caută jucător",
+      "no_team_assigned": "Fără echipă atribuită",
+      "birth_date": "Data nașterii",
+      "not_available": "Nu este disponibil",
+      "medical_visa": "Viza medicală",
+      "medical_visa_until": "Până la",
+      "payment_status": "Status plată",
+      "paid_on": "Plătit pe {{date}}",
+      "details": "Detalii",
+      "filter": {
+        "all_medical": "Toate medicale",
+        "valid": "Validă",
+        "pending": "În așteptare",
+        "expired": "Expirată"
+      },
+      "status": {
+        "paid": "Plătit",
+        "not_paid": "Neplătit",
+        "pending": "În așteptare",
+        "on_trial": "În probă",
+        "trial_ended": "Probă încheiată",
+        "unknown": "Necunoscut",
+        "valid": "Validă",
+        "expired": "Expirată"
+      },
+      "update_medical_visa_status": {
+        "title": "Actualizează statusul vizei medicale",
+        "change_status_for": "Schimbă statusul vizei medicale pentru {{playerName}}",
+        "valid": "Validă",
+        "expired": "Expirată"
+      }
+    },
+    "payments": {
+      "select_status": "Selectează Statusul",
+      "on_trial": "În perioada de probă",
+      "trial_ended": "Perioada de probă s-a terminat",
+      "pending": "În așteptare",
+      "not_paid": "Neplătit",
+      "paid": "Plătit",
+      "cash": "Numerar",
+      "voucher_cash": "Voucher și numerar",
+      "bank_transfer": "Transfer bancar",
+      "select_team": "Selectează Echipa",
+      "please_select_team": "Te rugăm să selectezi o echipă pentru a vedea plățile",
+      "search_player": "Caută jucător",
+      "total": "Total",
+      "no_players_found": "Nu s-au găsit jucători",
+      "send_payment_reminder": "Trimite memento de plată",
+      "collapse_actions": "Restrânge acțiunile",
+      "expand_actions": "Extinde acțiunile",
+      "paid_on": "Plătit pe",
+      "mark_as": "Marchează ca",
+      "select_month": "Selectează Luna",
+      "select_payment_method": "Selectează Metoda de Plată",
+      "confirm": "Confirmă",
+      "cancel": "Anulează"
+    },
+    "settings": {
+      "fill_all_password_fields": "Te rugăm să completezi toate câmpurile pentru parolă",
+      "new_passwords_do_not_match": "Parolele noi nu se potrivesc",
+      "password_must_be_at_least_6_characters_long": "Parola trebuie să aibă cel puțin 6 caractere",
+      "current_password_is_incorrect": "Parola actuală este incorectă",
+      "failed_to_change_password": "Nu s-a putut schimba parola",
+      "password_updated_successfully": "Parola a fost actualizată cu succes",
+      "please_enter_a_valid_email_address": "Te rugăm să introduci o adresă de email validă",
+      "failed_to_update_email": "Nu s-a putut actualiza emailul",
+      "could_not_identify_coach_record": "Nu s-a putut identifica înregistrarea antrenorului",
+      "email_updated_successfully": "Emailul a fost actualizat cu succes",
+      "profile_information": "Informații Profil",
+      "to_change_your_phone_number_please_contact_your_administrator": "Pentru a-ți schimba numărul de telefon, te rugăm să contactezi administratorul.",
+      "name": "Nume",
+      "phone_number": "Numărul de Telefon",
+      "email": "Email",
+      "saving": "Se salvează...",
+      "save_email": "Salvează Email",
+      "change_password": "Schimbă Parola",
+      "current_password": "Parola Actuală",
+      "new_password": "Parola Nouă",
+      "confirm_new_password": "Confirmă Parola Nouă",
+      "changing_password": "Se schimbă parola..."
+    },
+    "news": {
+      "title": "Știri",
+      "loading_club_information": "Se încarcă informațiile clubului...",
+      "loading_teams": "Se încarcă echipele..."
+    },
+    "login": {
+      "title": "Autentificare Antrenor",
+      "enter_phone_to_continue": "Introdu numărul tău de telefon pentru a continua.",
+      "complete_profile_to_finish_registration": "Completează-ți profilul pentru a finaliza înregistrarea",
+      "enter_password_to_log_in": "Introdu parola pentru a te autentifica",
+      "phone_number": "Număr de telefon",
+      "phone_number_placeholder": "ex: +40 734 108 108",
+      "phone_helper": "Te rugăm să introduci numărul de telefon în format internațional, ex: +40 734 108 108",
+      "phone_number_format_error": "Te rugăm să introduci numărul de telefon în format internațional, ex: +40 734 108 108",
+      "continue": "Continuă",
+      "register": "Înregistrează-te",
+      "registering": "Se înregistrează...",
+      "success": "Succes",
+      "registration_completed_successfully": "Înregistrare finalizată cu succes!",
+      "login": "Autentificare",
+      "no_coach_found": "Nu a fost găsit niciun antrenor cu acest număr de telefon. Te rugăm să contactezi administratorul.",
+      "unexpected_error": "Eroare neașteptată. Te rugăm să încerci din nou.",
+      "coach_info_not_found": "Informațiile antrenorului nu au fost găsite. Te rugăm să încerci din nou.",
+      "passwords_do_not_match": "Parolele nu se potrivesc.",
+      "phone_number_must_start_with_plus": "Numărul de telefon trebuie să înceapă cu + și codul de țară.",
+      "already_registered": {
+        "title": "Deja înregistrat",
+        "message": "Acest număr de telefon este deja înregistrat. Te rugăm să folosești parola existentă pentru autentificare."
+      },
+      "failed_to_retrieve_user_data_after_sign_in": "Nu s-au putut prelua datele utilizatorului după autentificare.",
+      "warning": "Atenție",
+      "login_successful_but_failed_to_link_coach_profile": "Autentificare reușită, dar nu s-a putut asocia profilul de antrenor. Te rugăm să contactezi suportul.",
+      "login_successful_but_could_not_find_coach_profile_to_link": "Autentificare reușită, dar nu s-a putut găsi profilul de antrenor pentru asociere. Te rugăm să contactezi suportul.",
+      "login_successful_but_could_not_link_coach_profile": "Autentificare reușită, dar nu s-a putut asocia profilul de antrenor. Unele funcții pot fi limitate.",
+      "registration_successful": {
+        "title": "Înregistrare reușită",
+        "message": "Contul tău a fost asociat cu succes! Te poți autentifica acum cu numărul de telefon și parola."
+      },
+      "error_during_linking_process": "A apărut o eroare la asocierea contului.",
+      "registration_error": { "title": "Eroare la înregistrare" },
+      "no_user_returned_from_supabase_sign_up": "Nu a fost returnat niciun utilizator la înregistrare.",
+      "registration_succeeded_but_automatic_login_failed": "Înregistrarea a reușit, dar autentificarea automată a eșuat. Te rugăm să te deconectezi și să te autentifici din nou.",
+      "account_created_but_could_not_link_to_your_coach_profile": "Contul a fost creat, dar nu s-a putut asocia cu profilul de antrenor. Te rugăm să contactezi suportul sau să încerci din nou mai târziu.",
+      "login_successful_but_could_not_link_your_coach_profile": "Autentificare reușită, dar nu s-a putut asocia profilul de antrenor. Unele funcții pot fi limitate.",
+      "login_successful_but_could_not_fully_link_your_coach_profile": "Autentificare reușită, dar nu s-a putut asocia complet profilul de antrenor. Unele funcții pot fi limitate.",
+      "registration_failed": "Înregistrarea a eșuat.",
+      "login_failed": "Autentificarea a eșuat."
+    }
   },
   "parent": {
     "title": "Panou Părinte",
@@ -541,5 +687,66 @@
     "message": "Contul tău a fost suspendat. Te rugăm să contactezi suportul pentru asistență.",
     "contactSupport": "Contactează Suportul",
     "logout": "Deconectare"
+  },
+  "activity": {
+    "detailsTitle": "Detalii activitate",
+    "type": {
+      "training": "Antrenament",
+      "game": "Meci",
+      "tournament": "Turneu",
+      "other": "Altul"
+    },
+    "recurring": "Recurent",
+    "duration": "Durată: {{duration}}",
+    "recurrence": "Recurență",
+    "repeatsDaily": "Se repetă zilnic",
+    "repeatsWeekly": "Se repetă săptămânal",
+    "repeatsMonthly": "Se repetă lunar",
+    "until": "până la {{date}}",
+    "repeatsOn": "Se repetă în:",
+    "days": {
+      "S": "D",
+      "M": "L",
+      "T": "Ma",
+      "W": "Mi",
+      "T2": "J",
+      "F": "V",
+      "S2": "S"
+    },
+    "additionalInfo": "Informații suplimentare",
+    "privateNotes": "Note private (doar pentru antrenori)",
+    "homeGame": "Meci acasă",
+    "awayGame": "Meci în deplasare",
+    "score": "Scor",
+    "updateScore": "Actualizează scorul meciului",
+    "cancel": "Anulează",
+    "save": "Salvează",
+    "deleteActivity": "Șterge activitatea",
+    "deleteConfirmation": "Sigur vrei să ștergi această activitate? Această acțiune nu poate fi anulată.",
+    "deleteWarning": "Toate prezențele și statisticile asociate vor fi șterse.",
+    "deleteAllInstancesWarning": "Aceasta va șterge toate instanțele recurente ale activității.",
+    "edit": "Editează",
+    "delete": "Șterge",
+    "confirmPresence": "Confirmă prezența",
+    "confirmPresenceSubtitle": "Va participa copilul tău la acest meci?",
+    "going": "Va participa",
+    "notGoing": "Nu va participa",
+    "childWillAttend": "Copilul va participa la acest meci",
+    "childWillNotAttend": "Copilul nu va participa la acest meci",
+    "reasonForNotGoing": "Motivul absenței",
+    "reasons": {
+      "sick": "Bolnav",
+      "injured": "Accidentat",
+      "vacation": "Vacanță",
+      "school": "Școală",
+      "work": "Serviciu",
+      "other": "Alt motiv"
+    },
+    "notFound": "Activitate negăsită",
+    "goBack": "Înapoi",
+    "update": "Actualizează",
+    "respond": "Răspunde",
+    "gameLineup": "Echipă meci",
+    "playersSelected": "jucători selectați"
   }
 } 

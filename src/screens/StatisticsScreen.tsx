@@ -63,11 +63,11 @@ export const StatisticsScreen = () => {
 
   // Activity type options
   const activityTypes = [
-    { value: 'all' as const, label: 'All Activities' },
-    { value: 'training' as ActivityType, label: 'Training' },
-    { value: 'game' as ActivityType, label: 'Game' },
-    { value: 'tournament' as ActivityType, label: 'Tournament' },
-    { value: 'other' as ActivityType, label: 'Other' }
+    { value: 'all' as const, label: t('attendance.statistics.all') },
+    { value: 'training' as ActivityType, label: t('attendance.statistics.training') },
+    { value: 'game' as ActivityType, label: t('attendance.statistics.game') },
+    { value: 'tournament' as ActivityType, label: t('attendance.statistics.tournament') },
+    { value: 'other' as ActivityType, label: t('attendance.statistics.other') }
   ];
 
   // Month names
