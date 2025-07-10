@@ -13,13 +13,13 @@ import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { decode } from 'base64-arraybuffer';
 import { useTranslation } from 'react-i18next';
+import { triggerEvent } from '../../utils/events';
 
 type PostEditorParams = {
   mode: 'create' | 'edit';
   post?: any;
   availableTeams?: any[];
   isAdmin?: boolean;
-  onSave?: () => void;
 };
 
 export const PostEditorScreen = () => {
@@ -115,7 +115,8 @@ export const PostEditorScreen = () => {
         Alert.alert(t('common.success'), t('admin.postEditor.postCreated'));
       }
 
-      if (route.params?.onSave) route.params.onSave();
+      // Trigger event to notify other screens to refresh
+      triggerEvent('post_saved');
       navigation.goBack();
     } catch (err) {
       console.error("Error saving post:", err);
@@ -141,7 +142,8 @@ export const PostEditorScreen = () => {
             if (error) {
               Alert.alert(t('common.error'), t('admin.postEditor.failedToDeletePost'));
             } else {
-              if (route.params && route.params.onSave) route.params.onSave();
+              // Trigger event to notify other screens to refresh
+              triggerEvent('post_deleted');
               navigation.goBack();
             }
           },

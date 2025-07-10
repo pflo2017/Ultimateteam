@@ -46,7 +46,9 @@ export type EventType =
   | 'payment_status_changed'
   | 'payment_collection_added'
   | 'payment_collection_processed'
-  | 'medical_visa_status_changed';
+  | 'medical_visa_status_changed'
+  | 'post_saved'
+  | 'post_deleted';
 
 interface EventData {
   id: string;

@@ -10,6 +10,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { AdminStackParamList } from '../../types/navigation';
 import { useTranslation } from 'react-i18next';
+import { registerEventListener } from '../../utils/events';
 
 // Real createPost function
 const createPost = async (data: { title?: string; content: string; is_general: boolean; team_ids: string[] }) => {
@@ -110,6 +111,27 @@ export const AdminNewsScreen = () => {
   const [loadingTeams, setLoadingTeams] = useState(true);
   const [clubId, setClubId] = useState<string | null>(null);
 
+  // Add event listeners for post save/delete events
+  useEffect(() => {
+    const handlePostSaved = () => {
+      console.log('[AdminNewsScreen] Post saved event received, refreshing news feed');
+      setRefreshKey(k => k + 1);
+    };
+
+    const handlePostDeleted = () => {
+      console.log('[AdminNewsScreen] Post deleted event received, refreshing news feed');
+      setRefreshKey(k => k + 1);
+    };
+
+    const unregisterSaved = registerEventListener('post_saved', handlePostSaved);
+    const unregisterDeleted = registerEventListener('post_deleted', handlePostDeleted);
+
+    return () => {
+      unregisterSaved();
+      unregisterDeleted();
+    };
+  }, []);
+
   useEffect(() => {
     const fetchTeams = async () => {
       setLoadingTeams(true);
@@ -167,7 +189,6 @@ export const AdminNewsScreen = () => {
       mode: 'create',
       availableTeams,
       isAdmin: true,
-      onSave: () => setRefreshKey(k => k + 1),
     });
   };
 
@@ -177,7 +198,6 @@ export const AdminNewsScreen = () => {
       post,
       availableTeams,
       isAdmin: true,
-      onSave: () => setRefreshKey(k => k + 1),
     });
   };
 

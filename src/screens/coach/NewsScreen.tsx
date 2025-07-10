@@ -12,6 +12,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { CoachStackParamList } from '../../navigation/CoachNavigator';
 import { getCoachInternalId } from '../../utils/coachUtils';
 import { useTranslation } from 'react-i18next';
+import { registerEventListener } from '../../utils/events';
 
 // Mocked available teams for coach
 const MOCK_TEAMS = [
@@ -116,6 +117,27 @@ export const CoachNewsScreen = () => {
   const [clubId, setClubId] = useState<string | null>(null);
   const navigation = useNavigation<NativeStackNavigationProp<CoachStackParamList>>();
 
+  // Add event listeners for post save/delete events
+  useEffect(() => {
+    const handlePostSaved = () => {
+      console.log('[CoachNewsScreen] Post saved event received, refreshing news feed');
+      setRefreshKey(k => k + 1);
+    };
+
+    const handlePostDeleted = () => {
+      console.log('[CoachNewsScreen] Post deleted event received, refreshing news feed');
+      setRefreshKey(k => k + 1);
+    };
+
+    const unregisterSaved = registerEventListener('post_saved', handlePostSaved);
+    const unregisterDeleted = registerEventListener('post_deleted', handlePostDeleted);
+
+    return () => {
+      unregisterSaved();
+      unregisterDeleted();
+    };
+  }, []);
+
   useEffect(() => {
     // Fetch coach's club_id
     const fetchCoachClubId = async () => {
@@ -183,7 +205,6 @@ export const CoachNewsScreen = () => {
       mode: 'create',
       availableTeams,
       isAdmin: false,
-      onSave: () => setRefreshKey(k => k + 1),
     });
   };
 
@@ -193,7 +214,6 @@ export const CoachNewsScreen = () => {
       post,
       availableTeams,
       isAdmin: false,
-      onSave: () => setRefreshKey(k => k + 1),
     });
   };
 
