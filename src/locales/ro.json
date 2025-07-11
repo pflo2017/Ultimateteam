@@ -436,6 +436,8 @@
       "title": "Autentificare Antrenor",
       "enter_phone_to_continue": "Introduceți numărul de telefon pentru a continua.",
       "phone_number": "Număr de telefon",
+      "phone_number_placeholder": "ex: +40 734 108 108",
+      "enter_password_to_log_in": "Introduceți parola pentru a continua.",
       "phone_helper": "Vă rugăm să introduceți numărul de telefon în format internațional, ex: +40 734 108 108",
       "continue": "Continuă",
       "invalidPhone": "Vă rugăm să introduceți un număr de telefon valid",
@@ -452,7 +454,8 @@
       "invalidCredentials": "Număr de telefon sau parolă incorecte",
       "coachNotFound": "Profilul de antrenor nu a fost găsit",
       "migrateFailed": "Migrarea contului a eșuat. Vă rugăm să contactați suportul.",
-      "migrateLoginFailed": "Contul a fost migrat, dar autentificarea a eșuat. Vă rugăm să încercați din nou."
+      "migrateLoginFailed": "Contul a fost migrat, dar autentificarea a eșuat. Vă rugăm să încercați din nou.",
+      "phone_number_format_error": "Numărul de telefon introdus nu este valid. Te rugăm să verifici și să încerci din nou."
     },
     "manage": {
       "players": "Jucători",
@@ -572,7 +575,18 @@
     "chat": "Chat cu Antrenorul",
     "activities": "Activități",
     "editChild": "Editează Copilul",
-    "addChild": "Adaugă Copilul",
+    "addChild": {
+      "title": "Adaugă Copilul",
+      "subtitle": "Introduceți informațiile copilului dumneavoastră",
+      "fullName": "Nume complet",
+      "birthdate": "Data nașterii",
+      "teamAccessCode": "Cod de acces echipă",
+      "addChild": "Adaugă copil",
+      "adding": "Se adaugă...",
+      "teamName": "Echipa",
+      "success": "Copilul a fost adăugat cu succes",
+      "error": "A apărut o eroare. Încercați din nou."
+    },
     "logout": {
       "failed": "Deconectarea a eșuat. Te rugăm să încerci din nou."
     },
@@ -596,7 +610,6 @@
       "children": "Copii",
       "team": "Echipă",
       "manage": "Gestionează",
-      "addChild": "Adaugă copil",
       "edit": "Editează",
       "delete": "Șterge",
       "medicalVisaStatus": {
@@ -628,6 +641,19 @@
       "parentNotFound": "Profilul de părinte nu a fost găsit",
       "migrateFailed": "Migrarea contului a eșuat. Vă rugăm să contactați suportul.",
       "migrateLoginFailed": "Contul a fost migrat, dar autentificarea a eșuat. Vă rugăm să încercați din nou."
+    },
+    "settings": {
+      "profileInfo": "Informații profil",
+      "name": "Nume",
+      "emailOptional": "Email (opțional)",
+      "phoneNumber": "Număr de telefon",
+      "updateProfile": "Actualizează profilul",
+      "updating": "Se actualizează...",
+      "changePassword": "Schimbă parola",
+      "currentPassword": "Parola curentă",
+      "newPassword": "Parolă nouă",
+      "confirmNewPassword": "Confirmă parola nouă",
+      "changingPassword": "Se schimbă parola..."
     }
   },
   "teams": {

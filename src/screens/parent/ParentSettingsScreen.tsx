@@ -6,6 +6,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 
 export const ParentSettingsScreen = () => {
   const [name, setName] = useState('');
@@ -16,6 +17,7 @@ export const ParentSettingsScreen = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const navigation = useNavigation();
+  const { t } = useTranslation();
 
   useEffect(() => {
     loadParentData();
@@ -247,9 +249,9 @@ export const ParentSettingsScreen = () => {
       >
         <View style={styles.form}>
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Profile Information</Text>
+            <Text style={styles.sectionTitle}>{t('parent.settings.profileInfo', 'Profile Information')}</Text>
             <TextInput
-              label="Name"
+              label={t('parent.settings.name', 'Name')}
               value={name}
               onChangeText={setName}
               mode="flat"
@@ -258,7 +260,7 @@ export const ParentSettingsScreen = () => {
               left={<TextInput.Icon icon="account" color={COLORS.primary} style={{ marginRight: 30 }} />}
             />
             <TextInput
-              label="Email (Optional)"
+              label={t('parent.settings.emailOptional', 'Email (Optional)')}
               value={email}
               onChangeText={setEmail}
               mode="flat"
@@ -269,7 +271,7 @@ export const ParentSettingsScreen = () => {
               left={<TextInput.Icon icon="email" color={COLORS.primary} style={{ marginRight: 30 }} />}
             />
             <TextInput
-              label="Phone Number"
+              label={t('parent.settings.phoneNumber', 'Phone Number')}
               value={phoneNumber}
               mode="flat"
               style={styles.input}
@@ -283,15 +285,15 @@ export const ParentSettingsScreen = () => {
               style={[styles.updateButton, isLoading && styles.buttonDisabled]}
             >
               <Text style={styles.buttonText}>
-                {isLoading ? 'Updating...' : 'Update Profile'}
+                {isLoading ? t('parent.settings.updating', 'Updating...') : t('parent.settings.updateProfile', 'Update Profile')}
               </Text>
             </Pressable>
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Change Password</Text>
+            <Text style={styles.sectionTitle}>{t('parent.settings.changePassword', 'Change Password')}</Text>
             <TextInput
-              label="Current Password"
+              label={t('parent.settings.currentPassword', 'Current Password')}
               value={currentPassword}
               onChangeText={setCurrentPassword}
               mode="flat"
@@ -301,7 +303,7 @@ export const ParentSettingsScreen = () => {
               left={<TextInput.Icon icon="lock" color={COLORS.primary} style={{ marginRight: 30 }} />}
             />
             <TextInput
-              label="New Password"
+              label={t('parent.settings.newPassword', 'New Password')}
               value={newPassword}
               onChangeText={setNewPassword}
               mode="flat"
@@ -311,7 +313,7 @@ export const ParentSettingsScreen = () => {
               left={<TextInput.Icon icon="lock-plus" color={COLORS.primary} style={{ marginRight: 30 }} />}
             />
             <TextInput
-              label="Confirm New Password"
+              label={t('parent.settings.confirmNewPassword', 'Confirm New Password')}
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               mode="flat"
@@ -326,7 +328,7 @@ export const ParentSettingsScreen = () => {
               style={[styles.updateButton, isLoading && styles.buttonDisabled]}
             >
               <Text style={styles.buttonText}>
-                {isLoading ? 'Changing Password...' : 'Change Password'}
+                {isLoading ? t('parent.settings.changingPassword', 'Changing Password...') : t('parent.settings.changePassword', 'Change Password')}
               </Text>
             </Pressable>
           </View>

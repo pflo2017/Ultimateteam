@@ -287,7 +287,7 @@ export const ParentNavigator = () => {
             name="AddChild"
             component={AddChildScreen}
             options={{
-              headerTitle: t('parent.addChild'),
+              headerTitle: t('parent.addChild.title'),
               headerBackTitle: t('common.back'),
             }}
           />

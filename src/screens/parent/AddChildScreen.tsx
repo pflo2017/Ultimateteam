@@ -10,6 +10,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { ParentStackParamList } from '../../types/navigation';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { CalendarPickerModal } from '../../components/CalendarPickerModal';
+import { useTranslation } from 'react-i18next';
 
 type AddChildScreenNavigationProp = NativeStackNavigationProp<ParentStackParamList>;
 
@@ -23,6 +24,7 @@ export const AddChildScreen = () => {
   const [tempDate, setTempDate] = useState<Date>(birthDate);
 
   const navigation = useNavigation<AddChildScreenNavigationProp>();
+  const { t } = useTranslation();
 
   const openDatePicker = () => {
     setTempDate(birthDate || new Date());
@@ -162,13 +164,13 @@ export const AddChildScreen = () => {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
-          <Text style={styles.title}>Add Child</Text>
-          <Text style={styles.subtitle}>Enter your child's information</Text>
+          <Text style={styles.title}>{t('parent.addChild.title', 'Add Child')}</Text>
+          <Text style={styles.subtitle}>{t('parent.addChild.subtitle', "Enter your child's information")}</Text>
         </View>
 
         <View style={styles.form}>
           <TextInput
-            label="Full Name"
+            label={t('parent.addChild.fullName', 'Full Name')}
             value={name}
             onChangeText={setName}
             mode="flat"
@@ -177,7 +179,7 @@ export const AddChildScreen = () => {
             left={<TextInput.Icon icon="account-child" color={COLORS.primary} style={{ marginRight: 30 }} />}
           />
 
-          <Text style={styles.inputLabel}>Birthdate</Text>
+          <Text style={styles.inputLabel}>{t('parent.addChild.birthdate', 'Birthdate')}</Text>
           <Pressable
             onPress={openDatePicker}
             style={styles.dateInput}
@@ -193,7 +195,7 @@ export const AddChildScreen = () => {
           </Pressable>
 
           <TextInput
-            label="Team Access Code"
+            label={t('parent.addChild.teamAccessCode', 'Team Access Code')}
             value={teamCode}
             onChangeText={handleTeamCodeChange}
             mode="flat"
@@ -205,7 +207,7 @@ export const AddChildScreen = () => {
 
           {teamName && (
             <Text style={styles.teamName}>
-              Team: {teamName}
+              {t('parent.addChild.teamName', 'Team') + ': ' + teamName}
             </Text>
           )}
 
@@ -215,7 +217,7 @@ export const AddChildScreen = () => {
             style={[styles.addButton, isLoading && styles.buttonDisabled]}
           >
             <Text style={styles.buttonText}>
-              {isLoading ? 'Adding...' : 'Add Child'}
+              {isLoading ? t('parent.addChild.adding', 'Adding...') : t('parent.addChild.addChild', 'Add Child')}
             </Text>
           </Pressable>
         </View>

@@ -545,7 +545,8 @@
       "invalidCredentials": "Invalid phone or password",
       "coachNotFound": "Coach profile not found",
       "migrateFailed": "Failed to migrate account. Please contact support.",
-      "migrateLoginFailed": "Account migrated but login failed. Please try again."
+      "migrateLoginFailed": "Account migrated but login failed. Please try again.",
+      "phone_number_format_error": "The phone number entered is not valid. Please check and try again."
     }
   },
   "login": {
