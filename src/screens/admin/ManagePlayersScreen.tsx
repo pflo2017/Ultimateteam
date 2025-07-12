@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, TextInput, RefreshControl, Modal, Pressable, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, TextInput, RefreshControl, Modal, Pressable, Alert, Platform } from 'react-native';
 import { Text, ActivityIndicator, Card, IconButton, Divider } from 'react-native-paper';
 import { COLORS, SPACING, FONT_SIZES } from '../../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -426,7 +426,10 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
 
   return (
     <View style={styles.content}>
-      <View style={styles.header}>
+      <View style={[
+        styles.header,
+        Platform.OS === 'android' ? { paddingTop: 24 } : null
+      ]}>
         <View>
           <Text style={styles.headerTitle}>{t('admin.players.title')}</Text>
           <Text style={styles.totalCount}>{t('admin.players.totalCount', { count: filteredPlayers.length })}</Text>

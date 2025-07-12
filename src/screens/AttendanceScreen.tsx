@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, StyleSheet, FlatList, ActivityIndicator, Alert, TouchableOpacity, ScrollView, TouchableWithoutFeedback, Modal } from 'react-native';
+import { View, StyleSheet, FlatList, ActivityIndicator, Alert, TouchableOpacity, ScrollView, TouchableWithoutFeedback, Modal, Platform } from 'react-native';
 import { Text, Button, Checkbox, FAB, TextInput } from 'react-native-paper';
 import { Chip } from 'react-native-paper';
 import { COLORS, SPACING } from '../constants/theme';
@@ -869,7 +869,10 @@ export const AttendanceScreen = () => {
       />
 
       {/* Header row with Attendance title and filter icon */}
-      <View style={styles.headerRow}>
+      <View style={[
+        styles.headerRow,
+        Platform.OS === 'android' ? { paddingTop: 24 } : null
+      ]}>
         <Text style={styles.reportsTitle}>Reports</Text>
         <TouchableOpacity onPress={() => setFilterModalVisible(true)} style={styles.filterIconButton}>
           <MaterialCommunityIcons name="filter" size={24} color={COLORS.primary} />

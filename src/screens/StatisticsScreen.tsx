@@ -12,6 +12,7 @@ import type { RootStackParamList } from '../types/navigation';
 import { getUserClubId } from '../services/activitiesService';
 import { fetchPlayerAttendanceStats, fetchTeamAttendanceStats } from '../services/attendanceService';
 import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export const StatisticsScreen = () => {
   // Navigation
@@ -1090,9 +1091,13 @@ export const StatisticsScreen = () => {
   };
 
   // Main render function
+  const insets = useSafeAreaInsets();
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={[
+        styles.header,
+        Platform.OS === 'android' ? { paddingTop: insets.top + 16 } : null
+      ]}>
         <View style={styles.headerRow}>
           <TouchableOpacity 
             style={styles.backButton}

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACING } from '../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
@@ -57,6 +58,7 @@ const PlayerAttendanceReportScreen = () => {
   const [error, setError] = useState<string | null>(null);
 
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
 
   // Safe date parsing function
   const parseActivityDate = (dateStr?: string): Date | null => {
@@ -315,7 +317,10 @@ const PlayerAttendanceReportScreen = () => {
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <View style={styles.container}>
-        <View style={styles.header}>
+        <View style={[
+          styles.header,
+          Platform.OS === 'android' ? { paddingTop: insets.top + 16 } : null
+        ]}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
             <MaterialCommunityIcons name="arrow-left" size={24} color={COLORS.text} />
           </TouchableOpacity>

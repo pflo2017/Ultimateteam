@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, Alert } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Text, Alert, Platform } from 'react-native';
 import { NewsFeed } from '../../components/news/NewsFeed';
 import { Post } from '../../components/news/types';
 import { PostCreationModal } from '../../components/news/PostCreationModal';
@@ -219,7 +219,10 @@ export const CoachNewsScreen = () => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={[
+        styles.header,
+        Platform.OS === 'android' ? { paddingTop: 24 } : null
+      ]}>
         <Text style={styles.headerTitle}>{t('coach.news.title')}</Text>
       </View>
       

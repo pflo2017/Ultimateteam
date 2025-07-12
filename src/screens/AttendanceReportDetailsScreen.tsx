@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, SafeAreaView } from 'react-native';
+import { View, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, SafeAreaView, Platform } from 'react-native';
 import { Text, Divider, Button } from 'react-native-paper';
 import { COLORS, SPACING } from '@/constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -12,6 +12,7 @@ import { Activity, getActivityById } from '../services/activitiesService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CommonActions } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Helper function to capitalize first letter
 const capitalize = (str: string | null | undefined) => {
@@ -101,6 +102,7 @@ export const AttendanceReportDetailsScreen = () => {
   const [isSaving, setIsSaving] = useState(false);
 
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     const loadUserRole = async () => {
@@ -284,7 +286,10 @@ export const AttendanceReportDetailsScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
+      <View style={[
+        styles.header,
+        Platform.OS === 'android' ? { paddingTop: insets.top + 16 } : null
+      ]}>
         <TouchableOpacity onPress={() => {
           if (route.params?.selectedDate) {
             if (userRole === 'admin') {

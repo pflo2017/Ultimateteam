@@ -141,7 +141,10 @@ export default function ParentVerificationScreen({ navigation, route }: Props) {
 
   return (
     <Animated.View entering={FadeIn} style={styles.container}>
-      <View style={styles.header}>
+      <View style={[
+        styles.header,
+        Platform.OS === 'android' ? { paddingTop: 24 } : null
+      ]}>
         <Icon 
           name="chevron-left" 
           size={32} 

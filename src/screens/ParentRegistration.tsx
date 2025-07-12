@@ -227,7 +227,10 @@ export const ParentRegistrationScreen = () => {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
-      <View style={styles.header}>
+      <View style={[
+        styles.header,
+        Platform.OS === 'android' ? { paddingTop: 24 } : null
+      ]}>
         <Icon 
           name="chevron-left" 
           size={32} 

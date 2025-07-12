@@ -14,6 +14,7 @@ import { RepeatSchedule, RepeatType, DayOfWeek } from '../components/Schedule/Re
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getCoachInternalId, getCoachAuthId } from '../utils/coachUtils';
 import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type CreateActivityScreenRouteProp = RouteProp<RootStackParamList, 'CreateActivity'>;
 
@@ -30,6 +31,7 @@ export const CreateActivityScreen = () => {
   const navigation = useNavigation();
   const route = useRoute<CreateActivityScreenRouteProp>();
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
   
   // Initialize with the type from route params or default to 'training'
   const initialType: ActivityType = 'training';
@@ -420,7 +422,10 @@ export const CreateActivityScreen = () => {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="dark" />
-      <View style={[styles.header, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}> 
+      <View style={[
+        styles.header,
+        Platform.OS === 'android' ? { paddingTop: insets.top + 16 } : null
+      ]}> 
         <TouchableOpacity onPress={handleGoBack} style={styles.backButton}>
           <MaterialCommunityIcons name="close" size={24} color={COLORS.text} />
         </TouchableOpacity>

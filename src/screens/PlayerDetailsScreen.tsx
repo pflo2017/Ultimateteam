@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, ScrollView, Text, StyleSheet, TouchableOpacity, Alert, Modal, ActivityIndicator } from 'react-native';
+import { View, ScrollView, Text, StyleSheet, TouchableOpacity, Alert, Modal, ActivityIndicator, Platform } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { RouteProp } from '@react-navigation/native';
@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { registerEventListener, triggerEvent } from '../utils/events';
 import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Placeholder: Replace with your actual theme/colors
 const COLORS = {
@@ -103,6 +104,8 @@ export const PlayerDetailsScreen = () => {
   const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
   const [isLoadingPaymentHistory, setIsLoadingPaymentHistory] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     const fetchPlayerData = async () => {
@@ -456,7 +459,10 @@ export const PlayerDetailsScreen = () => {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[
+        styles.header,
+        Platform.OS === 'android' ? { paddingTop: insets.top + 16 } : null
+      ]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <MaterialCommunityIcons name="arrow-left" size={28} color={COLORS.text} />
         </TouchableOpacity>

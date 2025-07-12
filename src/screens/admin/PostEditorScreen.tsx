@@ -156,7 +156,10 @@ export const PostEditorScreen = () => {
     <View style={styles.container}>
       {/* Safe Area Header */}
       <SafeAreaView edges={['top']} style={{ backgroundColor: COLORS.white }}>
-        <View style={styles.header}>
+        <View style={[
+          styles.header,
+          Platform.OS === 'android' ? { paddingTop: 24 } : null
+        ]}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
             <Text style={styles.backText}>{'←'}</Text>
           </TouchableOpacity>

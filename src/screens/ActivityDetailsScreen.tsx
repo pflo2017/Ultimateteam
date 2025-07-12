@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Modal, TextInput as RNTextInput } from 'react-native';
+import { View, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Modal, TextInput as RNTextInput, Platform } from 'react-native';
 import { Text, Button, IconButton, Divider, Menu, Dialog, Portal, TextInput, RadioButton } from 'react-native-paper';
 import { COLORS, SPACING } from '../constants/theme';
 import { useNavigation, useRoute, RouteProp, useNavigationState } from '@react-navigation/native';
@@ -657,7 +657,8 @@ export const ActivityDetailsScreen = () => {
       {/* Show header for all users */}
       <View style={[
         styles.header,
-        { borderBottomColor: activity ? getActivityColor(activity.type) : COLORS.grey[200] }
+        { borderBottomColor: activity ? getActivityColor(activity.type) : COLORS.grey[200] },
+        Platform.OS === 'android' ? { paddingTop: 24 } : null
       ]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <MaterialCommunityIcons name="arrow-left" size={24} color={COLORS.text} />

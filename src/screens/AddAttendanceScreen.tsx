@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Modal, Alert } from 'react-native';
+import { View, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Modal, Alert, Platform } from 'react-native';
 import { Text, TextInput, ActivityIndicator, Button } from 'react-native-paper';
 import { COLORS, SPACING } from '../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -10,6 +10,7 @@ import { Activity, getActivitiesByDateRange, getUserClubId, generateActivityIdFo
 import { supabase } from '../lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Remove placeholder data - we're not using it anymore
 
@@ -31,6 +32,7 @@ export default function AddAttendanceScreen() {
   const [showTeamModal, setShowTeamModal] = useState(false);
   const [showActivityModal, setShowActivityModal] = useState(false);
   const [activityFetched, setActivityFetched] = useState(false);
+  const insets = useSafeAreaInsets();
 
   // Initial load of teams
   useEffect(() => { 
@@ -482,7 +484,10 @@ export default function AddAttendanceScreen() {
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[
+        styles.header,
+        Platform.OS === 'android' ? { paddingTop: insets.top + 16 } : null
+      ]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <MaterialCommunityIcons name="close" size={24} color={COLORS.text} />
         </TouchableOpacity>
