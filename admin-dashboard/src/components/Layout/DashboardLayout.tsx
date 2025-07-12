@@ -90,25 +90,25 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
   const getSidebarLinks = (userRole: string | null) => {
     // Common links for all users
     const commonLinks = [
-      { label: 'Dashboard', icon: <IconDashboard size={20} />, link: '/' },
+      { label: 'Dashboard', icon: <IconDashboard size={20} />, link: '/admin' },
     ];
 
     // Links specific to master admin
     const masterAdminLinks = [
-      { label: 'Clubs', icon: <IconBuildingCommunity size={20} />, link: '/clubs' },
-      { label: 'Users', icon: <IconUsers size={20} />, link: '/users' },
+      { label: 'Clubs', icon: <IconBuildingCommunity size={20} />, link: '/admin/clubs' },
+      { label: 'Users', icon: <IconUsers size={20} />, link: '/admin/users' },
     ];
 
     // Links specific to club admin
     const clubAdminLinks = [
-      { label: 'Teams', icon: <IconUsers size={20} />, link: '/teams' },
-      { label: 'Coaches', icon: <IconUserCircle size={20} />, link: '/coaches' },
-      { label: 'Players', icon: <IconUsers size={20} />, link: '/players' },
-      { label: 'Parents', icon: <IconUsers size={20} />, link: '/parents' },
-      { label: 'Schedule', icon: <IconCalendarEvent size={20} />, link: '/schedule' },
-      { label: 'Attendance', icon: <IconUserCheck size={20} />, link: '/attendance' },
-      { label: 'Payments', icon: <IconCash size={20} />, link: '/payments' },
-      { label: 'Analytics', icon: <IconChartBar size={20} />, link: '/analytics' },
+      { label: 'Teams', icon: <IconUsers size={20} />, link: '/admin/teams' },
+      { label: 'Coaches', icon: <IconUserCircle size={20} />, link: '/admin/coaches' },
+      { label: 'Players', icon: <IconUsers size={20} />, link: '/admin/players' },
+      { label: 'Parents', icon: <IconUsers size={20} />, link: '/admin/parents' },
+      { label: 'Schedule', icon: <IconCalendarEvent size={20} />, link: '/admin/schedule' },
+      { label: 'Attendance', icon: <IconUserCheck size={20} />, link: '/admin/attendance' },
+      { label: 'Payments', icon: <IconCash size={20} />, link: '/admin/payments' },
+      { label: 'Analytics', icon: <IconChartBar size={20} />, link: '/admin/analytics' },
     ];
 
     // Return links based on user role
@@ -124,29 +124,29 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
   
   // Navigation items for master admin
   const masterAdminNavItems = [
-    { label: 'Dashboard', icon: <IconDashboard size={20} />, path: '/dashboard' },
-    { label: 'Clubs', icon: <IconBuildingCommunity size={20} />, path: '/clubs' },
-    { label: 'All Users', icon: <IconUsers size={20} />, path: '/users' },
-    { label: 'Coaches', icon: <IconUsers size={20} />, path: '/coaches' },
-    { label: 'Players', icon: <IconUsers size={20} />, path: '/players' },
-    { label: 'Parents', icon: <IconUsers size={20} />, path: '/parents' },
-    { label: 'Payments', icon: <IconCreditCard size={20} />, path: '/payments' },
-    { label: 'Analytics', icon: <IconReportAnalytics size={20} />, path: '/analytics' },
-    { label: 'Billing', icon: <IconCreditCard size={20} />, path: '/billing' },
-    { label: 'Settings', icon: <IconSettings size={20} />, path: '/settings' },
+    { label: 'Dashboard', icon: <IconDashboard size={20} />, path: '/admin' },
+    { label: 'Clubs', icon: <IconBuildingCommunity size={20} />, path: '/admin/clubs' },
+    { label: 'All Users', icon: <IconUsers size={20} />, path: '/admin/users' },
+    { label: 'Coaches', icon: <IconUsers size={20} />, path: '/admin/coaches' },
+    { label: 'Players', icon: <IconUsers size={20} />, path: '/admin/players' },
+    { label: 'Parents', icon: <IconUsers size={20} />, path: '/admin/parents' },
+    { label: 'Payments', icon: <IconCreditCard size={20} />, path: '/admin/payments' },
+    { label: 'Analytics', icon: <IconReportAnalytics size={20} />, path: '/admin/analytics' },
+    { label: 'Billing', icon: <IconCreditCard size={20} />, path: '/admin/billing' },
+    { label: 'Settings', icon: <IconSettings size={20} />, path: '/admin/settings' },
   ];
   
   // Navigation items for club admin
   const clubAdminNavItems = [
-    { label: 'Dashboard', icon: <IconDashboard size={20} />, path: '/dashboard' },
-    { label: 'Teams', icon: <IconUsers size={20} />, path: '/teams' },
-    { label: 'Coaches', icon: <IconUserCircle size={20} />, path: '/coaches' },
-    { label: 'Players', icon: <IconUsers size={20} />, path: '/players' },
-    { label: 'Parents', icon: <IconUsers size={20} />, path: '/parents' },
-    { label: 'Schedule', icon: <IconCalendarEvent size={20} />, path: '/schedule' },
-    { label: 'Attendance', icon: <IconUserCheck size={20} />, path: '/attendance' },
-    { label: 'Payments', icon: <IconCreditCard size={20} />, path: '/payments' },
-    { label: 'Settings', icon: <IconSettings size={20} />, path: '/settings' },
+    { label: 'Dashboard', icon: <IconDashboard size={20} />, path: '/admin' },
+    { label: 'Teams', icon: <IconUsers size={20} />, path: '/admin/teams' },
+    { label: 'Coaches', icon: <IconUserCircle size={20} />, path: '/admin/coaches' },
+    { label: 'Players', icon: <IconUsers size={20} />, path: '/admin/players' },
+    { label: 'Parents', icon: <IconUsers size={20} />, path: '/admin/parents' },
+    { label: 'Schedule', icon: <IconCalendarEvent size={20} />, path: '/admin/schedule' },
+    { label: 'Attendance', icon: <IconUserCheck size={20} />, path: '/admin/attendance' },
+    { label: 'Payments', icon: <IconCreditCard size={20} />, path: '/admin/payments' },
+    { label: 'Settings', icon: <IconSettings size={20} />, path: '/admin/settings' },
   ];
   
   // Select the appropriate nav items based on user role

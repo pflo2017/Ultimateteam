@@ -92,7 +92,7 @@ const Login: React.FC<LoginProps> = ({ setHasExplicitLogin }) => {
             setHasExplicitLogin(true);
           }
           
-          navigate('/');
+          navigate('/admin');
         } else {
           // Check if the user is a club admin
           const { data: clubData, error: clubError } = await supabase
@@ -130,7 +130,7 @@ const Login: React.FC<LoginProps> = ({ setHasExplicitLogin }) => {
             setHasExplicitLogin(true);
           }
           
-          navigate('/');
+          navigate('/admin');
         }
       }
     } catch (error: any) {

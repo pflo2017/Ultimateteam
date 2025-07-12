@@ -71,7 +71,7 @@
     "managePayments": "Gestionează Plățile",
     "reports": "Rapoarte",
     "settings": "Setări",
-    "loginTitle": "Autentificare Administrator",
+    "loginTitle": "Autentificare Admin",
     "loginSubtitle": "Te rugăm să introduci datele de autentificare",
     "dashboard": {
       "welcome": "Bun venit, {{name}}",
