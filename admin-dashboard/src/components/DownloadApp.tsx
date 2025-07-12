@@ -1,136 +1,95 @@
-import Button from "./Button";
-import Badge from "./Badge";
-import { Download, Star, Users, Smartphone } from "lucide-react"
+import { Shield, Users, Heart } from "lucide-react";
+
+const apps = [
+  {
+    icon: <Shield className="w-8 h-8 text-white bg-[#0CC1EC] rounded-xl p-1.5" />,
+    title: "Aplicația Admin",
+    subtitle: "Control complet asupra clubului",
+    features: [
+      "Dashboard complet cu statistici",
+      "Rapoarte financiare detaliate",
+      "Gestionare membri și echipe",
+      "Configurări și setări avansate"
+    ],
+    color: "bg-[#0CC1EC]"
+  },
+  {
+    icon: <Users className="w-8 h-8 text-white bg-[#0CC1EC] rounded-xl p-1.5" />,
+    title: "Aplicația Antrenor",
+    subtitle: "Instrumente pentru antrenori",
+    features: [
+      "Planificare antrenamente",
+      "Comunicare cu părinții",
+      "Urmărire progres sportivi",
+      "Rapoarte de performanță"
+    ],
+    color: "bg-[#0CC1EC]"
+  },
+  {
+    icon: <Heart className="w-8 h-8 text-white bg-[#0CC1EC] rounded-xl p-1.5" />,
+    title: "Aplicația Părinți",
+    subtitle: "Conectează familiile",
+    features: [
+      "Program antrenamente/meciuri",
+      "Plăți și facturare",
+      "Chat cu antrenorii",
+      "Progresul copilului"
+    ],
+    color: "bg-[#0CC1EC]"
+  }
+];
 
 export default function DownloadApp() {
   return (
-    <section className="py-20 bg-gradient-to-r from-blue-600 via-purple-600 to-blue-800 relative overflow-hidden">
-      {/* Background decorative elements */}
-      <div className="absolute inset-0">
-        <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-blue-600/20 to-purple-600/20"></div>
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-white/10 rounded-full blur-3xl animate-float"></div>
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-white/10 rounded-full blur-3xl animate-float" style={{ animationDelay: '2s' }}></div>
-      </div>
-
-      <div className="relative z-10 container mx-auto px-4 sm:px-6 lg:px-8">
+    <section className="py-20 bg-white">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-          {/* Content */}
-          <div className="text-white">
-            <Badge className="bg-white/20 text-white border-white/30 mb-6">
-              <Smartphone className="w-4 h-4 mr-2" />
-              Aplicație Mobilă
-            </Badge>
-            
-            <h2 className="text-4xl sm:text-5xl font-bold mb-6">
-              Descarcă aplicația <br />
-              <span className="bg-gradient-to-r from-yellow-400 to-orange-400 bg-clip-text text-transparent">
-                SportClub Pro
-              </span>
-            </h2>
-            
-            <p className="text-xl text-blue-100 mb-8 leading-relaxed">
-              Accesează platforma din orice loc, oricând. Gestionarea clubului sportiv 
-              devine mai ușoară cu aplicația noastră mobilă optimizată.
-            </p>
-
-            {/* App stats */}
-            <div className="flex items-center space-x-6 mb-8">
-              <div className="flex items-center space-x-2">
-                <div className="flex items-center">
-                  {[...Array(5)].map((_, i) => (
-                    <Star key={i} className="w-5 h-5 fill-yellow-400 text-yellow-400" />
-                  ))}
-                </div>
-                <span className="text-blue-100 font-medium">4.8/5</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Users className="w-5 h-5 text-blue-100" />
-                <span className="text-blue-100 font-medium">10K+ descărcări</span>
-              </div>
-            </div>
-
-            {/* Download buttons */}
-            <div className="flex flex-col sm:flex-row gap-4">
-              <Button 
-                className="bg-white text-blue-600 hover:bg-gray-100 px-8 py-4 text-lg font-semibold rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105"
-              >
-                <Download className="mr-2 h-6 w-6" />
-                App Store
-              </Button>
-              <Button 
-                className="bg-white text-blue-600 hover:bg-gray-100 px-8 py-4 text-lg font-semibold rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105"
-              >
-                <Download className="mr-2 h-6 w-6" />
-                Google Play
-              </Button>
+          {/* Left: Phone mockup on soft primary background */}
+          <div className="flex justify-center items-center">
+            <div className="rounded-3xl bg-[#E6F8FC] p-8 w-full max-w-xl flex justify-center items-center shadow-xl">
+              {/* Placeholder phone mockup SVG */}
+              <svg width="320" height="240" viewBox="0 0 320 240" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="40" y="20" width="70" height="200" rx="18" fill="#fff" stroke="#0CC1EC" strokeWidth="4" />
+                <rect x="125" y="20" width="70" height="200" rx="18" fill="#fff" stroke="#0CC1EC" strokeWidth="4" />
+                <rect x="210" y="20" width="70" height="200" rx="18" fill="#fff" stroke="#0CC1EC" strokeWidth="4" />
+                <rect x="60" y="40" width="30" height="8" rx="4" fill="#0CC1EC" />
+                <rect x="145" y="40" width="30" height="8" rx="4" fill="#0CC1EC" />
+                <rect x="230" y="40" width="30" height="8" rx="4" fill="#0CC1EC" />
+              </svg>
             </div>
           </div>
-
-          {/* Mobile mockup */}
-          <div className="relative flex justify-center lg:justify-end">
-            <div className="relative">
-              {/* Phone frame */}
-              <div className="w-80 h-96 bg-gray-900 rounded-3xl p-4 shadow-2xl">
-                <div className="w-full h-full bg-gradient-to-br from-blue-50 to-purple-50 rounded-2xl overflow-hidden relative">
-                  {/* App header */}
-                  <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-4 text-white">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center">
-                          <div className="w-4 h-4 bg-gradient-to-r from-blue-500 to-purple-500 rounded"></div>
-                        </div>
-                        <span className="font-semibold">SportClub Pro</span>
-                      </div>
-                      <div className="w-6 h-6 bg-white/20 rounded-full"></div>
-                    </div>
+          {/* Right: App cards */}
+          <div className="flex flex-col gap-8">
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4 font-sans" style={{ fontFamily: 'system-ui, sans-serif' }}>
+              Aplicații dedicate pentru <span className="bg-gradient-to-r from-[#0CC1EC] to-[#007AFF] bg-clip-text text-transparent">fiecare rol</span>
+            </h2>
+            <p className="text-lg text-gray-600 mb-6 font-normal font-sans" style={{ fontFamily: 'system-ui, sans-serif', fontWeight: 400 }}>
+              Fiecare membru al comunității sportive beneficiază de o experiență optimizată pentru nevoile și responsabilitățile sale specifice.
+            </p>
+            <div className="flex flex-col gap-6">
+              {apps.map((app, idx) => (
+                <div key={idx} className="flex flex-col sm:flex-row items-start bg-white rounded-2xl shadow-lg p-6 gap-4">
+                  <div className="flex-shrink-0 flex items-center justify-center w-14 h-14 rounded-xl" style={{ background: '#0CC1EC' }}>
+                    {app.icon}
                   </div>
-                  
-                  {/* App content */}
-                  <div className="p-4 space-y-4">
-                    <div className="bg-white rounded-xl p-4 shadow-sm">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="w-16 h-8 bg-blue-200 rounded"></div>
-                        <div className="w-8 h-8 bg-green-500 rounded-full"></div>
-                      </div>
-                      <div className="space-y-2">
-                        <div className="h-3 bg-gray-200 rounded w-3/4"></div>
-                        <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-                      </div>
-                    </div>
-                    
-                    <div className="bg-white rounded-xl p-4 shadow-sm">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="w-16 h-8 bg-purple-200 rounded"></div>
-                        <div className="w-8 h-8 bg-blue-500 rounded-full"></div>
-                      </div>
-                      <div className="space-y-2">
-                        <div className="h-3 bg-gray-200 rounded w-2/3"></div>
-                        <div className="h-3 bg-gray-200 rounded w-1/3"></div>
-                      </div>
-                    </div>
-                    
-                    <div className="bg-white rounded-xl p-4 shadow-sm">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="w-16 h-8 bg-green-200 rounded"></div>
-                        <div className="w-8 h-8 bg-yellow-500 rounded-full"></div>
-                      </div>
-                      <div className="space-y-2">
-                        <div className="h-3 bg-gray-200 rounded w-4/5"></div>
-                        <div className="h-3 bg-gray-200 rounded w-2/5"></div>
-                      </div>
-                    </div>
+                  <div>
+                    <h3 className="text-xl font-semibold text-gray-900 mb-1 font-sans" style={{ fontFamily: 'system-ui, sans-serif' }}>{app.title}</h3>
+                    <p className="text-gray-600 mb-2 font-normal font-sans" style={{ fontFamily: 'system-ui, sans-serif', fontWeight: 400 }}>{app.subtitle}</p>
+                    <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1 text-gray-700 text-base font-normal font-sans" style={{ fontFamily: 'system-ui, sans-serif', fontWeight: 400 }}>
+                      {app.features.map((feature, i) => (
+                        <li key={i} className="flex items-center">
+                          <span className="inline-block w-2 h-2 rounded-full bg-[#0CC1EC] mr-2"></span>
+                          {feature}
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 </div>
-              </div>
-              
-              {/* Floating elements */}
-              <div className="absolute -top-4 -right-4 w-8 h-8 bg-yellow-400 rounded-full animate-float" style={{ animationDelay: '1s' }}></div>
-              <div className="absolute -bottom-4 -left-4 w-6 h-6 bg-pink-400 rounded-full animate-float" style={{ animationDelay: '3s' }}></div>
-              <div className="absolute top-1/2 -right-8 w-4 h-4 bg-blue-400 rounded-full animate-float" style={{ animationDelay: '5s' }}></div>
+              ))}
             </div>
           </div>
         </div>
       </div>
     </section>
-  )
+  );
 } 
