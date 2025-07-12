@@ -429,7 +429,7 @@ export const ParentManageScreen = () => {
             size={24} 
             color={COLORS.white} 
           />
-          <Text style={styles.addButtonText}>{t('parent.manage.addChild')}</Text>
+          <Text style={styles.addButtonText}>{t('parent.addChild.addChild')}</Text>
         </Pressable>
 
         {isLoading ? (
