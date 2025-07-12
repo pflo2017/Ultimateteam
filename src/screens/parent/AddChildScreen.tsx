@@ -164,7 +164,6 @@ export const AddChildScreen = () => {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
-          <Text style={styles.title}>{t('parent.addChild.title', 'Add Child')}</Text>
           <Text style={styles.subtitle}>{t('parent.addChild.subtitle', "Enter your child's information")}</Text>
         </View>
 

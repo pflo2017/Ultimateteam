@@ -585,7 +585,8 @@
     "activities": "Activities",
     "editChild": "Edit Child",
     "addChild": {
-      "title": "Add Child"
+      "title": "",
+      "addChild": "Add Child"
     },
     "logout": {
       "failed": "Failed to log out. Please try again."

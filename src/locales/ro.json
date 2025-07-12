@@ -576,7 +576,7 @@
     "activities": "Activități",
     "editChild": "Editează Copilul",
     "addChild": {
-      "title": "Adaugă Copilul",
+      "title": "",
       "subtitle": "Introduceți informațiile copilului dumneavoastră",
       "fullName": "Nume complet",
       "birthdate": "Data nașterii",
