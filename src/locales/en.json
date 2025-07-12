@@ -584,7 +584,9 @@
     "chat": "Chat with Coach",
     "activities": "Activities",
     "editChild": "Edit Child",
-    "addChild": "Add Child",
+    "addChild": {
+      "title": "Add Child"
+    },
     "logout": {
       "failed": "Failed to log out. Please try again."
     },
