@@ -572,7 +572,7 @@ const DatePickerComponent = ({ date, onDateChange }: DatePickerComponentProps) =
       {/* Month/Year Header */}
       <View style={styles.calendarHeader}>
         <Pressable onPress={prevMonth}>
-          <MaterialCommunityIcons name="chevron-left" size={24} color="#666" />
+          <MaterialCommunityIcons name="chevron-left" size={24} color={COLORS.primary} />
         </Pressable>
         
         <Pressable 
@@ -582,11 +582,11 @@ const DatePickerComponent = ({ date, onDateChange }: DatePickerComponentProps) =
           <Text style={styles.monthYearText}>
             {monthNames[currentMonth]} {currentYear}
           </Text>
-          <MaterialCommunityIcons name="menu-down" size={24} color="#666" />
+          <MaterialCommunityIcons name="menu-down" size={24} color={COLORS.primary} />
         </Pressable>
         
         <Pressable onPress={nextMonth}>
-          <MaterialCommunityIcons name="chevron-right" size={24} color="#666" />
+          <MaterialCommunityIcons name="chevron-right" size={24} color={COLORS.primary} />
         </Pressable>
         </View>
       

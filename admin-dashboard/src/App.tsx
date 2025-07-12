@@ -59,9 +59,9 @@ function App() {
           <Routes>
             {/* Public landing page */}
             <Route path="/" element={<Landing />} />
-            
+            {/* Master admin login (hidden route) */}
+            <Route path="/master" element={<Login />} />
             {/* Auth routes */}
-            <Route path="/login" element={<Login setHasExplicitLogin={setHasExplicitLogin} />} />
             <Route path="/reset-password" element={<AdminPasswordReset />} />
             <Route path="/reset-password-confirmation" element={<ResetPasswordConfirmation />} />
             
