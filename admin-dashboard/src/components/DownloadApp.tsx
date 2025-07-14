@@ -1,4 +1,5 @@
 import { Shield, Users, Heart } from "lucide-react";
+import noNgMobile from '../assets/no_ng_mobile.png';
 
 const apps = [
   {
@@ -46,17 +47,12 @@ export default function DownloadApp() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
           {/* Left: Phone mockup on soft primary background */}
           <div className="flex justify-center items-center">
-            <div className="rounded-3xl bg-[#E6F8FC] p-8 w-full max-w-xl flex justify-center items-center shadow-xl">
-              {/* Placeholder phone mockup SVG */}
-              <svg width="320" height="240" viewBox="0 0 320 240" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect x="40" y="20" width="70" height="200" rx="18" fill="#fff" stroke="#0CC1EC" strokeWidth="4" />
-                <rect x="125" y="20" width="70" height="200" rx="18" fill="#fff" stroke="#0CC1EC" strokeWidth="4" />
-                <rect x="210" y="20" width="70" height="200" rx="18" fill="#fff" stroke="#0CC1EC" strokeWidth="4" />
-                <rect x="60" y="40" width="30" height="8" rx="4" fill="#0CC1EC" />
-                <rect x="145" y="40" width="30" height="8" rx="4" fill="#0CC1EC" />
-                <rect x="230" y="40" width="30" height="8" rx="4" fill="#0CC1EC" />
-              </svg>
-            </div>
+            <img
+              src={noNgMobile}
+              alt="Mobile screens preview"
+              className="rounded-2xl max-h-72 w-auto object-contain"
+              style={{ margin: '0 auto' }}
+            />
           </div>
           {/* Right: App cards */}
           <div className="flex flex-col gap-8">

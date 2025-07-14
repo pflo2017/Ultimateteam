@@ -1,5 +1,6 @@
 import { Play, Shield } from "lucide-react";
 import React from "react";
+import dashMobile from '../assets/dash+mobile.png';
 
 interface HeroProps {
   onLoginClick?: () => void;
@@ -48,39 +49,12 @@ export default function Hero({ onLoginClick }: HeroProps) {
           </div>
           {/* Right: Visual Mockup */}
           <div className="flex-1 flex justify-center lg:justify-end">
-            <div className="relative bg-white rounded-3xl shadow-2xl p-8 border border-gray-200 max-w-md w-full animate-fade-in">
-              {/* Mockup header */}
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center space-x-2">
-                  <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                  <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-                  <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                </div>
-                <div className="text-sm text-gray-500">SportClub Pro Dashboard</div>
-              </div>
-              {/* Mockup content */}
-              <div className="grid grid-cols-1 gap-4">
-                <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl p-4">
-                  <div className="w-10 h-10 bg-blue-500 rounded-xl mb-2"></div>
-                  <div className="h-3 bg-blue-200 rounded mb-1"></div>
-                  <div className="h-2 bg-blue-200 rounded w-2/3"></div>
-                </div>
-                <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-2xl p-4">
-                  <div className="w-10 h-10 bg-purple-500 rounded-xl mb-2"></div>
-                  <div className="h-3 bg-purple-200 rounded mb-1"></div>
-                  <div className="h-2 bg-purple-200 rounded w-3/4"></div>
-                </div>
-                <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl p-4">
-                  <div className="w-10 h-10 bg-green-500 rounded-xl mb-2"></div>
-                  <div className="h-3 bg-green-200 rounded mb-1"></div>
-                  <div className="h-2 bg-green-200 rounded w-1/2"></div>
-                </div>
-              </div>
-              {/* Floating elements */}
-              <div className="absolute -top-4 -right-4 w-8 h-8 bg-yellow-400 rounded-full animate-float" style={{ animationDelay: '1s' }}></div>
-              <div className="absolute -bottom-4 -left-4 w-6 h-6 bg-pink-400 rounded-full animate-float" style={{ animationDelay: '3s' }}></div>
-              <div className="absolute top-1/2 -right-8 w-4 h-4 bg-blue-400 rounded-full animate-float" style={{ animationDelay: '5s' }}></div>
-            </div>
+            <img
+              src={dashMobile}
+              alt="Dashboard preview"
+              className="rounded-3xl max-w-md w-full animate-fade-in object-contain"
+              style={{ margin: '0 auto' }}
+            />
           </div>
         </div>
       </div>

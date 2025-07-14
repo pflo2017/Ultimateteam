@@ -532,9 +532,11 @@ const Dashboard: React.FC = () => {
 
   return (
     <>
-      <Title order={2} mb="md">
-        {userRole === 'clubAdmin' && clubName ? `${clubName} Dashboard` : 'Master Admin Dashboard'}
-      </Title>
+      <Group align="center" mb="md" spacing="md">
+        <Title order={2} mb="md">
+          {userRole === 'clubAdmin' && clubName ? `${clubName} Dashboard` : 'Master Admin Dashboard'}
+        </Title>
+      </Group>
       
       {/* Stats Cards */}
       <SimpleGrid cols={4} spacing="md" mb="md">

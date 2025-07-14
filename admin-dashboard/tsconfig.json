@@ -22,10 +22,13 @@
     "downlevelIteration": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": [
+        "./src/*"
+      ]
     }
   },
   "include": [
     "src"
-  ]
+  ],
+  "extends": "expo/tsconfig.base"
 }
