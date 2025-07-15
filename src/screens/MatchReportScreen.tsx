@@ -7,6 +7,7 @@ import { getEventsForActivity, addEventsForActivity, addSingleEvent, ActivityEve
 import { COLORS } from '../constants/theme';
 import { filterValidPlayers } from '../utils/playerValidation';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTranslation } from 'react-i18next';
 
 // Types
 interface MatchReportScreenRouteParams {
@@ -15,19 +16,6 @@ interface MatchReportScreenRouteParams {
 }
 
 type MatchReportScreenRouteProp = RouteProp<{ params: MatchReportScreenRouteParams }, 'params'>;
-
-const eventTypeOptions = [
-  { label: 'Gol', value: 'goal' as const },
-  { label: 'Assist', value: 'assist' as const },
-  { label: 'Galben', value: 'yellow_card' as const },
-  { label: 'Roșu', value: 'red_card' as const },
-  { label: 'Man of the match', value: 'man_of_the_match' as const },
-];
-
-const halfOptions = [
-  { label: 'Prima', value: 'first' as const },
-  { label: 'A doua', value: 'second' as const },
-];
 
 // Type guard to ensure event type is valid
 const isValidEventType = (type: string): type is ActivityEventType => {
@@ -43,6 +31,20 @@ export default function MatchReportScreen() {
   const navigation = useNavigation();
   const route = useRoute<MatchReportScreenRouteProp>();
   const { activityId, lineupPlayers } = route.params;
+  const { t } = useTranslation();
+
+  const eventTypeOptions = [
+    { label: t('activity.goal'), value: 'goal' as const },
+    { label: t('activity.assist'), value: 'assist' as const },
+    { label: t('activity.yellowCard'), value: 'yellow_card' as const },
+    { label: t('activity.redCard'), value: 'red_card' as const },
+    { label: t('activity.manOfTheMatch'), value: 'man_of_the_match' as const },
+  ];
+
+  const halfOptions = [
+    { label: t('activity.firstHalf'), value: 'first' as const },
+    { label: t('activity.secondHalf'), value: 'second' as const },
+  ];
 
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -130,25 +132,25 @@ export default function MatchReportScreen() {
 
   const handleSave = async () => {
     if (!formPlayerId || !formType) {
-      Alert.alert('Eroare', 'Selectează tipul evenimentului și jucătorul.');
+      Alert.alert(t('common.error'), t('activity.selectEventType'));
       return;
     }
 
     // Validate event type
     if (!isValidEventType(formType)) {
-      Alert.alert('Eroare', 'Tip de eveniment invalid.');
+      Alert.alert(t('common.error'), t('activity.invalidEventType'));
       return;
     }
 
     // Validate half
     if (!isValidHalf(formHalf)) {
-      Alert.alert('Eroare', 'Repriză invalidă.');
+      Alert.alert(t('common.error'), t('activity.invalidHalf'));
       return;
     }
 
     // Validate minute is required for all events except man_of_the_match
     if (formType !== 'man_of_the_match' && !formMinute.trim()) {
-      Alert.alert('Eroare', 'Minutul este obligatoriu pentru acest tip de eveniment.');
+      Alert.alert(t('common.error'), t('activity.minuteRequired'));
       return;
     }
 
@@ -167,7 +169,7 @@ export default function MatchReportScreen() {
       const updatedEvents = events.map(ev => (ev.id === editingEvent.id ? { ...ev, ...newEvent } : ev));
       const { error } = await addEventsForActivity(activityId, updatedEvents);
       if (error) {
-        Alert.alert('Eroare', 'Nu s-a putut salva evenimentul: ' + error.message);
+        Alert.alert(t('common.error'), t('activity.couldNotSaveEvent') + ': ' + error.message);
         return;
       }
       setEvents(updatedEvents);
@@ -175,7 +177,7 @@ export default function MatchReportScreen() {
       // Add new event
       const { data, error } = await addSingleEvent(newEvent);
       if (error) {
-        Alert.alert('Eroare', 'Nu s-a putut salva evenimentul: ' + error.message);
+        Alert.alert(t('common.error'), t('activity.couldNotSaveEvent') + ': ' + error.message);
         return;
       }
       // Refresh events to get the new one with proper ID
@@ -197,7 +199,7 @@ export default function MatchReportScreen() {
     const updatedEvents = events.filter(ev => ev.id !== eventToDelete.id);
     const { error } = await addEventsForActivity(activityId, updatedEvents);
     if (error) {
-      Alert.alert('Eroare', 'Nu s-a putut șterge evenimentul: ' + error.message);
+      Alert.alert(t('common.error'), t('activity.couldNotDeleteEvent') + ': ' + error.message);
       return;
     }
     setEvents(updatedEvents);
@@ -275,14 +277,14 @@ export default function MatchReportScreen() {
         <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 4 }}>
           <MaterialCommunityIcons name="arrow-left" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <Appbar.Content title="Raport meci" titleStyle={{ fontWeight: 'bold', fontSize: 20 }} />
+        <Appbar.Content title={t('activity.matchReport')} titleStyle={{ fontWeight: 'bold', fontSize: 20 }} />
       </Appbar.Header>
       <ScrollView contentContainerStyle={{ padding: 20 }}>
-        <Text style={{ fontSize: 20, fontWeight: 'bold', marginBottom: 16 }}>Evenimente</Text>
+        <Text style={{ fontSize: 20, fontWeight: 'bold', marginBottom: 16 }}>{t('activity.events')}</Text>
         {loading ? (
-          <Text>Se încarcă...</Text>
+          <Text>{t('common.loading')}</Text>
         ) : events.length === 0 ? (
-          <Text style={{ color: COLORS.grey[600] }}>Niciun eveniment adăugat.</Text>
+          <Text style={{ color: COLORS.grey[600] }}>{t('activity.noEventsYet')}</Text>
         ) : (
           events.map(ev => (
             <View key={ev.id || ev.player_id + ev.event_type + ev.minute} style={styles.eventCard}>
@@ -295,8 +297,8 @@ export default function MatchReportScreen() {
                 />
                 <Text style={{ fontSize: 13, flex: 1, fontWeight: '500', color: '#222' }}>
                   {ev.event_type === 'man_of_the_match'
-                    ? `Man of the match: ${lineupPlayers.find(p => p.id === ev.player_id)?.name || ''}`
-                    : `${lineupPlayers.find(p => p.id === ev.player_id)?.name || ''} - ${getEventLabel(ev.event_type)} (${getHalfLabel(ev.half || 'first')}, min ${ev.minute || ''})`
+                    ? `${lineupPlayers.find(p => p.id === ev.player_id)?.name || ''}`
+                    : `${lineupPlayers.find(p => p.id === ev.player_id)?.name || ''} (${getHalfLabel(ev.half || 'first')}, min ${ev.minute || ''})`
                   }
                 </Text>
               </View>
@@ -316,8 +318,8 @@ export default function MatchReportScreen() {
         <View style={{ height: 32 }} />
         {userRole === 'coach' && (
           <View style={styles.formCard}>
-            <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 16 }}>{editingEvent ? 'Editează eveniment' : 'Adaugă eveniment'}</Text>
-            <Text style={{ marginBottom: 8, fontWeight: '500' }}>Tip eveniment:</Text>
+            <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 16 }}>{editingEvent ? t('activity.editEvent') : t('activity.addEvent')}</Text>
+            <Text style={{ marginBottom: 8, fontWeight: '500' }}>{t('activity.eventType')}:</Text>
             <View style={styles.pillRow}>
               {eventTypeOptions.map(opt => (
                 <TouchableOpacity
@@ -330,28 +332,28 @@ export default function MatchReportScreen() {
               ))}
             </View>
             <View style={{ marginTop: 16, marginBottom: 8 }}>
-              <Text style={{ fontWeight: '500', marginBottom: 4 }}>Jucător</Text>
+              <Text style={{ fontWeight: '500', marginBottom: 4 }}>{t('activity.player')}</Text>
               <View style={styles.playerMinuteRow}>
                 <TouchableOpacity
                   style={styles.playerSelector}
                   onPress={() => setShowPlayerPicker(true)}
                 >
                   <Text style={[styles.playerSelectorText, !selectedPlayerName && styles.placeholderText]}>
-                    {selectedPlayerName || 'Selectează jucătorul'}
+                    {selectedPlayerName || t('activity.selectPlayer')}
                   </Text>
                   <MaterialCommunityIcons name="chevron-down" size={20} color={COLORS.primary} style={{ marginLeft: 8 }} />
                 </TouchableOpacity>
               </View>
             </View>
             <View style={{ marginTop: 16, marginBottom: 8 }}>
-              <Text style={{ fontWeight: '500', marginBottom: 4 }}>Repriză și minut</Text>
+              <Text style={{ fontWeight: '500', marginBottom: 4 }}>{t('activity.halfAndMinute')}</Text>
               <View style={styles.halfMinuteRow}>
                 <TouchableOpacity
                   style={styles.halfSelector}
                   onPress={() => setShowHalfPicker(true)}
                 >
                   <Text style={[styles.halfSelectorText, !formHalf && styles.placeholderText]}>
-                    {formHalf === 'first' ? 'Prima' : formHalf === 'second' ? 'A doua' : 'Repriză:'}
+                    {formHalf === 'first' ? t('activity.firstHalf') : formHalf === 'second' ? t('activity.secondHalf') : t('activity.half') + ':'}
                   </Text>
                   <MaterialCommunityIcons name="chevron-down" size={20} color={COLORS.primary} style={{ marginLeft: 8 }} />
                 </TouchableOpacity>
@@ -367,9 +369,9 @@ export default function MatchReportScreen() {
 
               </View>
             </View>
-            <Button mode="contained" onPress={handleSave} style={styles.addButton}>{editingEvent ? 'Salvează modificările' : 'Adaugă eveniment'}</Button>
+            <Button mode="contained" onPress={handleSave} style={styles.addButton}>{editingEvent ? t('activity.saveChanges') : t('activity.addEvent')}</Button>
             {editingEvent && (
-              <Button mode="text" onPress={resetForm} style={{ marginTop: 4 }}>Renunță la editare</Button>
+              <Button mode="text" onPress={resetForm} style={{ marginTop: 4 }}>{t('activity.cancelEdit')}</Button>
             )}
           </View>
         )}
@@ -386,7 +388,7 @@ export default function MatchReportScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Selectează jucătorul</Text>
+              <Text style={styles.modalTitle}>{t('activity.selectPlayer')}</Text>
               <TouchableOpacity onPress={() => setShowPlayerPicker(false)}>
                 <MaterialCommunityIcons name="close" size={24} color={COLORS.primary} />
               </TouchableOpacity>
@@ -421,7 +423,7 @@ export default function MatchReportScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Selectează repriza</Text>
+              <Text style={styles.modalTitle}>{t('activity.selectHalf')}</Text>
               <TouchableOpacity onPress={() => setShowHalfPicker(false)}>
                 <MaterialCommunityIcons name="close" size={24} color={COLORS.primary} />
               </TouchableOpacity>
@@ -448,13 +450,13 @@ export default function MatchReportScreen() {
       <Portal>
         {userRole === 'coach' && (
           <Dialog visible={showDeleteDialog} onDismiss={() => setShowDeleteDialog(false)}>
-            <Dialog.Title>Confirmare ștergere</Dialog.Title>
+            <Dialog.Title>{t('activity.deleteEventConfirmation')}</Dialog.Title>
             <Dialog.Content>
-              <Text>Sigur vrei să ștergi acest eveniment?</Text>
+              <Text>{t('activity.deleteEventConfirmation')}</Text>
             </Dialog.Content>
             <Dialog.Actions>
-              <Button onPress={() => setShowDeleteDialog(false)}>Anulează</Button>
-              <Button onPress={handleDelete} color={COLORS.error}>Șterge</Button>
+              <Button onPress={() => setShowDeleteDialog(false)}>{t('activity.cancel')}</Button>
+              <Button onPress={handleDelete} color={COLORS.error}>{t('activity.delete')}</Button>
             </Dialog.Actions>
           </Dialog>
         )}

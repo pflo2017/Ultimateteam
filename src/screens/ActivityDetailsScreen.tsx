@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Modal, TextInput as RNTextInput, Platform } from 'react-native';
 import { Text, Button, IconButton, Divider, Menu, Dialog, Portal, TextInput, RadioButton } from 'react-native-paper';
 import { COLORS, SPACING } from '../constants/theme';
-import { useNavigation, useRoute, RouteProp, useNavigationState } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp, useNavigationState, useFocusEffect } from '@react-navigation/native';
 import { format, parseISO } from 'date-fns';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { getActivityById, deleteActivity, ActivityType, Activity, updateGameScore } from '../services/activitiesService';
@@ -293,6 +293,34 @@ export const ActivityDetailsScreen = () => {
     };
     fetchMatchEvents();
   }, [activityId]);
+
+  // Add this useFocusEffect to refresh match events when returning to this screen
+  useFocusEffect(
+    useCallback(() => {
+      const fetchMatchEvents = async () => {
+        if (!activityId) return;
+        const { data, error } = await getEventsForActivity(activityId);
+        if (!error && data) {
+          const mappedEvents = data.map((e: ActivityEvent) => ({
+            type: (reverseEventTypeMap[e.event_type] || e.event_type) as MatchEvent['type'],
+            player: e.player_id || '',
+            half: e.half === 'first' ? '1' : e.half === 'second' ? '2' : e.half || '',
+            minute: e.minute?.toString() || ''
+          }));
+          const sortedEvents = mappedEvents.sort((a, b) => {
+            if (a.half !== b.half) {
+              return a.half === '1' ? -1 : 1;
+            }
+            const minuteA = parseInt(a.minute) || 0;
+            const minuteB = parseInt(b.minute) || 0;
+            return minuteA - minuteB;
+          });
+          setMatchEvents(sortedEvents);
+        }
+      };
+      fetchMatchEvents();
+    }, [activityId])
+  );
   
   const loadActivity = async () => {
     try {
@@ -870,10 +898,10 @@ export const ActivityDetailsScreen = () => {
           <View style={styles.scoreContainer}>
             <View style={{ flexDirection: 'row', marginBottom: 12 }}>
               <TouchableOpacity onPress={() => setActiveTab('score')} style={[styles.tabButton, activeTab === 'score' && styles.tabButtonActive]}>
-                <Text style={[styles.tabButtonText, activeTab === 'score' && styles.tabButtonTextActive]}>Scor</Text>
+                <Text style={[styles.tabButtonText, activeTab === 'score' && styles.tabButtonTextActive]}>{t('activity.score')}</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={() => setActiveTab('report')} style={[styles.tabButton, activeTab === 'report' && styles.tabButtonActive]}>
-                <Text style={[styles.tabButtonText, activeTab === 'report' && styles.tabButtonTextActive]}>Raport meci</Text>
+                <Text style={[styles.tabButtonText, activeTab === 'report' && styles.tabButtonTextActive]}>{t('activity.matchReport')}</Text>
               </TouchableOpacity>
             </View>
             {activeTab === 'score' ? (
@@ -951,10 +979,10 @@ export const ActivityDetailsScreen = () => {
                           <MaterialCommunityIcons name="plus" size={14} color={COLORS.white} />
                         </TouchableOpacity>
                         <Text style={{ marginTop: 16, fontSize: 16, color: COLORS.grey[600], textAlign: 'center' }}>
-                          Nu există evenimente încă
+                          {t('activity.noEventsYet')}
                         </Text>
                         <Text style={{ marginTop: 4, fontSize: 14, color: COLORS.grey[500], textAlign: 'center' }}>
-                          Atinge pentru a adăuga evenimente
+                          {t('activity.tapToAddEvents')}
                         </Text>
                       </>
                     ) : (
@@ -962,10 +990,10 @@ export const ActivityDetailsScreen = () => {
                       <>
                         <MaterialCommunityIcons name="clipboard-text-outline" size={60} color={COLORS.grey[400]} />
                         <Text style={{ marginTop: 16, fontSize: 16, color: COLORS.grey[600], textAlign: 'center' }}>
-                          Nu există evenimente încă
+                          {t('activity.noEventsYet')}
                         </Text>
                         <Text style={{ marginTop: 4, fontSize: 14, color: COLORS.grey[500], textAlign: 'center' }}>
-                          Antrenorul nu a înregistrat evenimente pentru acest meci
+                          {t('activity.coachNotRecorded')}
                         </Text>
                       </>
                     )}
@@ -975,7 +1003,7 @@ export const ActivityDetailsScreen = () => {
                    <View style={{ width: '100%' }}>
                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                        <Text style={{ fontSize: 18, fontWeight: '600', color: COLORS.text }}>
-                         Evenimente meci
+                         {t('activity.matchEvents')}
                        </Text>
                        {userRole === 'coach' && (
                          <TouchableOpacity
@@ -1011,9 +1039,9 @@ export const ActivityDetailsScreen = () => {
                            {/* Man of the match section */}
                            {manOfTheMatchEvents.length > 0 && (
                              <View style={{ marginBottom: 16 }}>
-                               <Text style={{ fontSize: 14, fontWeight: '600', color: COLORS.text, marginBottom: 8 }}>
-                                 Man of the match
-                               </Text>
+                                                          <Text style={{ fontSize: 14, fontWeight: '600', color: COLORS.text, marginBottom: 8 }}>
+                             {t('activity.manOfTheMatch')}
+                           </Text>
                                {manOfTheMatchEvents.map((event, idx) => {
                                  return (
                                    <View key={idx} style={{
@@ -1047,7 +1075,7 @@ export const ActivityDetailsScreen = () => {
                            {firstHalfEvents.length > 0 && (
                              <View style={{ marginBottom: 16 }}>
                                <Text style={{ fontSize: 14, fontWeight: '600', color: COLORS.text, marginBottom: 8 }}>
-                                 Prima Repriză
+                                 {t('activity.firstHalf')}
                                </Text>
                                {firstHalfEvents.map((event, idx) => {
                       const normalizedType = normalizeEventType(event.type);
@@ -1105,7 +1133,7 @@ export const ActivityDetailsScreen = () => {
                            {secondHalfEvents.length > 0 && (
                              <View style={{ marginBottom: 16 }}>
                                <Text style={{ fontSize: 14, fontWeight: '600', color: COLORS.text, marginBottom: 8 }}>
-                                 Repriza a doua
+                                 {t('activity.secondHalf')}
                                </Text>
                                {secondHalfEvents.map((event, idx) => {
                                  const normalizedType = normalizeEventType(event.type);
