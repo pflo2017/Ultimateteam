@@ -677,7 +677,7 @@ export const CreateActivityScreen = () => {
             <View style={styles.modalOverlay}>
               <View style={styles.modalContent}>
                 <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>{t('admin.activityForm.selectPlayersForLineup')}</Text>
+                  <Text style={[styles.modalTitle, { fontSize: 18 }]}>{t('admin.activityForm.selectPlayersForLineup')}</Text>
                   <TouchableOpacity 
                     onPress={() => setShowPlayerMenu(false)}
                     style={styles.closeButton}
@@ -722,6 +722,15 @@ export const CreateActivityScreen = () => {
                     <Text style={styles.noTeamsText}>{t('admin.activityForm.noPlayersAvailable')}</Text>
                   )}
                 </ScrollView>
+                <Button
+                  mode="contained"
+                  onPress={() => setShowPlayerMenu(false)}
+                  style={{ marginTop: 16, borderRadius: 8 }}
+                  contentStyle={{ paddingVertical: 6 }}
+                  labelStyle={{ fontSize: 16, fontWeight: '600' }}
+                >
+                  OK
+                </Button>
               </View>
             </View>
           </Modal>

@@ -1159,6 +1159,13 @@ export const EventCard = ({ activity, isWeeklyView }: { activity: Activity, isWe
               <Text style={[styles.eventTypeText, { color: activityColor }]}> 
                 {getActivityTypeLabel(activity.type, t)}
               </Text>
+              {/* Show lineup count for game activities */}
+              {activity.type === 'game' && Array.isArray(activity.lineup_players) && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 8 }}>
+                  <MaterialCommunityIcons name="account-group" size={16} color={COLORS.grey[600]} style={{ marginRight: 2 }} />
+                  <Text style={{ fontSize: 13, color: COLORS.grey[700], fontWeight: '600' }}>{activity.lineup_players.length}</Text>
+                </View>
+              )}
               {activity.is_repeating && (
                 <MaterialCommunityIcons name="repeat" size={14} color={activityColor} style={styles.repeatIcon} />
               )}

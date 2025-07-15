@@ -6,17 +6,73 @@ import { useNavigation, useRoute, RouteProp, useNavigationState } from '@react-n
 import { format, parseISO } from 'date-fns';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { getActivityById, deleteActivity, ActivityType, Activity, updateGameScore } from '../services/activitiesService';
+import { getEventsForActivity, addEventsForActivity, ActivityEvent } from '../services/activityEventsService';
 import type { RootStackParamList, ParentStackParamList } from '../types/navigation';
 import { StatusBar } from 'expo-status-bar';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { useTranslation } from 'react-i18next';
+import MatchReportScreen from './MatchReportScreen';
 
 type ActivityDetailsScreenRouteProp = RouteProp<RootStackParamList | ParentStackParamList, 'ActivityDetails'>;
 type ActivityDetailsScreenNavigationProp = NativeStackNavigationProp<
   RootStackParamList & ParentStackParamList
 >;
+
+type MatchEvent = {
+  type: 'goal' | 'assist' | 'yellow' | 'red' | 'man_of_the_match';
+  player: string;
+  half: string;
+  minute: string;
+};
+
+// Add event type mapping for DB
+const eventTypeMap: Record<string, string> = {
+  goal: 'goal',
+  assist: 'assist',
+  yellow: 'yellow_card',
+  red: 'red_card',
+  man_of_the_match: 'man_of_the_match'
+};
+
+// Reverse mapping from DB to local types
+const reverseEventTypeMap: Record<string, string> = {
+  goal: 'goal',
+  assist: 'assist',
+  yellow_card: 'yellow',
+  red_card: 'red',
+  man_of_the_match: 'man_of_the_match'
+};
+
+// Helper to map local MatchEvent to ActivityEvent
+const mapMatchEventToActivityEvent = (event: MatchEvent, activityId: string): ActivityEvent => {
+  const dbEventType = eventTypeMap[event.type] || event.type;
+  if (dbEventType === 'man_of_the_match') {
+    return {
+      activity_id: activityId,
+      event_type: dbEventType,
+      player_id: event.player
+    };
+  }
+  return {
+    activity_id: activityId,
+    event_type: dbEventType as ActivityEvent['event_type'],
+    player_id: event.player,
+    half: event.half === '1' ? 'first' : event.half === '2' ? 'second' : event.half as any,
+    minute: event.minute ? parseInt(event.minute) : undefined
+  };
+};
+
+// Helper to normalize event types for display
+const normalizeEventType = (type: string): 'goal' | 'assist' | 'yellow_card' | 'red_card' | 'man_of_the_match' => {
+  if (type === 'yellow') return 'yellow_card';
+  if (type === 'red') return 'red_card';
+  if (type === 'goal') return 'goal';
+  if (type === 'assist') return 'assist';
+  if (type === 'man_of_the_match') return 'man_of_the_match';
+  return 'goal'; // fallback, should never happen
+};
 
 export const ActivityDetailsScreen = () => {
   const navigation = useNavigation<ActivityDetailsScreenNavigationProp>();
@@ -64,6 +120,10 @@ export const ActivityDetailsScreen = () => {
   const [parentChildren, setParentChildren] = useState<{id: string, name: string}[]>([]);
   const [isUpdatingPresence, setIsUpdatingPresence] = useState(false);
   const [presenceStatus, setPresenceStatus] = useState<'going' | 'not-going'>('going');
+  
+  // Add at the top of the component
+  const [activeTab, setActiveTab] = useState<'score' | 'report'>('score');
+  const [matchEvents, setMatchEvents] = useState<MatchEvent[]>([]);
   
   const { t } = useTranslation();
   
@@ -170,6 +230,38 @@ export const ActivityDetailsScreen = () => {
     };
     loadPresenceResponses();
   }, [activity?.id]);
+  
+  useEffect(() => {
+    // Fetch match events from Supabase when activity loads
+    const fetchMatchEvents = async () => {
+      if (!activityId) return;
+      const { data, error } = await getEventsForActivity(activityId);
+      if (!error && data) {
+        // Map DB events to local MatchEvent format and sort chronologically
+        const mappedEvents = data.map((e: ActivityEvent) => ({
+          type: (reverseEventTypeMap[e.event_type] || e.event_type) as MatchEvent['type'],
+          player: e.player_id || '',
+          half: e.half === 'first' ? '1' : e.half === 'second' ? '2' : e.half || '',
+          minute: e.minute?.toString() || ''
+        }));
+        
+        // Sort events: first half before second half, then by minute within each half
+        const sortedEvents = mappedEvents.sort((a, b) => {
+          // First sort by half (1st half before 2nd half)
+          if (a.half !== b.half) {
+            return a.half === '1' ? -1 : 1;
+          }
+          // Then sort by minute within the same half
+          const minuteA = parseInt(a.minute) || 0;
+          const minuteB = parseInt(b.minute) || 0;
+          return minuteA - minuteB;
+        });
+        
+        setMatchEvents(sortedEvents);
+      }
+    };
+    fetchMatchEvents();
+  }, [activityId]);
   
   const loadActivity = async () => {
     try {
@@ -545,7 +637,7 @@ export const ActivityDetailsScreen = () => {
                           {/* Show reason for not going if available and user is coach/admin */}
                           {status === 'not-going' && note && (userRole === 'coach' || userRole === 'admin') && (
                             <Text style={{ color: '#C62828', fontSize: 13, marginLeft: 8 }}>
-                              ({note.charAt(0).toUpperCase() + note.slice(1)})
+                              ( {t(`activity.reasons.${note}`)} )
                             </Text>
                           )}
                         </View>
@@ -603,7 +695,7 @@ export const ActivityDetailsScreen = () => {
                           {/* Show reason for not going if available and user is coach/admin */}
                           {status === 'not-going' && note && (userRole === 'coach' || userRole === 'admin') && (
                             <Text style={{ color: '#C62828', fontSize: 13, marginLeft: 8 }}>
-                              ({note.charAt(0).toUpperCase() + note.slice(1)})
+                              ( {t(`activity.reasons.${note}`)} )
                             </Text>
                           )}
                         </View>
@@ -650,6 +742,22 @@ export const ActivityDetailsScreen = () => {
       </SafeAreaView>
     );
   }
+  
+  // Helper to map player name <-> ID, now inside the component for access to activity/lineupNames
+  const getPlayerIdByName = (name: string): string | undefined => {
+    if (!activity || !activity.lineup_players || !lineupNames.length) return undefined;
+    const idx = lineupNames.findIndex(n => n === name);
+    return idx !== -1 ? activity.lineup_players[idx] : undefined;
+  };
+  const getPlayerNameById = (id: string): string => {
+    if (!activity || !activity.lineup_players || !lineupNames.length) return id;
+    const idx = activity.lineup_players.findIndex(pid => pid === id);
+    return idx !== -1 ? lineupNames[idx] : id;
+  };
+  
+  const eventTypesWithLabel: Array<'goal' | 'assist' | 'yellow_card' | 'red_card'> = [
+    'goal', 'assist', 'yellow_card', 'red_card'
+  ];
   
   return (
     <SafeAreaView style={styles.container}>
@@ -729,68 +837,284 @@ export const ActivityDetailsScreen = () => {
         {/* Display score for games */}
         {activity.type === 'game' && (
           <View style={styles.scoreContainer}>
-            <Text style={styles.sectionTitle}>{t('activity.score')}</Text>
-            <View style={styles.recordScoreRow}>
-              <View style={styles.scoreColumn}>
-                <Text style={styles.scoreLabel}>{scoreLabels.left}</Text>
-                <TextInput
-                  value={activity && activity.home_away === 'home' ? homeScore : awayScore}
-                  onChangeText={val => activity && activity.home_away === 'home' ? setHomeScore(val) : setAwayScore(val)}
-                  mode="flat"
-                  keyboardType="number-pad"
-                  style={{
-                    fontSize: 28,
-                    textAlign: 'center',
-                    borderBottomWidth: 2,
-                    borderColor: COLORS.primary,
-                    backgroundColor: 'transparent',
-                    marginTop: 8,
-                    width: 60,
-                    alignSelf: 'center',
-                  }}
-                  maxLength={2}
-                  editable
-                  underlineColor={COLORS.primary}
-                  selectionColor={COLORS.primary}
-                  placeholder="0"
-                />
-              </View>
-              <Text style={styles.scoreDash}>–</Text>
-              <View style={styles.scoreColumn}>
-                <Text style={styles.scoreLabel}>{scoreLabels.right}</Text>
-                <TextInput
-                  value={activity && activity.home_away === 'home' ? awayScore : homeScore}
-                  onChangeText={val => activity && activity.home_away === 'home' ? setAwayScore(val) : setHomeScore(val)}
-                  mode="flat"
-                  keyboardType="number-pad"
-                  style={{
-                    fontSize: 28,
-                    textAlign: 'center',
-                    borderBottomWidth: 2,
-                    borderColor: COLORS.primary,
-                    backgroundColor: 'transparent',
-                    marginTop: 8,
-                    width: 60,
-                    alignSelf: 'center',
-                  }}
-                  maxLength={2}
-                  editable
-                  underlineColor={COLORS.primary}
-                  selectionColor={COLORS.primary}
-                  placeholder="0"
-                />
-              </View>
+            <View style={{ flexDirection: 'row', marginBottom: 12 }}>
+              <TouchableOpacity onPress={() => setActiveTab('score')} style={[styles.tabButton, activeTab === 'score' && styles.tabButtonActive]}>
+                <Text style={[styles.tabButtonText, activeTab === 'score' && styles.tabButtonTextActive]}>Scor</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setActiveTab('report')} style={[styles.tabButton, activeTab === 'report' && styles.tabButtonActive]}>
+                <Text style={[styles.tabButtonText, activeTab === 'report' && styles.tabButtonTextActive]}>Raport meci</Text>
+              </TouchableOpacity>
             </View>
-            
-            {(userRole === 'coach' || userRole === 'admin') && (
-              <Button 
-                mode="outlined" 
-                onPress={() => setShowScoreDialog(true)}
-                style={styles.updateScoreButton}
-                icon="pencil"
-              >
-                {t('activity.updateScore')}
-              </Button>
+            {activeTab === 'score' ? (
+              <>
+                <Text style={styles.sectionTitle}>{t('activity.score')}</Text>
+                <View style={styles.recordScoreRow}>
+                  <View style={styles.scoreColumn}>
+                    <Text style={styles.scoreLabel}>{scoreLabels.left}</Text>
+                    <TextInput
+                      value={activity && activity.home_away === 'home' ? homeScore : awayScore}
+                      onChangeText={val => activity && activity.home_away === 'home' ? setHomeScore(val) : setAwayScore(val)}
+                      mode="flat"
+                      keyboardType="number-pad"
+                      style={{ fontSize: 28, textAlign: 'center', borderBottomWidth: 2, borderColor: COLORS.primary, backgroundColor: 'transparent', marginTop: 8, width: 60, alignSelf: 'center' }}
+                      maxLength={2}
+                      editable={userRole === 'coach'}
+                      underlineColor={COLORS.primary}
+                      selectionColor={COLORS.primary}
+                      placeholder="0"
+                    />
+                  </View>
+                  <Text style={styles.scoreDash}>–</Text>
+                  <View style={styles.scoreColumn}>
+                    <Text style={styles.scoreLabel}>{scoreLabels.right}</Text>
+                    <TextInput
+                      value={activity && activity.home_away === 'home' ? awayScore : homeScore}
+                      onChangeText={val => activity && activity.home_away === 'home' ? setAwayScore(val) : setHomeScore(val)}
+                      mode="flat"
+                      keyboardType="number-pad"
+                      style={{ fontSize: 28, textAlign: 'center', borderBottomWidth: 2, borderColor: COLORS.primary, backgroundColor: 'transparent', marginTop: 8, width: 60, alignSelf: 'center' }}
+                      maxLength={2}
+                      editable={userRole === 'coach'}
+                      underlineColor={COLORS.primary}
+                      selectionColor={COLORS.primary}
+                      placeholder="0"
+                    />
+                  </View>
+                </View>
+                {userRole === 'coach' && (
+                  <Button 
+                    mode="outlined" 
+                    onPress={() => setShowScoreDialog(true)}
+                    style={styles.updateScoreButton}
+                    icon="pencil"
+                  >
+                    {t('activity.updateScore')}
+                  </Button>
+                )}
+              </>
+            ) : (
+              <View style={{ minHeight: 200 }}>
+                {matchEvents.length === 0 ? (
+                  // Empty state - show plus icon to invite user to create events
+                  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 40 }}>
+                  <TouchableOpacity
+                    onPress={() => navigation.navigate('MatchReportScreen', { activityId: activity.id, lineupPlayers: (activity.lineup_players ?? []).map((id, idx) => ({ id, name: lineupNames[idx] || id })) })}
+                      style={{ 
+                        backgroundColor: COLORS.primary, 
+                        borderRadius: 50, 
+                        width: 80, 
+                        height: 80, 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 2 },
+                        shadowOpacity: 0.25,
+                        shadowRadius: 3.84,
+                        elevation: 5,
+                      }}
+                    accessibilityLabel="Adaugă eveniment"
+                  >
+                      <MaterialCommunityIcons name="plus" size={40} color={COLORS.white} />
+                  </TouchableOpacity>
+                    <Text style={{ marginTop: 16, fontSize: 16, color: COLORS.grey[600], textAlign: 'center' }}>
+                      Nu există evenimente încă
+                    </Text>
+                    <Text style={{ marginTop: 4, fontSize: 14, color: COLORS.grey[500], textAlign: 'center' }}>
+                      Atinge pentru a adăuga evenimente
+                    </Text>
+                </View>
+                                 ) : (
+                   // Events list view (same as MatchReportScreen)
+                   <View style={{ width: '100%' }}>
+                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                       <Text style={{ fontSize: 18, fontWeight: '600', color: COLORS.text }}>
+                         Evenimente meci
+                       </Text>
+                       <TouchableOpacity
+                         onPress={() => navigation.navigate('MatchReportScreen', { activityId: activity.id, lineupPlayers: (activity.lineup_players ?? []).map((id, idx) => ({ id, name: lineupNames[idx] || id })) })}
+                         style={{ 
+                           backgroundColor: COLORS.primary, 
+                           borderRadius: 16, 
+                           width: 32, 
+                           height: 32, 
+                           alignItems: 'center', 
+                           justifyContent: 'center' 
+                         }}
+                         accessibilityLabel="Editează evenimente"
+                       >
+                         <MaterialCommunityIcons name="pencil" size={12} color={COLORS.white} />
+                       </TouchableOpacity>
+                     </View>
+                     
+                     {/* Events list - organized by half */}
+                     {(() => {
+                       // Separate events by type and half
+                       const manOfTheMatchEvents = matchEvents.filter(event => normalizeEventType(event.type) === 'man_of_the_match');
+                       const firstHalfEvents = matchEvents.filter(event => 
+                         normalizeEventType(event.type) !== 'man_of_the_match' && event.half === '1'
+                       );
+                       const secondHalfEvents = matchEvents.filter(event => 
+                         normalizeEventType(event.type) !== 'man_of_the_match' && event.half === '2'
+                       );
+                       
+                       return (
+                         <View>
+                           {/* Man of the match section */}
+                           {manOfTheMatchEvents.length > 0 && (
+                             <View style={{ marginBottom: 16 }}>
+                               <Text style={{ fontSize: 14, fontWeight: '600', color: COLORS.text, marginBottom: 8 }}>
+                                 Man of the match
+                               </Text>
+                               {manOfTheMatchEvents.map((event, idx) => {
+                                 return (
+                                   <View key={idx} style={{
+                                     backgroundColor: '#fff',
+                                     borderRadius: 8,
+                                     padding: 8,
+                                     marginBottom: 4,
+                                     flexDirection: 'row',
+                                     alignItems: 'center',
+                                     borderWidth: 1,
+                                     borderColor: '#f0f0f0',
+                                   }}>
+                                     <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                                       <MaterialCommunityIcons
+                                         name="star"
+                                         color="#FFD700"
+                                         size={22}
+                                         style={{ marginRight: 12 }}
+                                       />
+                                       <Text style={{ fontSize: 13, flex: 1, fontWeight: '500', color: '#222' }}>
+                                         {getPlayerNameById(event.player)}
+                                       </Text>
+                                     </View>
+                                   </View>
+                                 );
+                               })}
+                             </View>
+                           )}
+                           
+                           {/* First half section */}
+                           {firstHalfEvents.length > 0 && (
+                             <View style={{ marginBottom: 16 }}>
+                               <Text style={{ fontSize: 14, fontWeight: '600', color: COLORS.text, marginBottom: 8 }}>
+                                 Prima Repriză
+                               </Text>
+                               {firstHalfEvents.map((event, idx) => {
+                      const normalizedType = normalizeEventType(event.type);
+                      let icon = 'star';
+                      let color = '#FFD700';
+                      let label = '';
+                                 
+                      if (normalizedType === 'goal') {
+                        icon = 'soccer';
+                        color = '#43a047';
+                        label = 'Gol';
+                      } else if (normalizedType === 'assist') {
+                        icon = 'handshake';
+                        color = '#1976d2';
+                        label = 'Assist';
+                      } else if (normalizedType === 'yellow_card') {
+                        icon = 'cards';
+                        color = '#fbc02d';
+                        label = 'Galben';
+                      } else if (normalizedType === 'red_card') {
+                                   icon = 'cards';
+                        color = '#d32f2f';
+                        label = 'Roșu';
+                      }
+                                 
+                      return (
+                                   <View key={idx} style={{
+                                     backgroundColor: '#fff',
+                                     borderRadius: 8,
+                                     padding: 8,
+                                     marginBottom: 4,
+                                     flexDirection: 'row',
+                                     alignItems: 'center',
+                                     borderWidth: 1,
+                                     borderColor: '#f0f0f0',
+                                   }}>
+                                     <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                          <MaterialCommunityIcons
+                            name={icon as any}
+                            color={color}
+                            size={22}
+                                         style={{ marginRight: 12 }}
+                                       />
+                                       <Text style={{ fontSize: 13, flex: 1, fontWeight: '500', color: '#222' }}>
+                                         {getPlayerNameById(event.player)} min {event.minute}
+                                       </Text>
+                                     </View>
+                                   </View>
+                                 );
+                               })}
+                             </View>
+                           )}
+                           
+                           {/* Second half section */}
+                           {secondHalfEvents.length > 0 && (
+                             <View style={{ marginBottom: 16 }}>
+                               <Text style={{ fontSize: 14, fontWeight: '600', color: COLORS.text, marginBottom: 8 }}>
+                                 Repriza a doua
+                               </Text>
+                               {secondHalfEvents.map((event, idx) => {
+                                 const normalizedType = normalizeEventType(event.type);
+                                 let icon = 'star';
+                                 let color = '#FFD700';
+                                 let label = '';
+                                 
+                                 if (normalizedType === 'goal') {
+                                   icon = 'soccer';
+                                   color = '#43a047';
+                                   label = 'Gol';
+                                 } else if (normalizedType === 'assist') {
+                                   icon = 'handshake';
+                                   color = '#1976d2';
+                                   label = 'Assist';
+                                 } else if (normalizedType === 'yellow_card') {
+                                   icon = 'cards';
+                                   color = '#fbc02d';
+                                   label = 'Galben';
+                                 } else if (normalizedType === 'red_card') {
+                                   icon = 'cards';
+                                   color = '#d32f2f';
+                                   label = 'Roșu';
+                                 }
+                                 
+                                 return (
+                                   <View key={idx} style={{
+                                     backgroundColor: '#fff',
+                                     borderRadius: 8,
+                                     padding: 8,
+                                     marginBottom: 4,
+                                     flexDirection: 'row',
+                                     alignItems: 'center',
+                                     borderWidth: 1,
+                                     borderColor: '#f0f0f0',
+                                   }}>
+                                     <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                                       <MaterialCommunityIcons
+                                         name={icon as any}
+                                         color={color}
+                                         size={22}
+                                         style={{ marginRight: 12 }}
+                                       />
+                                       <Text style={{ fontSize: 13, flex: 1, fontWeight: '500', color: '#222' }}>
+                                         {getPlayerNameById(event.player)} min {event.minute}
+                          </Text>
+                                     </View>
+                        </View>
+                      );
+                    })}
+                             </View>
+                           )}
+                         </View>
+                       );
+                     })()}
+                  </View>
+                )}
+              </View>
             )}
           </View>
         )}
@@ -1422,5 +1746,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginLeft: 8,
     color: COLORS.text,
+  },
+  tabButton: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: SPACING.sm,
+    borderBottomWidth: 2,
+    borderBottomColor: COLORS.grey[300],
+  },
+  tabButtonActive: {
+    borderBottomColor: COLORS.primary,
+  },
+  tabButtonText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: COLORS.grey[600],
+  },
+  tabButtonTextActive: {
+    color: COLORS.primary,
   },
 }); 

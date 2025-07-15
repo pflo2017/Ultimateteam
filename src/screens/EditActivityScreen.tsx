@@ -7,7 +7,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { format, addMonths, parseISO } from 'date-fns';
-import { ActivityType, getActivityById, updateActivity } from '../services/activitiesService';
+import { ActivityType, getActivityById, updateActivity, getPlayersByTeamId } from '../services/activitiesService';
 import { RepeatSchedule, RepeatType, DayOfWeek } from '../components/Schedule/RepeatSchedule';
 import type { RootStackParamList } from '../types/navigation';
 
@@ -45,11 +45,40 @@ export const EditActivityScreen = () => {
   const [repeatDays, setRepeatDays] = useState<DayOfWeek[]>([]);
   const [repeatUntil, setRepeatUntil] = useState<Date>(addMonths(new Date(), 1));
 
+  // Lineup player selection state
+  const [availablePlayers, setAvailablePlayers] = useState<Array<{id: string, name: string}>>([]);
+  const [selectedPlayers, setSelectedPlayers] = useState<string[]>([]);
+  const [showPlayerModal, setShowPlayerModal] = useState(false);
+
   // Initial data loading
   useEffect(() => {
     loadActivity();
   }, [activityId]);
   
+  // Load players for team if editing a game
+  useEffect(() => {
+    if (activityType === 'game' && teamId) {
+      (async () => {
+        const { data, error } = await getPlayersByTeamId(teamId);
+        if (!error && data) {
+          setAvailablePlayers(data);
+        }
+      })();
+    }
+  }, [activityType, teamId]);
+
+  // When loading activity, pre-select lineup
+  useEffect(() => {
+    if (activityType === 'game' && teamId) {
+      (async () => {
+        const { data, error } = await getActivityById(activityId);
+        if (!error && data && Array.isArray(data.lineup_players)) {
+          setSelectedPlayers(data.lineup_players);
+        }
+      })();
+    }
+  }, [activityType, teamId, activityId]);
+
   const loadActivity = async () => {
     try {
       setIsLoading(true);
@@ -145,7 +174,7 @@ export const EditActivityScreen = () => {
       const startTimeDate = new Date(startDate);
       const endTimeDate = calculateEndTime(startTimeDate, duration);
       
-      const activityData = {
+      const activityData: any = {
         title,
         location,
         start_time: startDate.toISOString(),
@@ -161,6 +190,10 @@ export const EditActivityScreen = () => {
         repeat_days: isRepeating ? repeatDays : undefined,
         repeat_until: isRepeating ? repeatUntil.toISOString() : undefined
       };
+      // Add lineup_players for game
+      if (activityType === 'game') {
+        activityData.lineup_players = selectedPlayers;
+      }
       
       const { data, error } = await updateActivity(activityId, activityData);
       
@@ -358,7 +391,67 @@ export const EditActivityScreen = () => {
           numberOfLines={3}
           placeholder="Don't forget to bring..."
         />
-
+        {/* Lineup selection for game activities */}
+        {activityType === 'game' && teamId && (
+          <View style={{ marginBottom: 20 }}>
+            <Text style={styles.label}>Lineup Players</Text>
+            <TouchableOpacity
+              style={{
+                backgroundColor: COLORS.grey[100],
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: COLORS.grey[200],
+                padding: 12,
+                flexDirection: 'row',
+                alignItems: 'center',
+                marginBottom: 8,
+              }}
+              onPress={() => setShowPlayerModal(true)}
+            >
+              <MaterialCommunityIcons name="account-group" size={20} color={COLORS.primary} style={{ marginRight: 8 }} />
+              <Text style={{ color: COLORS.text, fontSize: 15 }}>
+                {selectedPlayers.length > 0
+                  ? `${selectedPlayers.length} selected`
+                  : 'Select players for lineup'}
+              </Text>
+              <MaterialCommunityIcons name="chevron-down" size={20} color={COLORS.primary} style={{ marginLeft: 'auto' }} />
+            </TouchableOpacity>
+            {/* Modal for multi-select players */}
+            <Modal visible={showPlayerModal} animationType="slide" transparent onRequestClose={() => setShowPlayerModal(false)}>
+              <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'flex-end' }}>
+                <View style={{ backgroundColor: COLORS.white, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 24, maxHeight: '70%' }}>
+                  <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 16 }}>Select Lineup Players</Text>
+                  <ScrollView style={{ maxHeight: 300 }}>
+                    {availablePlayers.map(player => (
+                      <TouchableOpacity
+                        key={player.id}
+                        style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10 }}
+                        onPress={() => {
+                          if (selectedPlayers.includes(player.id)) {
+                            setSelectedPlayers(selectedPlayers.filter(id => id !== player.id));
+                          } else {
+                            setSelectedPlayers([...selectedPlayers, player.id]);
+                          }
+                        }}
+                      >
+                        <MaterialCommunityIcons
+                          name={selectedPlayers.includes(player.id) ? 'checkbox-marked' : 'checkbox-blank-outline'}
+                          size={22}
+                          color={COLORS.primary}
+                          style={{ marginRight: 12 }}
+                        />
+                        <Text style={{ fontSize: 16, color: COLORS.text }}>{player.name}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                  <Button mode="contained" onPress={() => setShowPlayerModal(false)} style={{ marginTop: 16 }}>
+                    Done
+                  </Button>
+                </View>
+              </View>
+            </Modal>
+          </View>
+        )}
         <View style={styles.privateNotesContainer}>
           <Text style={styles.privateNotesTitle}>Private notes for coaches</Text>
           <Text style={styles.privateNotesSubtitle}>Visible for all coaches and admins in the team</Text>

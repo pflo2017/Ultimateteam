@@ -111,6 +111,7 @@ export type RootStackParamList = {
     selectedYear: number;
     selectedActivityType: string;
   };
+  MatchReportScreen: { activityId: string; lineupPlayers: { id: string; name: string }[] };
 };
 
 export type ParentStackParamList = {

@@ -28,6 +28,7 @@ import AddAttendanceScreen from '../screens/AddAttendanceScreen';
 import { PlayerDetailsScreen } from '../screens/PlayerDetailsScreen';
 import { StatisticsScreen } from '../screens/StatisticsScreen';
 import PlayerAttendanceReportScreen from '../screens/PlayerAttendanceReportScreen';
+import MatchReportScreen from '../screens/MatchReportScreen';
 
 // Add global type declaration for reloadRole
 declare global {
@@ -152,6 +153,13 @@ export const Navigation = () => {
                 component={PlayerAttendanceReportScreen}
                 options={{ headerShown: false }}
               />
+              <Stack.Screen
+                name="MatchReportScreen"
+                component={MatchReportScreen}
+                options={{
+                  headerShown: false,
+                }}
+              />
             </>
           ) : role === 'admin' ? (
             <>
@@ -216,6 +224,13 @@ export const Navigation = () => {
                 name="PlayerAttendanceReportScreen"
                 component={PlayerAttendanceReportScreen}
                 options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="MatchReportScreen"
+                component={MatchReportScreen}
+                options={{
+                  headerShown: false,
+                }}
               />
             </>
           ) : role === 'coach' ? (
@@ -289,6 +304,13 @@ export const Navigation = () => {
                 component={PlayerAttendanceReportScreen}
                 options={{ headerShown: false }}
               />
+              <Stack.Screen
+                name="MatchReportScreen"
+                component={MatchReportScreen}
+                options={{
+                  headerShown: false,
+                }}
+              />
             </>
           ) : (
             <>
@@ -328,6 +350,13 @@ export const Navigation = () => {
                 name="PlayerAttendanceReportScreen"
                 component={PlayerAttendanceReportScreen}
                 options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="MatchReportScreen"
+                component={MatchReportScreen}
+                options={{
+                  headerShown: false,
+                }}
               />
             </>
           )}
