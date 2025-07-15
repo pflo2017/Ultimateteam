@@ -5,6 +5,8 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { getEventsForActivity, addEventsForActivity, addSingleEvent, ActivityEvent, ActivityEventType } from '../services/activityEventsService';
 import { COLORS } from '../constants/theme';
+import { filterValidPlayers } from '../utils/playerValidation';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Types
 interface MatchReportScreenRouteParams {
@@ -50,6 +52,7 @@ export default function MatchReportScreen() {
   const [showPlayerPicker, setShowPlayerPicker] = useState(false);
   const [showHalfPicker, setShowHalfPicker] = useState(false);
   const [showMinuteInput, setShowMinuteInput] = useState(false);
+  const [userRole, setUserRole] = useState<'parent' | 'coach' | 'admin' | null>(null);
 
   // Form state
   const [formType, setFormType] = useState<ActivityEventType>('goal');
@@ -59,7 +62,43 @@ export default function MatchReportScreen() {
 
   useEffect(() => {
     fetchEvents();
+    determineUserRole();
   }, [activityId]);
+
+  const determineUserRole = async () => {
+    try {
+      const parentData = await AsyncStorage.getItem('parent_data');
+      const coachData = await AsyncStorage.getItem('coach_data');
+      const adminData = await AsyncStorage.getItem('admin_data');
+      const userData = await AsyncStorage.getItem('user_data');
+      
+      if (parentData) {
+        setUserRole('parent');
+        return;
+      }
+      if (coachData) {
+        setUserRole('coach');
+        return;
+      }
+      if (adminData) {
+        setUserRole('admin');
+        return;
+      }
+      if (userData) {
+        try {
+          const user = JSON.parse(userData);
+          if (user && (user.role === 'admin' || user.isAdmin)) {
+            setUserRole('admin');
+            return;
+          }
+        } catch (e) {
+          // ignore parse error
+        }
+      }
+    } catch (error) {
+      console.error('Error determining user role:', error);
+    }
+  };
 
   const fetchEvents = async () => {
     setLoading(true);
@@ -104,6 +143,12 @@ export default function MatchReportScreen() {
     // Validate half
     if (!isValidHalf(formHalf)) {
       Alert.alert('Eroare', 'Repriză invalidă.');
+      return;
+    }
+
+    // Validate minute is required for all events except man_of_the_match
+    if (formType !== 'man_of_the_match' && !formMinute.trim()) {
+      Alert.alert('Eroare', 'Minutul este obligatoriu pentru acest tip de eveniment.');
       return;
     }
 
@@ -255,84 +300,89 @@ export default function MatchReportScreen() {
                   }
                 </Text>
               </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 8 }}>
-                <TouchableOpacity onPress={() => handleEdit(ev)} style={styles.iconButton}>
-                  <MaterialCommunityIcons name="pencil" size={14} color={COLORS.primary} />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => { setEventToDelete(ev); setShowDeleteDialog(true); }} style={styles.iconButton}>
-                  <MaterialCommunityIcons name="delete" size={14} color={COLORS.error} />
-                </TouchableOpacity>
-              </View>
+              {userRole === 'coach' && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 8 }}>
+                  <TouchableOpacity onPress={() => handleEdit(ev)} style={styles.iconButton}>
+                    <MaterialCommunityIcons name="pencil" size={14} color={COLORS.primary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => { setEventToDelete(ev); setShowDeleteDialog(true); }} style={styles.iconButton}>
+                    <MaterialCommunityIcons name="delete" size={14} color={COLORS.error} />
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
           ))
         )}
         <View style={{ height: 32 }} />
-        <View style={styles.formCard}>
-          <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 16 }}>{editingEvent ? 'Editează eveniment' : 'Adaugă eveniment'}</Text>
-          <Text style={{ marginBottom: 8, fontWeight: '500' }}>Tip eveniment:</Text>
-          <View style={styles.pillRow}>
-            {eventTypeOptions.map(opt => (
-              <TouchableOpacity
-                key={opt.value}
-                style={[styles.pill, formType === opt.value && styles.pillActive]}
-                onPress={() => setFormType(opt.value)}
-              >
-                <Text style={[styles.pillText, formType === opt.value && styles.pillTextActive]}>{opt.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <View style={{ marginTop: 16, marginBottom: 8 }}>
-            <Text style={{ fontWeight: '500', marginBottom: 4 }}>Jucător</Text>
-            <View style={styles.playerMinuteRow}>
-              <TouchableOpacity
-                style={styles.playerSelector}
-                onPress={() => setShowPlayerPicker(true)}
-              >
-                <Text style={[styles.playerSelectorText, !selectedPlayerName && styles.placeholderText]}>
-                  {selectedPlayerName || 'Selectează jucătorul'}
-                </Text>
-                <MaterialCommunityIcons name="chevron-down" size={20} color={COLORS.primary} style={{ marginLeft: 8 }} />
-              </TouchableOpacity>
+        {userRole === 'coach' && (
+          <View style={styles.formCard}>
+            <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 16 }}>{editingEvent ? 'Editează eveniment' : 'Adaugă eveniment'}</Text>
+            <Text style={{ marginBottom: 8, fontWeight: '500' }}>Tip eveniment:</Text>
+            <View style={styles.pillRow}>
+              {eventTypeOptions.map(opt => (
+                <TouchableOpacity
+                  key={opt.value}
+                  style={[styles.pill, formType === opt.value && styles.pillActive]}
+                  onPress={() => setFormType(opt.value)}
+                >
+                  <Text style={[styles.pillText, formType === opt.value && styles.pillTextActive]}>{opt.label}</Text>
+                </TouchableOpacity>
+              ))}
             </View>
-          </View>
-          <View style={{ marginTop: 16, marginBottom: 8 }}>
-            <Text style={{ fontWeight: '500', marginBottom: 4 }}>Repriză și minut</Text>
-            <View style={styles.halfMinuteRow}>
-              <TouchableOpacity
-                style={styles.halfSelector}
-                onPress={() => setShowHalfPicker(true)}
-              >
-                <Text style={[styles.halfSelectorText, !formHalf && styles.placeholderText]}>
-                  {formHalf === 'first' ? 'Prima' : formHalf === 'second' ? 'A doua' : 'Repriză:'}
-                </Text>
-                <MaterialCommunityIcons name="chevron-down" size={20} color={COLORS.primary} style={{ marginLeft: 8 }} />
-              </TouchableOpacity>
-              <TextInput
-                value={formMinute}
-                onChangeText={setFormMinute}
-                keyboardType="number-pad"
-                style={styles.simpleMinuteInput}
-                placeholder="min"
-                placeholderTextColor={COLORS.grey[500]}
-                maxLength={3}
-              />
+            <View style={{ marginTop: 16, marginBottom: 8 }}>
+              <Text style={{ fontWeight: '500', marginBottom: 4 }}>Jucător</Text>
+              <View style={styles.playerMinuteRow}>
+                <TouchableOpacity
+                  style={styles.playerSelector}
+                  onPress={() => setShowPlayerPicker(true)}
+                >
+                  <Text style={[styles.playerSelectorText, !selectedPlayerName && styles.placeholderText]}>
+                    {selectedPlayerName || 'Selectează jucătorul'}
+                  </Text>
+                  <MaterialCommunityIcons name="chevron-down" size={20} color={COLORS.primary} style={{ marginLeft: 8 }} />
+                </TouchableOpacity>
+              </View>
+            </View>
+            <View style={{ marginTop: 16, marginBottom: 8 }}>
+              <Text style={{ fontWeight: '500', marginBottom: 4 }}>Repriză și minut</Text>
+              <View style={styles.halfMinuteRow}>
+                <TouchableOpacity
+                  style={styles.halfSelector}
+                  onPress={() => setShowHalfPicker(true)}
+                >
+                  <Text style={[styles.halfSelectorText, !formHalf && styles.placeholderText]}>
+                    {formHalf === 'first' ? 'Prima' : formHalf === 'second' ? 'A doua' : 'Repriză:'}
+                  </Text>
+                  <MaterialCommunityIcons name="chevron-down" size={20} color={COLORS.primary} style={{ marginLeft: 8 }} />
+                </TouchableOpacity>
+                <TextInput
+                  value={formMinute}
+                  onChangeText={setFormMinute}
+                  keyboardType="number-pad"
+                  style={styles.simpleMinuteInput}
+                  placeholder="min"
+                  placeholderTextColor={COLORS.grey[500]}
+                  maxLength={3}
+                />
 
+              </View>
             </View>
+            <Button mode="contained" onPress={handleSave} style={styles.addButton}>{editingEvent ? 'Salvează modificările' : 'Adaugă eveniment'}</Button>
+            {editingEvent && (
+              <Button mode="text" onPress={resetForm} style={{ marginTop: 4 }}>Renunță la editare</Button>
+            )}
           </View>
-          <Button mode="contained" onPress={handleSave} style={styles.addButton}>{editingEvent ? 'Salvează modificările' : 'Adaugă eveniment'}</Button>
-          {editingEvent && (
-            <Button mode="text" onPress={resetForm} style={{ marginTop: 4 }}>Renunță la editare</Button>
-          )}
-        </View>
+        )}
       </ScrollView>
 
       {/* Player Picker Modal */}
-      <Modal
-        visible={showPlayerPicker}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowPlayerPicker(false)}
-      >
+      {userRole === 'coach' && (
+        <Modal
+          visible={showPlayerPicker}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setShowPlayerPicker(false)}
+        >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
@@ -342,7 +392,7 @@ export default function MatchReportScreen() {
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.modalScrollView} showsVerticalScrollIndicator={false}>
-              {lineupPlayers.map(player => (
+              {filterValidPlayers(lineupPlayers).map(player => (
                 <TouchableOpacity
                   key={player.id}
                   style={styles.playerOption}
@@ -354,18 +404,20 @@ export default function MatchReportScreen() {
                   <Text style={styles.playerOptionText}>{player.name}</Text>
                 </TouchableOpacity>
               ))}
-            </ScrollView>
+                        </ScrollView>
           </View>
         </View>
       </Modal>
+      )}
 
       {/* Half Picker Modal */}
-      <Modal
-        visible={showHalfPicker}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowHalfPicker(false)}
-      >
+      {userRole === 'coach' && (
+        <Modal
+          visible={showHalfPicker}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setShowHalfPicker(false)}
+        >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
@@ -391,18 +443,21 @@ export default function MatchReportScreen() {
           </View>
         </View>
       </Modal>
+      )}
 
       <Portal>
-        <Dialog visible={showDeleteDialog} onDismiss={() => setShowDeleteDialog(false)}>
-          <Dialog.Title>Confirmare ștergere</Dialog.Title>
-          <Dialog.Content>
-            <Text>Sigur vrei să ștergi acest eveniment?</Text>
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setShowDeleteDialog(false)}>Anulează</Button>
-            <Button onPress={handleDelete} color={COLORS.error}>Șterge</Button>
-          </Dialog.Actions>
-        </Dialog>
+        {userRole === 'coach' && (
+          <Dialog visible={showDeleteDialog} onDismiss={() => setShowDeleteDialog(false)}>
+            <Dialog.Title>Confirmare ștergere</Dialog.Title>
+            <Dialog.Content>
+              <Text>Sigur vrei să ștergi acest eveniment?</Text>
+            </Dialog.Content>
+            <Dialog.Actions>
+              <Button onPress={() => setShowDeleteDialog(false)}>Anulează</Button>
+              <Button onPress={handleDelete} color={COLORS.error}>Șterge</Button>
+            </Dialog.Actions>
+          </Dialog>
+        )}
       </Portal>
     </View>
   );

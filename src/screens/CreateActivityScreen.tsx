@@ -13,6 +13,7 @@ import { ActivityType, createActivity, getPlayersByTeamId } from '../services/ac
 import { RepeatSchedule, RepeatType, DayOfWeek } from '../components/Schedule/RepeatSchedule';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getCoachInternalId, getCoachAuthId } from '../utils/coachUtils';
+import { validatePlayerIds } from '../utils/playerValidation';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -322,7 +323,20 @@ export const CreateActivityScreen = () => {
       // Add game-specific fields if this is a game
       if (activityType === 'game') {
         activityData.home_away = homeAway;
-        activityData.lineup_players = selectedPlayers.length > 0 ? selectedPlayers : undefined;
+        
+        // Validate player IDs before saving
+        if (selectedPlayers.length > 0) {
+          try {
+            const validPlayerIds = await validatePlayerIds(selectedPlayers);
+            activityData.lineup_players = validPlayerIds.length > 0 ? validPlayerIds : undefined;
+          } catch (error) {
+            console.error('Error validating player IDs:', error);
+            Alert.alert(t('common.error'), 'Some selected players are no longer available. Please reselect players.');
+            return;
+          }
+        } else {
+          activityData.lineup_players = undefined;
+        }
       }
       
       // Only add parent and child IDs if available

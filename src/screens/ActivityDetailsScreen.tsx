@@ -13,6 +13,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { useTranslation } from 'react-i18next';
+import { filterValidPlayers } from '../utils/playerValidation';
 import MatchReportScreen from './MatchReportScreen';
 
 type ActivityDetailsScreenRouteProp = RouteProp<RootStackParamList | ParentStackParamList, 'ActivityDetails'>;
@@ -235,7 +236,37 @@ export const ActivityDetailsScreen = () => {
     // Fetch match events from Supabase when activity loads
     const fetchMatchEvents = async () => {
       if (!activityId) return;
+      console.log('Fetching events for activity:', activityId);
+      console.log('Current user role:', userRole);
+      
+      // For parents, let's also check their children's team relationship
+      if (userRole === 'parent') {
+        try {
+          const parentData = await AsyncStorage.getItem('parent_data');
+          if (parentData) {
+            const parent = JSON.parse(parentData);
+            console.log('Parent data:', parent);
+            
+            // Check if parent has children in the activity's team
+            const { data: childrenData, error: childrenError } = await supabase
+              .from('parent_children')
+              .select('team_id')
+              .eq('parent_id', parent.id);
+            
+            console.log('Parent children teams:', { data: childrenData, error: childrenError });
+            
+            // Check the activity's team
+            if (activity) {
+              console.log('Activity team_id:', activity.team_id);
+            }
+          }
+        } catch (error) {
+          console.error('Error checking parent relationship:', error);
+        }
+      }
+      
       const { data, error } = await getEventsForActivity(activityId);
+      console.log('Events fetch result:', { data, error });
       if (!error && data) {
         // Map DB events to local MatchEvent format and sort chronologically
         const mappedEvents = data.map((e: ActivityEvent) => ({
@@ -895,34 +926,50 @@ export const ActivityDetailsScreen = () => {
             ) : (
               <View style={{ minHeight: 200 }}>
                 {matchEvents.length === 0 ? (
-                  // Empty state - show plus icon to invite user to create events
+                  // Empty state - different for coaches vs others (parents, admins)
                   <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 40 }}>
-                  <TouchableOpacity
-                    onPress={() => navigation.navigate('MatchReportScreen', { activityId: activity.id, lineupPlayers: (activity.lineup_players ?? []).map((id, idx) => ({ id, name: lineupNames[idx] || id })) })}
-                      style={{ 
-                        backgroundColor: COLORS.primary, 
-                        borderRadius: 50, 
-                        width: 80, 
-                        height: 80, 
-                        alignItems: 'center', 
-                        justifyContent: 'center',
-                        shadowColor: '#000',
-                        shadowOffset: { width: 0, height: 2 },
-                        shadowOpacity: 0.25,
-                        shadowRadius: 3.84,
-                        elevation: 5,
-                      }}
-                    accessibilityLabel="Adaugă eveniment"
-                  >
-                      <MaterialCommunityIcons name="plus" size={40} color={COLORS.white} />
-                  </TouchableOpacity>
-                    <Text style={{ marginTop: 16, fontSize: 16, color: COLORS.grey[600], textAlign: 'center' }}>
-                      Nu există evenimente încă
-                    </Text>
-                    <Text style={{ marginTop: 4, fontSize: 14, color: COLORS.grey[500], textAlign: 'center' }}>
-                      Atinge pentru a adăuga evenimente
-                    </Text>
-                </View>
+                    {userRole === 'coach' ? (
+                      // Coaches see the plus icon to create events
+                      <>
+                        <TouchableOpacity
+                          onPress={() => navigation.navigate('MatchReportScreen', { activityId: activity.id, lineupPlayers: filterValidPlayers((activity.lineup_players ?? []).map((id, idx) => ({ id, name: lineupNames[idx] || id }))) })}
+                          style={{ 
+                            backgroundColor: COLORS.primary, 
+                            borderRadius: 16, 
+                            width: 32, 
+                            height: 32, 
+                            alignItems: 'center', 
+                            justifyContent: 'center',
+                            shadowColor: '#000',
+                            shadowOffset: { width: 0, height: 1 },
+                            shadowOpacity: 0.15,
+                            shadowRadius: 2,
+                            elevation: 2,
+                          }}
+                          accessibilityLabel="Adaugă eveniment"
+                        >
+                          <MaterialCommunityIcons name="plus" size={14} color={COLORS.white} />
+                        </TouchableOpacity>
+                        <Text style={{ marginTop: 16, fontSize: 16, color: COLORS.grey[600], textAlign: 'center' }}>
+                          Nu există evenimente încă
+                        </Text>
+                        <Text style={{ marginTop: 4, fontSize: 14, color: COLORS.grey[500], textAlign: 'center' }}>
+                          Atinge pentru a adăuga evenimente
+                        </Text>
+                      </>
+                    ) : (
+                      // Parents and admins see a message that no events have been recorded yet
+                      <>
+                        <MaterialCommunityIcons name="clipboard-text-outline" size={60} color={COLORS.grey[400]} />
+                        <Text style={{ marginTop: 16, fontSize: 16, color: COLORS.grey[600], textAlign: 'center' }}>
+                          Nu există evenimente încă
+                        </Text>
+                        <Text style={{ marginTop: 4, fontSize: 14, color: COLORS.grey[500], textAlign: 'center' }}>
+                          Antrenorul nu a înregistrat evenimente pentru acest meci
+                        </Text>
+                      </>
+                    )}
+                  </View>
                                  ) : (
                    // Events list view (same as MatchReportScreen)
                    <View style={{ width: '100%' }}>
@@ -930,20 +977,22 @@ export const ActivityDetailsScreen = () => {
                        <Text style={{ fontSize: 18, fontWeight: '600', color: COLORS.text }}>
                          Evenimente meci
                        </Text>
-                       <TouchableOpacity
-                         onPress={() => navigation.navigate('MatchReportScreen', { activityId: activity.id, lineupPlayers: (activity.lineup_players ?? []).map((id, idx) => ({ id, name: lineupNames[idx] || id })) })}
-                         style={{ 
-                           backgroundColor: COLORS.primary, 
-                           borderRadius: 16, 
-                           width: 32, 
-                           height: 32, 
-                           alignItems: 'center', 
-                           justifyContent: 'center' 
-                         }}
-                         accessibilityLabel="Editează evenimente"
-                       >
-                         <MaterialCommunityIcons name="pencil" size={12} color={COLORS.white} />
-                       </TouchableOpacity>
+                       {userRole === 'coach' && (
+                         <TouchableOpacity
+                           onPress={() => navigation.navigate('MatchReportScreen', { activityId: activity.id, lineupPlayers: filterValidPlayers((activity.lineup_players ?? []).map((id, idx) => ({ id, name: lineupNames[idx] || id }))) })}
+                           style={{ 
+                             backgroundColor: COLORS.primary, 
+                             borderRadius: 16, 
+                             width: 32, 
+                             height: 32, 
+                             alignItems: 'center', 
+                             justifyContent: 'center' 
+                           }}
+                           accessibilityLabel="Editează evenimente"
+                         >
+                           <MaterialCommunityIcons name="pencil" size={12} color={COLORS.white} />
+                         </TouchableOpacity>
+                       )}
                      </View>
                      
                      {/* Events list - organized by half */}

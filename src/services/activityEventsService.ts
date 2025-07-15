@@ -37,11 +37,23 @@ const migrateEventType = (eventType: string): ActivityEventType => {
 
 // Fetch all events for a given activity
 export const getEventsForActivity = async (activityId: string) => {
+  console.log('getEventsForActivity called with activityId:', activityId);
+  
+  // First, let's check if we can access the activity_events table at all
+  const { data: testData, error: testError } = await supabase
+    .from('activity_events')
+    .select('count')
+    .limit(1);
+  
+  console.log('Test query result:', { testData, testError });
+  
   const { data, error } = await supabase
     .from('activity_events')
     .select('*')
     .eq('activity_id', activityId)
     .order('created_at', { ascending: true });
+  
+  console.log('Main query result:', { data, error, activityId });
   
   if (data) {
     // Migrate old event types to new ones
