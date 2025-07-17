@@ -138,6 +138,22 @@ interface MatchReport {
   };
 }
 
+interface PlayerStats {
+  player_id: string;
+  player_name: string;
+  goals: number;
+  assists: number;
+  yellow_cards: number;
+  red_cards: number;
+  man_of_match_count: number;
+  man_of_match_games: Array<{
+    game_id: string;
+    game_title: string;
+    game_date: string;
+  }>;
+  total_events: number;
+}
+
 const TeamDetails: React.FC = () => {
   const { teamId } = useParams<{ teamId: string }>();
   const navigate = useNavigate();
@@ -160,6 +176,8 @@ const TeamDetails: React.FC = () => {
   const [selectedGame, setSelectedGame] = useState<GameResult | null>(null);
   const [matchReport, setMatchReport] = useState<MatchReport | null>(null);
   const [matchReportLoading, setMatchReportLoading] = useState(false);
+  const [playerStats, setPlayerStats] = useState<PlayerStats[]>([]);
+  const [playerStatsLoading, setPlayerStatsLoading] = useState(false);
 
   useEffect(() => {
     if (teamId) {
@@ -753,9 +771,13 @@ const TeamDetails: React.FC = () => {
 
         console.log('Processed game results:', results);
         setGameResults(results);
+        
+        // Fetch player statistics after getting game results
+        await fetchPlayerStatistics();
       } else {
         console.log('No games data found');
         setGameResults([]);
+        setPlayerStats([]);
       }
     } catch (error) {
       console.error('Error fetching game results:', error);
@@ -766,6 +788,112 @@ const TeamDetails: React.FC = () => {
       });
     } finally {
       setAnalyticsLoading(false);
+    }
+  };
+
+  const fetchPlayerStatistics = async () => {
+    try {
+      setPlayerStatsLoading(true);
+      
+      if (!teamId) return;
+
+      // Get all game activity IDs for this team
+      const { data: gamesData, error: gamesError } = await supabase
+        .from('activities')
+        .select('id, title, start_time')
+        .eq('team_id', teamId)
+        .eq('type', 'game');
+
+      if (gamesError) throw gamesError;
+
+      if (!gamesData || gamesData.length === 0) {
+        setPlayerStats([]);
+        return;
+      }
+
+      const gameIds = gamesData.map(game => game.id);
+      const gamesMap = new Map(gamesData.map(game => [game.id, { title: game.title, date: game.start_time }]));
+
+      // Fetch all events for these games
+      const { data: eventsData, error: eventsError } = await supabase
+        .from('activity_events')
+        .select(`
+          id,
+          event_type,
+          player_id,
+          activity_id,
+          players:player_id (name)
+        `)
+        .in('activity_id', gameIds);
+
+      if (eventsError) throw eventsError;
+
+      if (eventsData && eventsData.length > 0) {
+        // Group events by player
+        const playerStatsMap = new Map<string, PlayerStats>();
+
+        eventsData.forEach((event: any) => {
+          const playerId = event.player_id;
+          const playerName = event.players?.name || 'Unknown Player';
+          
+          if (!playerStatsMap.has(playerId)) {
+            playerStatsMap.set(playerId, {
+              player_id: playerId,
+              player_name: playerName,
+              goals: 0,
+              assists: 0,
+              yellow_cards: 0,
+              red_cards: 0,
+              man_of_match_count: 0,
+              man_of_match_games: [],
+              total_events: 0
+            });
+          }
+
+          const stats = playerStatsMap.get(playerId)!;
+          stats.total_events++;
+
+          switch (event.event_type) {
+            case 'goal':
+              stats.goals++;
+              break;
+            case 'assist':
+              stats.assists++;
+              break;
+            case 'yellow_card':
+              stats.yellow_cards++;
+              break;
+            case 'red_card':
+              stats.red_cards++;
+              break;
+            case 'man_of_the_match':
+              stats.man_of_match_count++;
+              const gameInfo = gamesMap.get(event.activity_id);
+              if (gameInfo) {
+                stats.man_of_match_games.push({
+                  game_id: event.activity_id,
+                  game_title: gameInfo.title,
+                  game_date: new Date(gameInfo.date).toLocaleDateString()
+                });
+              }
+              break;
+          }
+        });
+
+        // Convert to array and sort by total events
+        const statsArray = Array.from(playerStatsMap.values())
+          .filter(player => player.total_events > 0)
+          .sort((a, b) => b.total_events - a.total_events);
+
+        setPlayerStats(statsArray);
+      } else {
+        setPlayerStats([]);
+      }
+    } catch (error) {
+      console.error('Error fetching player statistics:', error);
+      setPlayerStats([]);
+    } finally {
+      setPlayerStatsLoading(false);
     }
   };
 
@@ -1399,6 +1527,243 @@ const TeamDetails: React.FC = () => {
                     ))}
                   </tbody>
                 </Table>
+
+                {/* Player Statistics Section */}
+                <Paper p="md" mt="lg" withBorder>
+                  <Title order={4} mb="md">Player Statistics</Title>
+                  
+                  {playerStatsLoading ? (
+                    <Center p="xl">
+                      <Loader />
+                    </Center>
+                  ) : playerStats.length === 0 ? (
+                    <Text color="dimmed" align="center">
+                      No player statistics available yet. Statistics will appear after match events are recorded.
+                    </Text>
+                  ) : (
+                    <div>
+                      {/* Top Goal Scorers */}
+                      <div style={{ marginBottom: '1.5rem' }}>
+                        <Text weight={600} size="lg" mb="sm" color="green">Top Goal Scorers</Text>
+                        <Table>
+                          <thead>
+                            <tr>
+                              <th>Player</th>
+                              <th>Goals</th>
+                              <th>Assists</th>
+                              <th>Total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {playerStats
+                              .filter(player => player.goals > 0)
+                              .sort((a, b) => b.goals - a.goals)
+                              .slice(0, 5)
+                              .map((player, index) => (
+                                <tr key={player.player_id}>
+                                  <td>
+                                    <Group>
+                                      <div style={{
+                                        width: 24,
+                                        height: 24,
+                                        borderRadius: '50%',
+                                        backgroundColor: '#228be6',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        fontSize: '12px',
+                                        fontWeight: 'bold',
+                                        color: 'white'
+                                      }}>
+                                        {index + 1}
+                                      </div>
+                                      <Text weight={500}>{player.player_name}</Text>
+                                    </Group>
+                                  </td>
+                                  <td>
+                                    <Text weight={600} color="green">{player.goals}</Text>
+                                  </td>
+                                  <td>
+                                    <Text color="blue">{player.assists}</Text>
+                                  </td>
+                                  <td>
+                                    <Text weight={600}>{player.goals + player.assists}</Text>
+                                  </td>
+                                </tr>
+                              ))}
+                          </tbody>
+                        </Table>
+                      </div>
+
+                      {/* Most Assists */}
+                      <div style={{ marginBottom: '1.5rem' }}>
+                        <Text weight={600} size="lg" mb="sm" color="blue">Most Assists</Text>
+                        <Table>
+                          <thead>
+                            <tr>
+                              <th>Player</th>
+                              <th>Assists</th>
+                              <th>Goals</th>
+                              <th>Total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {playerStats
+                              .filter(player => player.assists > 0)
+                              .sort((a, b) => b.assists - a.assists)
+                              .slice(0, 5)
+                              .map((player, index) => (
+                                <tr key={player.player_id}>
+                                  <td>
+                                    <Group>
+                                      <div style={{
+                                        width: 24,
+                                        height: 24,
+                                        borderRadius: '50%',
+                                        backgroundColor: '#228be6',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        fontSize: '12px',
+                                        fontWeight: 'bold',
+                                        color: 'white'
+                                      }}>
+                                        {index + 1}
+                                      </div>
+                                      <Text weight={500}>{player.player_name}</Text>
+                                    </Group>
+                                  </td>
+                                  <td>
+                                    <Text weight={600} color="blue">{player.assists}</Text>
+                                  </td>
+                                  <td>
+                                    <Text color="green">{player.goals}</Text>
+                                  </td>
+                                  <td>
+                                    <Text weight={600}>{player.goals + player.assists}</Text>
+                                  </td>
+                                </tr>
+                              ))}
+                          </tbody>
+                        </Table>
+                      </div>
+
+                      {/* Most Cards */}
+                      <div style={{ marginBottom: '1.5rem' }}>
+                        <Text weight={600} size="lg" mb="sm" color="orange">Most Cards</Text>
+                        <Table>
+                          <thead>
+                            <tr>
+                              <th>Player</th>
+                              <th>Yellow Cards</th>
+                              <th>Red Cards</th>
+                              <th>Total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {playerStats
+                              .filter(player => player.yellow_cards > 0 || player.red_cards > 0)
+                              .sort((a, b) => (b.yellow_cards + b.red_cards) - (a.yellow_cards + a.red_cards))
+                              .slice(0, 5)
+                              .map((player, index) => (
+                                <tr key={player.player_id}>
+                                  <td>
+                                    <Group>
+                                      <div style={{
+                                        width: 24,
+                                        height: 24,
+                                        borderRadius: '50%',
+                                        backgroundColor: '#228be6',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        fontSize: '12px',
+                                        fontWeight: 'bold',
+                                        color: 'white'
+                                      }}>
+                                        {index + 1}
+                                      </div>
+                                      <Text weight={500}>{player.player_name}</Text>
+                                    </Group>
+                                  </td>
+                                  <td>
+                                    <Text weight={600} color="yellow">{player.yellow_cards}</Text>
+                                  </td>
+                                  <td>
+                                    <Text weight={600} color="red">{player.red_cards}</Text>
+                                  </td>
+                                  <td>
+                                    <Text weight={600} color="orange">{player.yellow_cards + player.red_cards}</Text>
+                                  </td>
+                                </tr>
+                              ))}
+                          </tbody>
+                        </Table>
+                      </div>
+
+                      {/* Man of the Match Winners */}
+                      {playerStats.some(player => player.man_of_match_count > 0) && (
+                        <div>
+                          <Text weight={600} size="lg" mb="sm" color="gold">Man of the Match Winners</Text>
+                          <Table>
+                            <thead>
+                              <tr>
+                                <th>Player</th>
+                                <th>Man of the Match</th>
+                                <th>Game</th>
+                                <th>Date</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {playerStats
+                                .filter(player => player.man_of_match_count > 0)
+                                .flatMap(player => 
+                                  player.man_of_match_games.map((game, index) => ({
+                                    player,
+                                    game,
+                                    isFirst: index === 0
+                                  }))
+                                )
+                                .sort((a, b) => new Date(b.game.game_date).getTime() - new Date(a.game.game_date).getTime())
+                                .map(({ player, game, isFirst }, index) => (
+                                  <tr key={`${player.player_id}-${game.game_id}`}>
+                                    <td>
+                                      <Group>
+                                        {isFirst && (
+                                          <div style={{
+                                            width: 24,
+                                            height: 24,
+                                            borderRadius: '50%',
+                                            backgroundColor: '#228be6',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            fontSize: '16px'
+                                          }}>
+                                            ⭐
+                                          </div>
+                                        )}
+                                        <Text weight={500}>{player.player_name}</Text>
+                                      </Group>
+                                    </td>
+                                    <td>
+                                      <Text weight={600} color="gold">{player.man_of_match_count}</Text>
+                                    </td>
+                                    <td>
+                                      <Text>{game.game_title}</Text>
+                                    </td>
+                                    <td>
+                                      <Text size="sm" color="dimmed">{game.game_date}</Text>
+                                    </td>
+                                  </tr>
+                                ))}
+                            </tbody>
+                          </Table>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </Paper>
                 {/* Match Report Modal */}
                 <Modal
                   opened={matchReportModalOpen}
