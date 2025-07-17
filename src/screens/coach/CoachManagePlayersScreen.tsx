@@ -112,6 +112,7 @@ const PlayerCard = ({ player, onDetailsPress, onDelete, onUpdateMedicalVisa }: {
   onUpdateMedicalVisa: (player: Player) => void;
 }) => {
   const { t } = useTranslation();
+  const [isExpanded, setIsExpanded] = useState(false);
   const [refreshedStatus, setRefreshedStatus] = useState<string | null>(null);
   const [refreshedPaidDate, setRefreshedPaidDate] = useState<string | null>(null);
   const [refreshedLastPaidMonth, setRefreshedLastPaidMonth] = useState<string | null>(null);
@@ -282,11 +283,11 @@ const PlayerCard = ({ player, onDetailsPress, onDelete, onUpdateMedicalVisa }: {
   
   return (
     <Card 
-      style={styles.playerCard}
+      style={[styles.playerCard, !isExpanded && styles.playerCardCollapsed]}
       mode="outlined"
     >
-      <Card.Content style={{ padding: SPACING.md }}>
-        <View style={styles.playerHeader}>
+      <Card.Content style={[styles.cardContent, !isExpanded && styles.cardContentCollapsed]}>
+        <View style={[styles.playerHeader, !isExpanded && styles.playerHeaderCollapsed]}>
           <View style={styles.nameContainer}>
             <View style={{
               width: 48,
@@ -317,131 +318,148 @@ const PlayerCard = ({ player, onDetailsPress, onDelete, onUpdateMedicalVisa }: {
           </View>
         </View>
         
-        <Divider style={styles.divider} />
-        
-        <TouchableOpacity 
-          onPress={() => onUpdateMedicalVisa(player)}
-          style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: SPACING.md }}
-        >
-          <MaterialCommunityIcons name="medical-bag" size={20} color={COLORS.primary} />
-          <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500' }}>
-            {t('coach.players.medical_visa')}
-          </Text>
-          <View style={{
-            backgroundColor: getMedicalVisaStatusColor(displayMedicalVisaStatus) + '20',
-            borderRadius: 12,
-            paddingHorizontal: SPACING.md,
-            paddingVertical: 4,
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginLeft: 4,
-          }}>
-            <Text style={{
-              fontSize: FONT_SIZES.xs,
-              fontWeight: '600',
-              color: getMedicalVisaStatusColor(displayMedicalVisaStatus)
-            }}>
-              {t(`coach.players.status.${displayMedicalVisaStatus}`)}
-            </Text>
-          </View>
-          
-          {displayMedicalVisaStatus === 'valid' && displayMedicalVisaIssueDate && (
-            <View style={{ alignItems: 'flex-end', marginLeft: 'auto' }}>
-              <Text style={{ fontSize: FONT_SIZES.xs, color: COLORS.grey[600], fontWeight: '500' }}>{t('coach.players.medical_visa_until')}</Text>
-              <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '600' }}>
-                {(() => {
-                  try {
-                    const issueDate = new Date(displayMedicalVisaIssueDate);
-                    if (isNaN(issueDate.getTime())) return 'N/A';
-                    const expiryDate = new Date(issueDate);
-                    expiryDate.setMonth(expiryDate.getMonth() + 6);
-                    return expiryDate.toLocaleDateString('en-GB');
-                  } catch (e) {
-                    console.error("Error calculating expiry date:", e);
-                    return 'N/A';
-                  }
-                })()}
+        {/* Expandable section */}
+        {isExpanded && (
+          <>
+            <Divider style={styles.divider} />
+            
+            <TouchableOpacity 
+              onPress={() => onUpdateMedicalVisa(player)}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: SPACING.md }}
+            >
+              <MaterialCommunityIcons name="medical-bag" size={20} color={COLORS.primary} />
+              <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500' }}>
+                {t('coach.players.medical_visa')}
               </Text>
-            </View>
-          )}
-        </TouchableOpacity>
-        
-        <View style={{ marginBottom: SPACING.md }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <MaterialCommunityIcons name="credit-card-outline" size={20} color={COLORS.primary} />
-            {displayStatus === 'paid' && displayPaidDate ? (
-              <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginLeft: 8 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500', marginRight: 8 }}>
-                    {t('coach.players.payment_status')}
-                  </Text>
-                  <View style={{
-                    backgroundColor: getPaymentStatusColor(displayStatus) + '20',
-                    borderRadius: 12,
-                    paddingHorizontal: SPACING.md,
-                    paddingVertical: 4,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}>
-                    <Text style={{
-                      fontSize: FONT_SIZES.xs,
-                      fontWeight: '600',
-                      color: getPaymentStatusColor(displayStatus)
-                    }}>
-                      {getPaymentStatusText(displayStatus, t)}
-                    </Text>
-                  </View>
-                </View>
-                <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500' }}>
-                  {displayPaidDate}
+              <View style={{
+                backgroundColor: getMedicalVisaStatusColor(displayMedicalVisaStatus) + '20',
+                borderRadius: 12,
+                paddingHorizontal: SPACING.md,
+                paddingVertical: 4,
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginLeft: 4,
+              }}>
+                <Text style={{
+                  fontSize: FONT_SIZES.xs,
+                  fontWeight: '600',
+                  color: getMedicalVisaStatusColor(displayMedicalVisaStatus)
+                }}>
+                  {t(`coach.players.status.${displayMedicalVisaStatus}`)}
                 </Text>
               </View>
-            ) : (
-              <View style={{ flex: 1, flexDirection: 'column', marginLeft: 8 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500', marginRight: 8 }}>
-                    {t('coach.players.payment_status')}
+              
+              {displayMedicalVisaStatus === 'valid' && displayMedicalVisaIssueDate && (
+                <View style={{ alignItems: 'flex-end', marginLeft: 'auto' }}>
+                  <Text style={{ fontSize: FONT_SIZES.xs, color: COLORS.grey[600], fontWeight: '500' }}>{t('coach.players.medical_visa_until')}</Text>
+                  <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '600' }}>
+                    {(() => {
+                      try {
+                        const issueDate = new Date(displayMedicalVisaIssueDate);
+                        if (isNaN(issueDate.getTime())) return 'N/A';
+                        const expiryDate = new Date(issueDate);
+                        expiryDate.setMonth(expiryDate.getMonth() + 6);
+                        return expiryDate.toLocaleDateString('en-GB');
+                      } catch (e) {
+                        return 'N/A';
+                      }
+                    })()}
                   </Text>
-                  <View style={{
-                    backgroundColor: getPaymentStatusColor(displayStatus) + '20',
-                    borderRadius: 12,
-                    paddingHorizontal: SPACING.md,
-                    paddingVertical: 4,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}>
-                    <Text style={{
-                      fontSize: FONT_SIZES.xs,
-                      fontWeight: '600',
-                      color: getPaymentStatusColor(displayStatus)
-                    }}>
-                      {getPaymentStatusText(displayStatus, t)}
+                </View>
+              )}
+            </TouchableOpacity>
+            
+            <View style={{ marginBottom: SPACING.md }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <MaterialCommunityIcons name="credit-card-outline" size={20} color={COLORS.primary} />
+                {displayStatus === 'paid' && displayPaidDate ? (
+                  <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginLeft: 8 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500', marginRight: 8 }}>
+                        {t('coach.players.payment_status')}
+                      </Text>
+                      <View style={{
+                        backgroundColor: getPaymentStatusColor(displayStatus) + '20',
+                        borderRadius: 12,
+                        paddingHorizontal: SPACING.md,
+                        paddingVertical: 4,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}>
+                        <Text style={{
+                          fontSize: FONT_SIZES.xs,
+                          fontWeight: '600',
+                          color: getPaymentStatusColor(displayStatus)
+                        }}>
+                          {getPaymentStatusText(displayStatus, t)}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500' }}>
+                      {displayPaidDate}
                     </Text>
                   </View>
-                </View>
-                {/* Details below, left-aligned with label */}
-                {displayStatus !== 'paid' && displayLastPaidMonth && displayLastPaidExactDate && (
-                  <View style={{ flexDirection: 'row', alignItems: 'baseline', marginTop: 8, marginLeft: 0 }}>
-                    <Text style={{ fontSize: FONT_SIZES.sm, fontWeight: '700', color: COLORS.text }}>
-                      {displayLastPaidMonth}
-                    </Text>
-                    <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.grey[600], fontWeight: '500', marginLeft: 6 }}>
-                      {t('coach.players.paid_on', { date: displayLastPaidExactDate })}
-                    </Text>
+                ) : (
+                  <View style={{ flex: 1, flexDirection: 'column', marginLeft: 8 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500', marginRight: 8 }}>
+                        {t('coach.players.payment_status')}
+                      </Text>
+                      <View style={{
+                        backgroundColor: getPaymentStatusColor(displayStatus) + '20',
+                        borderRadius: 12,
+                        paddingHorizontal: SPACING.md,
+                        paddingVertical: 4,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}>
+                        <Text style={{
+                          fontSize: FONT_SIZES.xs,
+                          fontWeight: '600',
+                          color: getPaymentStatusColor(displayStatus)
+                        }}>
+                          {getPaymentStatusText(displayStatus, t)}
+                        </Text>
+                      </View>
+                    </View>
+                    {/* Details below, left-aligned with label */}
+                    {displayStatus !== 'paid' && displayLastPaidMonth && displayLastPaidExactDate && (
+                      <View style={{ flexDirection: 'row', alignItems: 'baseline', marginTop: 8, marginLeft: 0 }}>
+                        <Text style={{ fontSize: FONT_SIZES.sm, fontWeight: '700', color: COLORS.text }}>
+                          {displayLastPaidMonth}
+                        </Text>
+                        <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.grey[600], fontWeight: '500', marginLeft: 6 }}>
+                          {t('coach.players.paid_on', { date: displayLastPaidExactDate })}
+                        </Text>
+                      </View>
+                    )}
                   </View>
                 )}
               </View>
-            )}
-          </View>
-        </View>
+            </View>
+            
+            <View style={styles.actionButtons}>
+              <TouchableOpacity 
+                style={styles.viewButton}
+                onPress={() => onDetailsPress(player)}
+              >
+                <MaterialCommunityIcons name="account-details" size={18} color={COLORS.white} />
+                <Text style={styles.buttonText}>{t('coach.players.details')}</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
         
-        <View style={styles.actionButtons}>
+        <View style={[styles.expandButtonContainer, !isExpanded && styles.expandButtonContainerCollapsed]}>
           <TouchableOpacity 
-            style={styles.viewButton}
-            onPress={() => onDetailsPress(player)}
+            style={styles.expandButton}
+            onPress={() => setIsExpanded(!isExpanded)}
           >
-            <MaterialCommunityIcons name="account-details" size={18} color={COLORS.white} />
-            <Text style={styles.buttonText}>{t('coach.players.details')}</Text>
+            <MaterialCommunityIcons 
+              name={isExpanded ? "chevron-up" : "chevron-down"} 
+              size={20} 
+              color={COLORS.primary} 
+            />
           </TouchableOpacity>
         </View>
       </Card.Content>
@@ -1120,11 +1138,25 @@ const styles = StyleSheet.create({
     borderColor: COLORS.grey[200],
     backgroundColor: COLORS.white,
   },
+  playerCardCollapsed: {
+    marginBottom: SPACING.xs,
+    minHeight: 60,
+  },
+  cardContent: {
+    padding: SPACING.md,
+  },
+  cardContentCollapsed: {
+    padding: SPACING.xs,
+    paddingVertical: SPACING.xs,
+  },
   playerHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: SPACING.md,
+  },
+  playerHeaderCollapsed: {
+    marginBottom: 0,
   },
   nameContainer: {
     flexDirection: 'row',
@@ -1135,10 +1167,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORS.text,
   },
+  playerNameCollapsed: {
+    fontSize: FONT_SIZES.sm,
+  },
   teamName: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.grey[600],
     marginTop: 2,
+  },
+  teamNameCollapsed: {
+    fontSize: FONT_SIZES.xs,
   },
   ageContainer: {
     alignItems: 'flex-end',
@@ -1152,6 +1190,12 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     color: COLORS.text,
     fontWeight: '600',
+  },
+  ageLabelCollapsed: {
+    fontSize: FONT_SIZES.xs,
+  },
+  ageValueCollapsed: {
+    fontSize: FONT_SIZES.xs,
   },
   divider: {
     height: 1,
@@ -1177,6 +1221,16 @@ const styles = StyleSheet.create({
     marginLeft: 4,
     fontWeight: '500',
     fontSize: FONT_SIZES.sm,
+  },
+  expandButtonContainer: {
+    alignItems: 'center',
+    marginTop: SPACING.md,
+  },
+  expandButtonContainerCollapsed: {
+    marginTop: SPACING.xs,
+  },
+  expandButton: {
+    padding: SPACING.xs,
   },
   playersContainer: {
     flex: 1,

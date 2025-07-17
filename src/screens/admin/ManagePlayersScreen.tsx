@@ -250,6 +250,8 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
 
   // Create a PlayerCard component that fetches fresh status data
   const PlayerCardWithFreshStatus = ({ player }: { player: Player }) => {
+    const [isExpanded, setIsExpanded] = useState(false);
+    
     // Format the date if it exists
     let formattedBirthDate = t('admin.players.notAvailable');
     if (player.birth_date) {
@@ -266,11 +268,11 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
     return (
       <Card 
         key={player.id} 
-        style={styles.playerCard}
+        style={[styles.playerCard, !isExpanded && styles.playerCardCollapsed]}
         mode="outlined"
       >
-        <Card.Content style={{ padding: SPACING.md }}>
-          <View style={styles.playerHeader}>
+        <Card.Content style={[styles.cardContent, !isExpanded && styles.cardContentCollapsed]}>
+          <View style={[styles.playerHeader, !isExpanded && styles.playerHeaderCollapsed]}>
             <View style={styles.nameContainer}>
               <View style={{
                 width: 48,
@@ -301,118 +303,136 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
             </View>
           </View>
           
-          <Divider style={styles.divider} />
-          
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: SPACING.md }}>
-            <MaterialCommunityIcons name="medical-bag" size={20} color={COLORS.primary} />
-            <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500' }}>
-              {t('admin.players.medicalVisa')}
-            </Text>
-            <View style={{
-              backgroundColor: getMedicalVisaStatusColor(player.medicalVisaStatus) + '20',
-              borderRadius: 12,
-              paddingHorizontal: SPACING.md,
-              paddingVertical: 4,
-              alignItems: 'center',
-              justifyContent: 'center',
-              marginLeft: 4,
-            }}>
-              <Text style={{
-                fontSize: FONT_SIZES.xs,
-                fontWeight: '600',
-                color: getMedicalVisaStatusColor(player.medicalVisaStatus)
-              }}>
-                {player.medicalVisaStatus === 'no_status' 
-                  ? t('admin.players.noStatus') 
-                  : t(`admin.players.medicalStatus.${player.medicalVisaStatus}`)}
-              </Text>
-            </View>
-            <View style={{ alignItems: 'flex-end', marginLeft: 'auto' }}>
-              <Text style={{ fontSize: FONT_SIZES.xs, color: COLORS.grey[600], fontWeight: '500' }}>{t('admin.players.until')}</Text>
-              <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '600' }}>
-                {'N/A'}
-              </Text>
-            </View>
-          </View>
-          
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: SPACING.md }}>
-            <MaterialCommunityIcons name="credit-card-outline" size={20} color={COLORS.primary} />
-            {(player.paymentStatus === 'paid' && player.last_payment_date) ? (
-              <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginLeft: 8 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500', marginRight: 8 }}>
-                    {t('admin.players.paymentStatus')}
-                  </Text>
-                  <View style={{
-                    backgroundColor: getPaymentStatusColor(player.paymentStatus || '') + '20',
-                    borderRadius: 12,
-                    paddingHorizontal: SPACING.md,
-                    paddingVertical: 4,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}>
-                    <Text style={{
-                      fontSize: FONT_SIZES.xs,
-                      fontWeight: '600',
-                      color: getPaymentStatusColor(player.paymentStatus || '')
-                    }}>
-                      {t(`admin.players.${(player.paymentStatus || '').toLowerCase()}`)}
-                    </Text>
-                  </View>
-                </View>
+          {/* Expandable section */}
+          {isExpanded && (
+            <>
+              <Divider style={styles.divider} />
+              
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: SPACING.md }}>
+                <MaterialCommunityIcons name="medical-bag" size={20} color={COLORS.primary} />
                 <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500' }}>
-                  {new Date(player.last_payment_date).toLocaleDateString('en-GB')}
+                  {t('admin.players.medicalVisa')}
                 </Text>
-              </View>
-            ) : (
-              <View style={{ flex: 1, flexDirection: 'column', marginLeft: 8 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500', marginRight: 8 }}>
-                    {t('admin.players.paymentStatus')}
-                  </Text>
-                  <View style={{
-                    backgroundColor: getPaymentStatusColor(player.paymentStatus || '') + '20',
-                    borderRadius: 12,
-                    paddingHorizontal: SPACING.md,
-                    paddingVertical: 4,
-                    alignItems: 'center',
-                    justifyContent: 'center',
+                <View style={{
+                  backgroundColor: getMedicalVisaStatusColor(player.medicalVisaStatus) + '20',
+                  borderRadius: 12,
+                  paddingHorizontal: SPACING.md,
+                  paddingVertical: 4,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginLeft: 4,
+                }}>
+                  <Text style={{
+                    fontSize: FONT_SIZES.xs,
+                    fontWeight: '600',
+                    color: getMedicalVisaStatusColor(player.medicalVisaStatus)
                   }}>
-                    <Text style={{
-                      fontSize: FONT_SIZES.xs,
-                      fontWeight: '600',
-                      color: getPaymentStatusColor(player.paymentStatus || '')
-                    }}>
-                      {t(`admin.players.${(player.paymentStatus || '').toLowerCase()}`)}
+                    {player.medicalVisaStatus === 'no_status' 
+                      ? t('admin.players.noStatus') 
+                      : t(`admin.players.medicalStatus.${player.medicalVisaStatus}`)}
+                  </Text>
+                </View>
+                <View style={{ alignItems: 'flex-end', marginLeft: 'auto' }}>
+                  <Text style={{ fontSize: FONT_SIZES.xs, color: COLORS.grey[600], fontWeight: '500' }}>{t('admin.players.until')}</Text>
+                  <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '600' }}>
+                    {'N/A'}
+                  </Text>
+                </View>
+              </View>
+              
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: SPACING.md }}>
+                <MaterialCommunityIcons name="credit-card-outline" size={20} color={COLORS.primary} />
+                {(player.paymentStatus === 'paid' && player.last_payment_date) ? (
+                  <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginLeft: 8 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500', marginRight: 8 }}>
+                        {t('admin.players.paymentStatus')}
+                      </Text>
+                      <View style={{
+                        backgroundColor: getPaymentStatusColor(player.paymentStatus || '') + '20',
+                        borderRadius: 12,
+                        paddingHorizontal: SPACING.md,
+                        paddingVertical: 4,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}>
+                        <Text style={{
+                          fontSize: FONT_SIZES.xs,
+                          fontWeight: '600',
+                          color: getPaymentStatusColor(player.paymentStatus || '')
+                        }}>
+                          {t(`admin.players.${(player.paymentStatus || '').toLowerCase()}`)}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500' }}>
+                      {new Date(player.last_payment_date).toLocaleDateString('en-GB')}
                     </Text>
                   </View>
-                </View>
-                {/* Details below, left-aligned with label */}
-                {player.paymentStatus !== 'paid' && player.last_payment_date && (
-                  <View style={{ flexDirection: 'row', alignItems: 'baseline', marginTop: 8, marginLeft: 0 }}>
-                    <Text style={{ fontSize: FONT_SIZES.sm, fontWeight: '700', color: COLORS.text }}>
-                      {new Date(player.last_payment_date).toLocaleDateString('en-GB', { month: 'long' })}
-                    </Text>
-                    <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.grey[600], fontWeight: '500', marginLeft: 6 }}>
-                      {t('admin.players.paidOn', { date: new Date(player.last_payment_date).toLocaleDateString('en-GB') })}
-                    </Text>
+                ) : (
+                  <View style={{ flex: 1, flexDirection: 'column', marginLeft: 8 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500', marginRight: 8 }}>
+                        {t('admin.players.paymentStatus')}
+                      </Text>
+                      <View style={{
+                        backgroundColor: getPaymentStatusColor(player.paymentStatus || '') + '20',
+                        borderRadius: 12,
+                        paddingHorizontal: SPACING.md,
+                        paddingVertical: 4,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}>
+                        <Text style={{
+                          fontSize: FONT_SIZES.xs,
+                          fontWeight: '600',
+                          color: getPaymentStatusColor(player.paymentStatus || '')
+                        }}>
+                          {t(`admin.players.${(player.paymentStatus || '').toLowerCase()}`)}
+                        </Text>
+                      </View>
+                    </View>
+                    {/* Details below, left-aligned with label */}
+                    {player.paymentStatus !== 'paid' && player.last_payment_date && (
+                      <View style={{ flexDirection: 'row', alignItems: 'baseline', marginTop: 8, marginLeft: 0 }}>
+                        <Text style={{ fontSize: FONT_SIZES.sm, fontWeight: '700', color: COLORS.text }}>
+                          {new Date(player.last_payment_date).toLocaleDateString('en-GB', { month: 'long' })}
+                        </Text>
+                        <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.grey[600], fontWeight: '500', marginLeft: 6 }}>
+                          {t('admin.players.paidOn', { date: new Date(player.last_payment_date).toLocaleDateString('en-GB') })}
+                        </Text>
+                      </View>
+                    )}
                   </View>
                 )}
               </View>
-            )}
-          </View>
+              
+              <View style={styles.actionButtons}>
+                <TouchableOpacity 
+                  style={styles.viewButton}
+                  onPress={() => handleOpenPlayerDetails(player)}
+                >
+                  <MaterialCommunityIcons 
+                    name="account-details" 
+                    size={16} 
+                    color={COLORS.white} 
+                  />
+                  <Text style={styles.buttonText}>{t('admin.players.details.viewDetails')}</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
           
-          <View style={styles.actionButtons}>
+          <View style={[styles.expandButtonContainer, !isExpanded && styles.expandButtonContainerCollapsed]}>
             <TouchableOpacity 
-              style={styles.viewButton}
-              onPress={() => handleOpenPlayerDetails(player)}
+              style={styles.expandButton}
+              onPress={() => setIsExpanded(!isExpanded)}
             >
               <MaterialCommunityIcons 
-                name="account-details" 
-                size={16} 
-                color={COLORS.white} 
+                name={isExpanded ? "chevron-up" : "chevron-down"} 
+                size={20} 
+                color={COLORS.primary} 
               />
-              <Text style={styles.buttonText}>{t('admin.players.details.viewDetails')}</Text>
             </TouchableOpacity>
           </View>
         </Card.Content>
@@ -816,11 +836,25 @@ const styles = StyleSheet.create({
     borderColor: COLORS.grey[200],
     overflow: 'hidden'
   },
+  playerCardCollapsed: {
+    marginBottom: SPACING.xs,
+    minHeight: 60,
+  },
+  cardContent: {
+    padding: SPACING.md,
+  },
+  cardContentCollapsed: {
+    padding: SPACING.xs,
+    paddingVertical: SPACING.xs,
+  },
   playerHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: SPACING.sm,
+  },
+  playerHeaderCollapsed: {
+    marginBottom: 0,
   },
   nameContainer: {
     flexDirection: 'row',
@@ -834,9 +868,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORS.text,
   },
+  playerNameCollapsed: {
+    fontSize: FONT_SIZES.md,
+  },
   teamName: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.grey[600],
+  },
+  teamNameCollapsed: {
+    fontSize: FONT_SIZES.xs,
   },
   divider: {
     height: 1,
@@ -1029,6 +1069,12 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: COLORS.text,
   },
+  ageLabelCollapsed: {
+    fontSize: FONT_SIZES.xs,
+  },
+  ageValueCollapsed: {
+    fontSize: FONT_SIZES.xs,
+  },
   menuButton: {
     padding: SPACING.xs,
   },
@@ -1056,5 +1102,15 @@ const styles = StyleSheet.create({
     marginLeft: SPACING.sm,
     fontSize: 14,
     color: COLORS.text,
+  },
+  expandButton: {
+    padding: SPACING.xs,
+  },
+  expandButtonContainer: {
+    alignItems: 'center',
+    marginTop: SPACING.md,
+  },
+  expandButtonContainerCollapsed: {
+    marginTop: SPACING.xs,
   },
 }); 
