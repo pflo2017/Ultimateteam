@@ -991,64 +991,105 @@ export const CoachPaymentsScreen = () => {
     
     const currentDate = new Date();
     const currentYear = currentDate.getFullYear();
-    const currentMonth = currentDate.getMonth() + 1; // 1-12
-    
-    // Generate all months for the current year up to the current month
-    const months = [];
-    for (let m = 1; m <= currentMonth; m++) {
-      months.push({ year: currentYear, month: m, date: new Date(currentYear, m - 1, 1) });
-    }
-    months.reverse(); // Most recent first
-    
-    console.log("[DEBUG] Generated months:", months.map(m => `${m.year}-${m.month}`));
-    setHistoryMonths(months);
     
     const playerId = player.id;
     
     try {
-      // Fetch all payment records for this player for the current year
-      const { data, error } = await supabase
-        .from('monthly_payments')
-        .select('*')
-        .eq('player_id', playerId)
-        .eq('year', currentYear);
+      // Use the new RPC function to get complete payment history
+      const { data: historyData, error: historyError } = await supabase
+        .rpc('get_player_complete_payment_history', { 
+          p_player_id: playerId, 
+          p_year: currentYear 
+        });
       
-      if (error) throw error;
-      console.log("[DEBUG] Raw payment records:", data);
+      if (historyError) {
+        console.log('RPC function not available, using fallback method');
+        throw historyError;
+      }
       
-      // Build a map of records for lookup, ONLY for months <= currentMonth
-      const recordsByMonth: Record<string, any> = {};
-      (data || []).forEach(record => {
-        if (record.year === currentYear && record.month <= currentMonth) {
-          recordsByMonth[`${record.year}-${record.month}`] = record;
+      console.log("[DEBUG] Received payment history from RPC:", historyData);
+      
+      if (historyData && historyData.length > 0) {
+        // Convert the RPC result to the expected format
+        const history = historyData.map((record: any) => ({
+          player_id: playerId,
+          year: record.year,
+          month: record.month,
+          status: record.status,
+          updated_at: record.updated_at,
+          payment_method: record.payment_method
+        }));
+        
+        // Generate months array for UI display
+        const months = history.map((record: any) => ({
+          year: record.year,
+          month: record.month,
+          date: new Date(record.year, record.month - 1, 1)
+        }));
+        
+        console.log("[DEBUG] Final payment history:", history.map((h: { year: number; month: number; status: string }) => `${h.year}-${h.month}: ${h.status}`));
+        setPaymentHistory(history);
+        setHistoryMonths(months);
+      } else {
+        // Fallback to original method if RPC returns no data
+        console.log('RPC returned no data, using fallback method');
+        
+        const currentMonth = currentDate.getMonth() + 1; // 1-12
+        
+        // Generate all months for the current year up to the current month
+        const months = [];
+        for (let m = 1; m <= currentMonth; m++) {
+          months.push({ year: currentYear, month: m, date: new Date(currentYear, m - 1, 1) });
         }
-      });
-      
-      console.log("[DEBUG] Filtered records by month:", recordsByMonth);
-      
-      // Build history for each month in our months array
-      const history = months.map(({ year, month }) => {
-        const key = `${year}-${month}`;
-        if (recordsByMonth[key]) {
-          return {
-            player_id: playerId,
-            year,
-            month,
-            status: recordsByMonth[key].status
-          };
-        } else {
-          // For any month with no record, always show Not Paid
-          return {
-            player_id: playerId,
-            year,
-            month,
-            status: 'not_paid'
-          };
-        }
-      });
-      
-      console.log("[DEBUG] Final payment history:", history.map(h => `${h.year}-${h.month}: ${h.status}`));
-      setPaymentHistory(history);
+        months.reverse(); // Most recent first
+        
+        console.log("[DEBUG] Generated months:", months.map(m => `${m.year}-${m.month}`));
+        setHistoryMonths(months);
+        
+        // Fetch all payment records for this player for the current year
+        const { data, error } = await supabase
+          .from('monthly_payments')
+          .select('*')
+          .eq('player_id', playerId)
+          .eq('year', currentYear);
+        
+        if (error) throw error;
+        console.log("[DEBUG] Raw payment records:", data);
+        
+        // Build a map of records for lookup, ONLY for months <= currentMonth
+        const recordsByMonth: Record<string, any> = {};
+        (data || []).forEach(record => {
+          if (record.year === currentYear && record.month <= currentMonth) {
+            recordsByMonth[`${record.year}-${record.month}`] = record;
+          }
+        });
+        
+        console.log("[DEBUG] Filtered records by month:", recordsByMonth);
+        
+        // Build history for each month in our months array
+        const history = months.map(({ year, month }) => {
+          const key = `${year}-${month}`;
+          if (recordsByMonth[key]) {
+            return {
+              player_id: playerId,
+              year,
+              month,
+              status: recordsByMonth[key].status
+            };
+          } else {
+            // For any month with no record, always show Not Paid
+            return {
+              player_id: playerId,
+              year,
+              month,
+              status: 'not_paid'
+            };
+          }
+        });
+        
+        console.log("[DEBUG] Final payment history:", history.map((h: { year: number; month: number; status: string }) => `${h.year}-${h.month}: ${h.status}`));
+        setPaymentHistory(history);
+      }
     } catch (error) {
       console.error('Error fetching payment history:', error);
     } finally {

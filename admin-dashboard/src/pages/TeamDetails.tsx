@@ -31,6 +31,34 @@ import {
 } from '@tabler/icons-react';
 import { supabase } from '../lib/supabase';
 import { notifications } from '@mantine/notifications';
+import { Doughnut, Bar, Line } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  ArcElement,
+  Tooltip,
+  Legend,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  PointElement,
+  LineElement,
+  Title as ChartTitle,
+  Filler
+} from 'chart.js';
+
+// Register Chart.js components
+ChartJS.register(
+  ArcElement,
+  Tooltip,
+  Legend,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  PointElement,
+  LineElement,
+  ChartTitle,
+  Filler
+);
 
 interface Team {
   id: string;
@@ -396,6 +424,8 @@ const TeamDetails: React.FC = () => {
           year: payment.year
         }));
         
+        console.log('Payment statuses found:', [...new Set(paymentsWithDetails.map(p => p.status))]);
+        
         setPayments(paymentsWithDetails);
 
         // Create payment summaries for each player
@@ -409,10 +439,18 @@ const TeamDetails: React.FC = () => {
 
         const summaries: PlayerPaymentSummary[] = playersData.map(player => {
           const playerPayments = playerPaymentMap[player.id] || [];
-          const totalMonths = playerPayments.length;
-          const paidMonths = playerPayments.filter(p => p.status === 'paid').length;
-          const unpaidMonths = playerPayments.filter(p => p.status === 'unpaid').length;
-          const overdueMonths = playerPayments.filter(p => p.status === 'overdue').length;
+          
+          // Get current year and month for complete payment tracking
+          const currentYear = new Date().getFullYear();
+          const currentMonth = new Date().getMonth() + 1;
+          
+          // Calculate total months up to current month for this year
+          const totalMonths = currentMonth;
+          
+          // Count paid months from actual records for current year up to current month
+          const paidMonths = playerPayments.filter(p => p.status === 'paid' && p.year === currentYear && p.month <= currentMonth).length;
+          const unpaidMonths = playerPayments.filter(p => p.status === 'unpaid' && p.year === currentYear && p.month <= currentMonth).length;
+          const overdueMonths = playerPayments.filter(p => p.status === 'overdue' && p.year === currentYear && p.month <= currentMonth).length;
           
           // Get last payment date
           const paidPayments = playerPayments.filter(p => p.status === 'paid');
@@ -473,12 +511,12 @@ const TeamDetails: React.FC = () => {
       const playerIds = playersData.map(player => player.id);
 
       // Fetch all activities for the team to get activity names
-      const { data: activitiesData, error: activitiesError } = await supabase
+      const { data: activitiesData, error: attendanceActivitiesError } = await supabase
         .from('activities')
         .select('id, title')
         .eq('team_id', teamId);
 
-      if (activitiesError) throw activitiesError;
+      if (attendanceActivitiesError) throw attendanceActivitiesError;
 
       console.log('Activities fetched for team:', activitiesData);
 
@@ -642,12 +680,14 @@ const TeamDetails: React.FC = () => {
     switch (status) {
       case 'paid':
         return <Badge color="green">Paid</Badge>;
+      case 'unpaid':
+        return <Badge color="red">Unpaid</Badge>;
       case 'pending':
         return <Badge color="yellow">Pending</Badge>;
       case 'overdue':
         return <Badge color="red">Overdue</Badge>;
       default:
-        return <Badge color="gray">Unknown</Badge>;
+        return <Badge color="gray">{status || 'Unknown'}</Badge>;
     }
   };
 
@@ -667,7 +707,49 @@ const TeamDetails: React.FC = () => {
   };
 
   const getPlayerDetailedPayments = (playerId: string) => {
-    return payments.filter(payment => payment.player_id === playerId);
+    // Get current year and month
+    const currentYear = new Date().getFullYear();
+    const currentMonth = new Date().getMonth() + 1;
+    
+    // Get actual payment records for this player
+    const actualPayments = payments.filter(payment => payment.player_id === playerId);
+    
+    // Create a map of existing payments by month
+    const paymentsByMonth = new Map<string, Payment>();
+    actualPayments.forEach(payment => {
+      const key = `${payment.year}-${payment.month}`;
+      paymentsByMonth.set(key, payment);
+    });
+    
+    // Generate complete payment records for all months up to current month
+    const completePayments: Payment[] = [];
+    
+    for (let month = 1; month <= currentMonth; month++) {
+      const key = `${currentYear}-${month}`;
+      const existingPayment = paymentsByMonth.get(key);
+      
+      if (existingPayment) {
+        // Use existing payment record
+        completePayments.push(existingPayment);
+      } else {
+        // Create virtual payment record for missing month
+        completePayments.push({
+          id: `virtual-${currentYear}-${month}`,
+          player_id: playerId,
+          player_name: actualPayments.length > 0 ? actualPayments[0].player_name : 'Unknown Player',
+          status: 'unpaid',
+          updated_at: '',
+          month: month,
+          year: currentYear
+        });
+      }
+    }
+    
+    // Sort by year and month (most recent first)
+    return completePayments.sort((a, b) => {
+      if (a.year !== b.year) return b.year - a.year;
+      return b.month - a.month;
+    });
   };
 
   const formatMonthYear = (month: number, year: number) => {
@@ -961,6 +1043,8 @@ const TeamDetails: React.FC = () => {
     setMatchReportLoading(false);
   };
 
+
+
   if (loading) {
     return (
       <Center p="xl">
@@ -1036,9 +1120,6 @@ const TeamDetails: React.FC = () => {
           </Tabs.Tab>
           <Tabs.Tab value="attendance" icon={<IconCalendar size={16} />}>
             Attendance ({attendance.length})
-          </Tabs.Tab>
-          <Tabs.Tab value="statistics" icon={<IconChartBar size={16} />}>
-            Statistics
           </Tabs.Tab>
           <Tabs.Tab value="analytics" icon={<IconChartBar size={16} />}>
             Analytics
@@ -1183,7 +1264,9 @@ const TeamDetails: React.FC = () => {
                                           <Text size="sm">
                                             {payment.status === 'paid' && payment.updated_at 
                                               ? new Date(payment.updated_at).toLocaleDateString() 
-                                              : 'Not paid'}
+                                              : payment.id.startsWith('virtual-') 
+                                                ? 'Not paid' 
+                                                : 'Not available'}
                                           </Text>
                                         </td>
                                       </tr>
@@ -1363,61 +1446,7 @@ const TeamDetails: React.FC = () => {
           </ScrollArea>
         </Tabs.Panel>
 
-        <Tabs.Panel value="statistics" pt="md">
-          <Grid>
-            <Grid.Col span={4}>
-              <Card p="md">
-                <Text size="lg" weight={500} mb="md">Payment Overview</Text>
-                <RingProgress
-                  sections={[
-                    { value: 70, color: 'green' },
-                    { value: 20, color: 'yellow' },
-                    { value: 10, color: 'red' }
-                  ]}
-                  label={
-                    <Text size="xs" align="center">
-                      70% Paid
-                    </Text>
-                  }
-                />
-              </Card>
-            </Grid.Col>
-            <Grid.Col span={4}>
-              <Card p="md">
-                <Text size="lg" weight={500} mb="md">Attendance Rate</Text>
-                <RingProgress
-                  sections={[
-                    { value: 85, color: 'green' },
-                    { value: 10, color: 'yellow' },
-                    { value: 5, color: 'red' }
-                  ]}
-                  label={
-                    <Text size="xs" align="center">
-                      85% Present
-                    </Text>
-                  }
-                />
-              </Card>
-            </Grid.Col>
-            <Grid.Col span={4}>
-              <Card p="md">
-                <Text size="lg" weight={500} mb="md">Medical Visa Status</Text>
-                <RingProgress
-                  sections={[
-                    { value: 90, color: 'green' },
-                    { value: 5, color: 'orange' },
-                    { value: 5, color: 'red' }
-                  ]}
-                  label={
-                    <Text size="xs" align="center">
-                      90% Valid
-                    </Text>
-                  }
-                />
-              </Card>
-            </Grid.Col>
-          </Grid>
-        </Tabs.Panel>
+
 
         <Tabs.Panel value="analytics" pt="md">
           <div>

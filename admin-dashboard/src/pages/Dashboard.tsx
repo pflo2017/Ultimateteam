@@ -566,7 +566,7 @@ const Dashboard: React.FC = () => {
           )}
         </Paper>
 
-        <Paper withBorder p="md" radius="md" style={{ cursor: 'pointer', transition: 'box-shadow 0.2s', boxShadow: '0 0 0 rgba(0,0,0,0)' }} onClick={() => navigate('/players')} onMouseOver={e => (e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.08)')} onMouseOut={e => (e.currentTarget.style.boxShadow = '0 0 0 rgba(0,0,0,0)')}>
+        <Paper withBorder p="md" radius="md" style={{ cursor: 'pointer', transition: 'box-shadow 0.2s', boxShadow: '0 0 0 rgba(0,0,0,0)' }} onClick={() => navigate('/admin/players')} onMouseOver={e => (e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.08)')} onMouseOut={e => (e.currentTarget.style.boxShadow = '0 0 0 rgba(0,0,0,0)')}>
           <Group position="apart">
             <div>
               <Text color="dimmed" size="xs" transform="uppercase" weight={700}>
@@ -585,7 +585,7 @@ const Dashboard: React.FC = () => {
           </Text>
         </Paper>
 
-        <Paper withBorder p="md" radius="md" style={{ cursor: 'pointer', transition: 'box-shadow 0.2s', boxShadow: '0 0 0 rgba(0,0,0,0)' }} onClick={() => navigate('/teams')} onMouseOver={e => (e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.08)')} onMouseOut={e => (e.currentTarget.style.boxShadow = '0 0 0 rgba(0,0,0,0)')}>
+        <Paper withBorder p="md" radius="md" style={{ cursor: 'pointer', transition: 'box-shadow 0.2s', boxShadow: '0 0 0 rgba(0,0,0,0)' }} onClick={() => navigate('/admin/teams')} onMouseOver={e => (e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.08)')} onMouseOut={e => (e.currentTarget.style.boxShadow = '0 0 0 rgba(0,0,0,0)')}>
           <Group position="apart">
             <div>
               <Text color="dimmed" size="xs" transform="uppercase" weight={700}>
@@ -604,7 +604,7 @@ const Dashboard: React.FC = () => {
           </Text>
         </Paper>
 
-        <Paper withBorder p="md" radius="md" style={{ cursor: 'pointer', transition: 'box-shadow 0.2s', boxShadow: '0 0 0 rgba(0,0,0,0)' }} onClick={() => navigate('/coaches')} onMouseOver={e => (e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.08)')} onMouseOut={e => (e.currentTarget.style.boxShadow = '0 0 0 rgba(0,0,0,0)')}>
+        <Paper withBorder p="md" radius="md" style={{ cursor: 'pointer', transition: 'box-shadow 0.2s', boxShadow: '0 0 0 rgba(0,0,0,0)' }} onClick={() => navigate('/admin/coaches')} onMouseOver={e => (e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.08)')} onMouseOut={e => (e.currentTarget.style.boxShadow = '0 0 0 rgba(0,0,0,0)')}>
           <Group position="apart">
             <div>
               <Text color="dimmed" size="xs" transform="uppercase" weight={700}>
@@ -628,7 +628,7 @@ const Dashboard: React.FC = () => {
       {userRole === 'clubAdmin' && (
         <SimpleGrid cols={4} spacing="md" mb="md">
           {/* Paid Card */}
-          <Paper withBorder p="md" radius="md" style={{ cursor: 'pointer', transition: 'box-shadow 0.2s', boxShadow: '0 0 0 rgba(0,0,0,0)' }} onClick={() => navigate(`/payments?status=paid&year=${currentYear}&month=${currentMonth}`)} onMouseOver={e => (e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.08)')} onMouseOut={e => (e.currentTarget.style.boxShadow = '0 0 0 rgba(0,0,0,0)')}>
+          <Paper withBorder p="md" radius="md" style={{ cursor: 'pointer', transition: 'box-shadow 0.2s', boxShadow: '0 0 0 rgba(0,0,0,0)' }} onClick={() => navigate(`/admin/payments?status=paid&year=${currentYear}&month=${currentMonth}`)} onMouseOver={e => (e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.08)')} onMouseOut={e => (e.currentTarget.style.boxShadow = '0 0 0 rgba(0,0,0,0)')}>
             <Group position="apart">
               <div>
                 <Text color="dimmed" size="xs" transform="uppercase" weight={700}>
@@ -647,7 +647,7 @@ const Dashboard: React.FC = () => {
             </Text>
           </Paper>
           {/* Unpaid Card */}
-          <Paper withBorder p="md" radius="md" style={{ cursor: 'pointer', transition: 'box-shadow 0.2s', boxShadow: '0 0 0 rgba(0,0,0,0)' }} onClick={() => navigate(`/payments?status=unpaid&year=${currentYear}&month=${currentMonth}`)} onMouseOver={e => (e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.08)')} onMouseOut={e => (e.currentTarget.style.boxShadow = '0 0 0 rgba(0,0,0,0)')}>
+          <Paper withBorder p="md" radius="md" style={{ cursor: 'pointer', transition: 'box-shadow 0.2s', boxShadow: '0 0 0 rgba(0,0,0,0)' }} onClick={() => navigate(`/admin/payments?status=unpaid&year=${currentYear}&month=${currentMonth}`)} onMouseOver={e => (e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.08)')} onMouseOut={e => (e.currentTarget.style.boxShadow = '0 0 0 rgba(0,0,0,0)')}>
             <Group position="apart">
               <div>
                 <Text color="dimmed" size="xs" transform="uppercase" weight={700}>

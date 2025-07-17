@@ -442,6 +442,18 @@
       }
     },
     "players": {
+      "title": "Players",
+      "total_count": "Total: {{count}} players",
+      "search_placeholder": "Search players",
+      "no_players_found": "No players found",
+      "no_team_assigned": "No team assigned",
+      "birth_date": "Birth Date",
+      "not_available": "Not available",
+      "medical_visa": "Medical Visa",
+      "medical_visa_until": "Until",
+      "payment_status": "Payment Status",
+      "paid_on": "Paid on {{date}}",
+      "details": "Details",
       "status": {
         "paid": "Paid",
         "not_paid": "Not Paid",
@@ -450,12 +462,15 @@
         "trial_ended": "Trial Ended",
         "unknown": "Unknown"
       },
-      "no_players_found": "No players found",
       "filter": {
         "title": "Filter Players",
         "teams": "Teams",
         "all_teams": "All Teams",
         "medical_status": "Medical Status",
+        "all_medical": "All Medical",
+        "valid": "Valid",
+        "pending": "Pending",
+        "expired": "Expired",
         "apply_filters": "Apply Filters"
       },
       "select_team": "Select Team",

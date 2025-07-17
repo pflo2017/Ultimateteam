@@ -166,20 +166,35 @@ export const PlayerDetailsScreen = () => {
           .order('month', { ascending: false });
         if (allPaymentsError) throw allPaymentsError;
 
-        // Find the most recent paid record
+        // Get current year and month
+        const currentDate = new Date();
+        const currentYear = currentDate.getFullYear();
+        const currentMonth = currentDate.getMonth() + 1;
+        
+        // Find current month's payment status
+        const currentMonthPayment = allPayments?.find(p => p.year === currentYear && p.month === currentMonth);
+        
+        // Find the most recent paid record for last payment date
         let latestPaid = null;
         let latestPaymentMethod = null;
         if (allPayments && allPayments.length > 0) {
           latestPaid = allPayments.find(p => p.status === 'paid');
         }
-        if (latestPaid) {
-          playerData.payment_status = latestPaid.status;
-          playerData.last_payment_date = latestPaid.updated_at;
-          latestPaymentMethod = latestPaid.payment_method;
+        
+        // Set current status based on current month
+        if (currentMonthPayment) {
+          playerData.payment_status = currentMonthPayment.status;
+          latestPaymentMethod = currentMonthPayment.payment_method;
         } else {
-          playerData.payment_status = allPayments && allPayments.length > 0 ? allPayments[0].status : 'not_paid';
-          playerData.last_payment_date = allPayments && allPayments.length > 0 ? allPayments[0].updated_at : null;
-          latestPaymentMethod = allPayments && allPayments.length > 0 ? allPayments[0].payment_method : null;
+          // If no current month record, default to unpaid
+          playerData.payment_status = 'not_paid';
+        }
+        
+        // Set last payment date from most recent paid record
+        if (latestPaid) {
+          playerData.last_payment_date = latestPaid.updated_at;
+        } else {
+          playerData.last_payment_date = null;
         }
 
         // Fetch parent data if available
@@ -497,7 +512,21 @@ export const PlayerDetailsScreen = () => {
           />
           <InfoRow 
             label={t('admin.players.details.lastPaymentDate')} 
-            value={formatDate(player.last_payment_date)} 
+            value={(() => {
+              // Find the last paid month from payment history
+              const paidPayments = paymentHistory.filter(p => p.status === 'paid');
+              if (paidPayments.length > 0) {
+                const lastPaid = paidPayments.sort((a, b) => 
+                  new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+                )[0];
+                return `${new Date(lastPaid.year, lastPaid.month - 1).toLocaleString('default', { month: 'long' })} ${lastPaid.year} - ${formatDate(lastPaid.updated_at)}`;
+              }
+              return formatDate(player.last_payment_date);
+            })()} 
+          />
+          <InfoRow 
+            label="Current Month Status" 
+            value={`${new Date().toLocaleString('default', { month: 'long' })} ${new Date().getFullYear()}: ${player.payment_status === 'paid' ? 'Paid' : 'Not Paid'}`} 
           />
           <TouchableOpacity style={styles.historyButton} onPress={fetchPaymentHistory}>
             <MaterialCommunityIcons name="history" size={18} color={COLORS.primary} />

@@ -129,48 +129,79 @@ const PlayerCard = ({ player, onDetailsPress, onDelete, onUpdateMedicalVisa }: {
       const year = now.getFullYear();
       const month = now.getMonth() + 1;
       
-      // First, check current month payment status
-      const { data: currentMonthData, error: currentMonthError } = await supabase
-        .from('monthly_payments')
-        .select('status, updated_at')
-        .eq('player_id', player.id)
-        .eq('year', year)
-        .eq('month', month)
-        .single();
+      // Use the new RPC function to get consistent payment status
+      const { data: paymentStatusData, error: paymentStatusError } = await supabase
+        .rpc('get_player_current_payment_status', { p_player_id: player.id });
       
-      // Then, find the last paid payment record
-      const { data: lastPaidData, error: lastPaidError } = await supabase
-        .from('monthly_payments')
-        .select('status, updated_at, year, month')
-        .eq('player_id', player.id)
-        .eq('status', 'paid')
-        .order('year', { ascending: false })
-        .order('month', { ascending: false })
-        .limit(1)
-        .single();
-      
-      // Set current month status
-      if (!currentMonthError && currentMonthData && currentMonthData.status) {
-        setRefreshedStatus(currentMonthData.status);
-        if (currentMonthData.status === 'paid' && currentMonthData.updated_at) {
-          const paidDate = new Date(currentMonthData.updated_at);
+      if (!paymentStatusError && paymentStatusData && paymentStatusData.length > 0) {
+        const statusData = paymentStatusData[0];
+        setRefreshedStatus(statusData.current_status);
+        
+        if (statusData.current_status === 'paid' && statusData.last_paid_date) {
+          const paidDate = new Date(statusData.last_paid_date);
           setRefreshedPaidDate(paidDate.toLocaleDateString('en-GB'));
         } else {
           setRefreshedPaidDate(null);
         }
+        
+        // Set last paid month and exact date if found
+        if (statusData.last_paid_date) {
+          const paidDate = new Date(statusData.last_paid_date);
+          const monthName = paidDate.toLocaleDateString('en-GB', { month: 'long' });
+          setRefreshedLastPaidMonth(monthName);
+          setRefreshedLastPaidExactDate(paidDate.toLocaleDateString('en-GB'));
+        } else {
+          setRefreshedLastPaidMonth(null);
+          setRefreshedLastPaidExactDate(null);
+        }
       } else {
-        setRefreshedStatus('unpaid');
-        setRefreshedPaidDate(null);
-      }
-      // Set last paid month and exact date if found
-      if (!lastPaidError && lastPaidData && lastPaidData.status === 'paid' && lastPaidData.updated_at) {
-        const paidDate = new Date(lastPaidData.updated_at);
-        const monthName = paidDate.toLocaleDateString('en-GB', { month: 'long' });
-        setRefreshedLastPaidMonth(monthName);
-        setRefreshedLastPaidExactDate(paidDate.toLocaleDateString('en-GB'));
-      } else {
-        setRefreshedLastPaidMonth(null);
-        setRefreshedLastPaidExactDate(null);
+        // Fallback to direct table queries if RPC fails
+        console.log('RPC function not available, using fallback method');
+        
+        // First, check current month payment status
+        const { data: currentMonthData, error: currentMonthError } = await supabase
+          .from('monthly_payments')
+          .select('status, updated_at')
+          .eq('player_id', player.id)
+          .eq('year', year)
+          .eq('month', month)
+          .single();
+        
+        // Then, find the last paid payment record
+        const { data: lastPaidData, error: lastPaidError } = await supabase
+          .from('monthly_payments')
+          .select('status, updated_at, year, month')
+          .eq('player_id', player.id)
+          .eq('status', 'paid')
+          .order('year', { ascending: false })
+          .order('month', { ascending: false })
+          .limit(1)
+          .single();
+        
+        // Set current month status
+        if (!currentMonthError && currentMonthData && currentMonthData.status) {
+          setRefreshedStatus(currentMonthData.status);
+          if (currentMonthData.status === 'paid' && currentMonthData.updated_at) {
+            const paidDate = new Date(currentMonthData.updated_at);
+            setRefreshedPaidDate(paidDate.toLocaleDateString('en-GB'));
+          } else {
+            setRefreshedPaidDate(null);
+          }
+        } else {
+          setRefreshedStatus('unpaid');
+          setRefreshedPaidDate(null);
+        }
+        
+        // Set last paid month and exact date if found
+        if (!lastPaidError && lastPaidData && lastPaidData.status === 'paid' && lastPaidData.updated_at) {
+          const paidDate = new Date(lastPaidData.updated_at);
+          const monthName = paidDate.toLocaleDateString('en-GB', { month: 'long' });
+          setRefreshedLastPaidMonth(monthName);
+          setRefreshedLastPaidExactDate(paidDate.toLocaleDateString('en-GB'));
+        } else {
+          setRefreshedLastPaidMonth(null);
+          setRefreshedLastPaidExactDate(null);
+        }
       }
       
       // Also fetch fresh medical visa status

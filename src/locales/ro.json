@@ -469,7 +469,8 @@
     "players": {
       "title": "Jucători",
       "total_count": "Total: {{count}} jucători",
-      "search_placeholder": "Caută jucător",
+      "search_placeholder": "Caută jucători",
+      "no_players_found": "Nu s-au găsit jucători",
       "no_team_assigned": "Fără echipă atribuită",
       "birth_date": "Data nașterii",
       "not_available": "Nu este disponibil",
@@ -479,11 +480,18 @@
       "paid_on": "Plătit pe {{date}}",
       "details": "Detalii",
       "filter": {
+        "title": "Filtrează Jucătorii",
+        "teams": "Echipe",
+        "all_teams": "Toate Echipele",
+        "medical_status": "Status Medical",
         "all_medical": "Toate medicale",
         "valid": "Validă",
         "pending": "În așteptare",
-        "expired": "Expirată"
+        "expired": "Expirată",
+        "apply_filters": "Aplică Filtrele"
       },
+      "select_team": "Selectează Echipa",
+      "all_teams": "Toate Echipele",
       "status": {
         "paid": "Plătit",
         "not_paid": "Neplătit",
@@ -498,6 +506,10 @@
         "title": "Actualizează statusul vizei medicale",
         "change_status_for": "Schimbă statusul vizei medicale pentru {{playerName}}",
         "valid": "Validă",
+        "medical_visa_issue_date": "Data Emiterii Vizei Medicale:",
+        "hide_calendar": "Ascunde Calendarul",
+        "change_date": "Schimbă Data",
+        "confirm_valid_status": "Confirmă Statusul Valid",
         "expired": "Expirată"
       }
     },
