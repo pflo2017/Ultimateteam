@@ -53,6 +53,8 @@ const TeamsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string | null>('active');
   const [clubId, setClubId] = useState<string | null>(null);
   const [clubName, setClubName] = useState<string | null>(null);
+  const [gameResults, setGameResults] = useState<any[]>([]);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
   
   // Modal state
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -67,6 +69,13 @@ const TeamsPage: React.FC = () => {
     
     fetchTeams();
   }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'analytics' && clubId) {
+      console.log('Analytics tab selected, fetching game results...');
+      fetchGameResults();
+    }
+  }, [activeTab, clubId]);
   
   const fetchTeams = async () => {
     try {
@@ -301,6 +310,96 @@ const TeamsPage: React.FC = () => {
     navigate(`/admin/teams/${team.id}`);
   };
 
+  const fetchGameResults = async () => {
+    try {
+      setAnalyticsLoading(true);
+      console.log('Fetching game results for clubId:', clubId);
+      
+      if (!clubId) {
+        throw new Error('No club ID found');
+      }
+
+      // First, fetch teams to get team names
+      const { data: teamsData, error: teamsError } = await supabase
+        .from('teams')
+        .select('id, name')
+        .eq('club_id', clubId)
+        .eq('is_active', true);
+
+      if (teamsError) throw teamsError;
+
+      // Fetch game activities with scores for this club
+      const { data: gamesData, error: gamesError } = await supabase
+        .from('activities')
+        .select(`
+          id,
+          title,
+          start_time,
+          team_id,
+          home_away,
+          home_score,
+          away_score
+        `)
+        .eq('club_id', clubId)
+        .eq('type', 'game')
+        .not('home_score', 'is', null)
+        .not('away_score', 'is', null)
+        .order('start_time', { ascending: false });
+
+      if (gamesError) throw gamesError;
+
+      console.log('Raw games data:', gamesData);
+      console.log('Teams data:', teamsData);
+
+      if (gamesData && gamesData.length > 0) {
+        const results = gamesData.map((game: any) => {
+          // Map team name using teams data
+          const teamName = teamsData?.find(t => t.id === game.team_id)?.name || `Team ${game.team_id?.slice(0, 8) || 'Unknown'}`;
+          const isHome = game.home_away === 'home';
+          const clubScore = isHome ? game.home_score : game.away_score;
+          const opponentScore = isHome ? game.away_score : game.home_score;
+          
+          let outcome: 'Win' | 'Loss' | 'Draw';
+          if (clubScore > opponentScore) {
+            outcome = 'Win';
+          } else if (clubScore < opponentScore) {
+            outcome = 'Loss';
+          } else {
+            outcome = 'Draw';
+          }
+
+          return {
+            id: game.id,
+            title: game.title,
+            date: new Date(game.start_time).toLocaleDateString(),
+            teamName: teamName,
+            homeScore: game.home_score,
+            awayScore: game.away_score,
+            homeAway: game.home_away,
+            outcome: outcome,
+            clubScore: clubScore,
+            opponentScore: opponentScore
+          };
+        });
+
+        console.log('Processed game results:', results);
+        setGameResults(results);
+      } else {
+        console.log('No games data found');
+        setGameResults([]);
+      }
+    } catch (error) {
+      console.error('Error fetching game results:', error);
+      notifications.show({
+        title: 'Error',
+        message: 'Failed to fetch game results',
+        color: 'red'
+      });
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  };
+
 
   
   // Filter teams based on search term
@@ -332,15 +431,122 @@ const TeamsPage: React.FC = () => {
         </Group>
       </Paper>
       
-      <Tabs value={activeTab} onTabChange={setActiveTab} mb="md">
+      <Tabs value={activeTab} onTabChange={(value) => {
+        console.log('Tab changed to:', value);
+        setActiveTab(value);
+      }} mb="md">
         <Tabs.List>
           <Tabs.Tab value="all">All Teams</Tabs.Tab>
           <Tabs.Tab value="active">Active</Tabs.Tab>
           <Tabs.Tab value="inactive">Inactive</Tabs.Tab>
+          <Tabs.Tab value="analytics">Analytics</Tabs.Tab>
         </Tabs.List>
       </Tabs>
       
-      {loading ? (
+      {activeTab === 'analytics' ? (
+        // Analytics Tab Content - Game Performance Only
+        <div>
+          <Title order={3} mb="md">Team Performance Analytics</Title>
+          
+          {(() => {
+            console.log('Analytics tab - analyticsLoading:', analyticsLoading, 'gameResults length:', gameResults.length);
+            return null;
+          })()}
+          
+          {analyticsLoading ? (
+            <Center p="xl">
+              <Loader />
+            </Center>
+          ) : gameResults.length === 0 ? (
+            <div>
+              <Text align="center" mt="lg" color="dimmed">
+                No game results found. Games with scores will appear here.
+              </Text>
+              <Text align="center" mt="sm" size="xs" color="dimmed">
+                Debug: clubId = {clubId}, analyticsLoading = {analyticsLoading.toString()}
+              </Text>
+            </div>
+          ) : (
+            <div>
+              {/* Performance Summary */}
+              <Paper p="md" mb="md" withBorder>
+                <Group position="apart">
+                  <div>
+                    <Text size="sm" color="dimmed">Total Games</Text>
+                    <Text weight={700} size="xl">{gameResults.length}</Text>
+                  </div>
+                  <div>
+                    <Text size="sm" color="dimmed">Wins</Text>
+                    <Text weight={700} size="xl" color="green">
+                      {gameResults.filter(game => game.outcome === 'Win').length}
+                    </Text>
+                  </div>
+                  <div>
+                    <Text size="sm" color="dimmed">Losses</Text>
+                    <Text weight={700} size="xl" color="red">
+                      {gameResults.filter(game => game.outcome === 'Loss').length}
+                    </Text>
+                  </div>
+                  <div>
+                    <Text size="sm" color="dimmed">Draws</Text>
+                    <Text weight={700} size="xl" color="yellow">
+                      {gameResults.filter(game => game.outcome === 'Draw').length}
+                    </Text>
+                  </div>
+                  <div>
+                    <Text size="sm" color="dimmed">Win Rate</Text>
+                    <Text weight={700} size="xl" color="blue">
+                      {gameResults.length > 0 
+                        ? Math.round((gameResults.filter(game => game.outcome === 'Win').length / gameResults.length) * 100)
+                        : 0}%
+                    </Text>
+                  </div>
+                </Group>
+              </Paper>
+
+              {/* Game Results Table */}
+              <Table striped>
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Game</th>
+                    <th>Team</th>
+                    <th>Score</th>
+                    <th>Result</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {gameResults.map((game) => (
+                    <tr key={game.id}>
+                      <td>{game.date}</td>
+                      <td>{game.title}</td>
+                      <td>{game.teamName}</td>
+                      <td>
+                        <Text>
+                          {game.homeScore} - {game.awayScore}
+                          <Text size="xs" color="dimmed" ml="xs">
+                            ({game.homeAway === 'home' ? 'Home' : 'Away'})
+                          </Text>
+                        </Text>
+                      </td>
+                      <td>
+                        <Badge 
+                          color={
+                            game.outcome === 'Win' ? 'green' : 
+                            game.outcome === 'Loss' ? 'red' : 'yellow'
+                          }
+                        >
+                          {game.outcome}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            </div>
+          )}
+        </div>
+      ) : loading ? (
         <Center p="xl">
           <Loader />
         </Center>

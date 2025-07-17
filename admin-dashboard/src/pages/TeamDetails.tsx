@@ -17,7 +17,8 @@ import {
   Grid,
   RingProgress,
   Select,
-  NumberInput
+  NumberInput,
+  Modal
 } from '@mantine/core';
 import {
   IconUsers,
@@ -105,6 +106,38 @@ interface PlayerAttendanceSummary {
   current_status: 'excellent' | 'good' | 'fair' | 'poor';
 }
 
+interface GameResult {
+  id: string;
+  title: string;
+  date: string;
+  homeScore: number;
+  awayScore: number;
+  homeAway: 'home' | 'away';
+  outcome: 'Win' | 'Loss' | 'Draw';
+  clubScore: number;
+  opponentScore: number;
+}
+
+interface MatchReportEvent {
+  id: string;
+  event_type: 'goal' | 'assist' | 'yellow_card' | 'red_card' | 'man_of_the_match';
+  player_id: string;
+  player_name: string;
+  minute?: number;
+  half: 'first' | 'second';
+}
+
+interface MatchReport {
+  events: MatchReportEvent[];
+  summary: {
+    totalGoals: number;
+    totalAssists: number;
+    totalYellowCards: number;
+    totalRedCards: number;
+    manOfTheMatch?: string;
+  };
+}
+
 const TeamDetails: React.FC = () => {
   const { teamId } = useParams<{ teamId: string }>();
   const navigate = useNavigate();
@@ -114,6 +147,8 @@ const TeamDetails: React.FC = () => {
   const [paymentSummaries, setPaymentSummaries] = useState<PlayerPaymentSummary[]>([]);
   const [attendance, setAttendance] = useState<Attendance[]>([]);
   const [attendanceSummaries, setAttendanceSummaries] = useState<PlayerAttendanceSummary[]>([]);
+  const [gameResults, setGameResults] = useState<GameResult[]>([]);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<string | null>('players');
   const [expandedPlayerId, setExpandedPlayerId] = useState<string | null>(null);
@@ -121,12 +156,23 @@ const TeamDetails: React.FC = () => {
     month: new Date().getMonth() + 1,
     year: new Date().getFullYear()
   });
+  const [matchReportModalOpen, setMatchReportModalOpen] = useState(false);
+  const [selectedGame, setSelectedGame] = useState<GameResult | null>(null);
+  const [matchReport, setMatchReport] = useState<MatchReport | null>(null);
+  const [matchReportLoading, setMatchReportLoading] = useState(false);
 
   useEffect(() => {
     if (teamId) {
       fetchTeamDetails();
     }
   }, [teamId]);
+
+  useEffect(() => {
+    if (activeTab === 'analytics' && teamId) {
+      console.log('Analytics tab selected, fetching game results...');
+      fetchGameResults();
+    }
+  }, [activeTab, teamId]);
 
   const fetchTeamDetails = async () => {
     try {
@@ -646,6 +692,147 @@ const TeamDetails: React.FC = () => {
     return attendance.filter(att => att.player_id === playerId);
   };
 
+  const fetchGameResults = async () => {
+    try {
+      setAnalyticsLoading(true);
+      console.log('Fetching game results for teamId:', teamId);
+      
+      if (!teamId) {
+        throw new Error('No team ID found');
+      }
+
+      // Fetch game activities with scores for this team
+      const { data: gamesData, error: gamesError } = await supabase
+        .from('activities')
+        .select(`
+          id,
+          title,
+          start_time,
+          team_id,
+          home_away,
+          home_score,
+          away_score
+        `)
+        .eq('team_id', teamId)
+        .eq('type', 'game')
+        .not('home_score', 'is', null)
+        .not('away_score', 'is', null)
+        .order('start_time', { ascending: false });
+
+      if (gamesError) throw gamesError;
+
+      console.log('Raw games data:', gamesData);
+
+      if (gamesData && gamesData.length > 0) {
+        const results = gamesData.map((game: any) => {
+          const isHome = game.home_away === 'home';
+          const clubScore = isHome ? game.home_score : game.away_score;
+          const opponentScore = isHome ? game.away_score : game.home_score;
+          
+          let outcome: 'Win' | 'Loss' | 'Draw';
+          if (clubScore > opponentScore) {
+            outcome = 'Win';
+          } else if (clubScore < opponentScore) {
+            outcome = 'Loss';
+          } else {
+            outcome = 'Draw';
+          }
+
+          return {
+            id: game.id,
+            title: game.title,
+            date: new Date(game.start_time).toLocaleDateString(),
+            homeScore: game.home_score,
+            awayScore: game.away_score,
+            homeAway: game.home_away,
+            outcome: outcome,
+            clubScore: clubScore,
+            opponentScore: opponentScore
+          };
+        });
+
+        console.log('Processed game results:', results);
+        setGameResults(results);
+      } else {
+        console.log('No games data found');
+        setGameResults([]);
+      }
+    } catch (error) {
+      console.error('Error fetching game results:', error);
+      notifications.show({
+        title: 'Error',
+        message: 'Failed to fetch game results',
+        color: 'red'
+      });
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  };
+
+  const handleViewMatchReport = async (gameId: string) => {
+    const game = gameResults.find(g => g.id === gameId) || null;
+    setSelectedGame(game);
+    setMatchReportModalOpen(true);
+    setMatchReportLoading(true);
+    
+    try {
+      // Fetch real match report data from activity_events table
+      const { data: eventsData, error: eventsError } = await supabase
+        .from('activity_events')
+        .select(`
+          id,
+          event_type,
+          player_id,
+          minute,
+          half,
+          players:player_id (name)
+        `)
+        .eq('activity_id', gameId)
+        .order('half', { ascending: true })
+        .order('minute', { ascending: true });
+
+      if (eventsError) {
+        console.error('Error fetching match events:', eventsError);
+        setMatchReport(null);
+      } else if (eventsData && eventsData.length > 0) {
+        // Process the events data
+        const events: MatchReportEvent[] = eventsData.map((event: any) => ({
+          id: event.id,
+          event_type: event.event_type,
+          player_id: event.player_id,
+          player_name: event.players?.name || 'Unknown Player',
+          minute: event.minute,
+          half: event.half
+        }));
+
+        // Calculate summary
+        const summary = {
+          totalGoals: events.filter(e => e.event_type === 'goal').length,
+          totalAssists: events.filter(e => e.event_type === 'assist').length,
+          totalYellowCards: events.filter(e => e.event_type === 'yellow_card').length,
+          totalRedCards: events.filter(e => e.event_type === 'red_card').length,
+          manOfTheMatch: events.find(e => e.event_type === 'man_of_the_match')?.player_name
+        };
+
+        setMatchReport({ events, summary });
+      } else {
+        setMatchReport(null);
+      }
+    } catch (error) {
+      console.error('Error fetching match report:', error);
+      setMatchReport(null);
+    } finally {
+      setMatchReportLoading(false);
+    }
+  };
+
+  const handleCloseMatchReport = () => {
+    setMatchReportModalOpen(false);
+    setSelectedGame(null);
+    setMatchReport(null);
+    setMatchReportLoading(false);
+  };
+
   if (loading) {
     return (
       <Center p="xl">
@@ -1105,26 +1292,344 @@ const TeamDetails: React.FC = () => {
         </Tabs.Panel>
 
         <Tabs.Panel value="analytics" pt="md">
-          <Grid>
-            <Grid.Col span={6}>
-              <Card p="md">
-                <Text size="lg" weight={500} mb="md">Monthly Payments Trend</Text>
-                {/* Placeholder for chart component */}
-                <Center h={200}>
-                  <Text color="dimmed">Chart will be implemented here</Text>
-                </Center>
-              </Card>
-            </Grid.Col>
-            <Grid.Col span={6}>
-              <Card p="md">
-                <Text size="lg" weight={500} mb="md">Attendance Trend</Text>
-                {/* Placeholder for chart component */}
-                <Center h={200}>
-                  <Text color="dimmed">Chart will be implemented here</Text>
-                </Center>
-              </Card>
-            </Grid.Col>
-          </Grid>
+          <div>
+            <Title order={3} mb="md">Team Performance Analytics</Title>
+            
+            {(() => {
+              console.log('Analytics tab - analyticsLoading:', analyticsLoading, 'gameResults length:', gameResults.length);
+              return null;
+            })()}
+            
+            {analyticsLoading ? (
+              <Center p="xl">
+                <Loader />
+              </Center>
+            ) : gameResults.length === 0 ? (
+              <div>
+                <Text align="center" mt="lg" color="dimmed">
+                  No game results found. Games with scores will appear here.
+                </Text>
+                <Text align="center" mt="sm" size="xs" color="dimmed">
+                  Debug: teamId = {teamId}, analyticsLoading = {analyticsLoading.toString()}
+                </Text>
+              </div>
+            ) : (
+              <div>
+                {/* Performance Summary */}
+                <Paper p="md" mb="md" withBorder>
+                  <Group position="apart">
+                    <div>
+                      <Text size="sm" color="dimmed">Total Games</Text>
+                      <Text weight={700} size="xl">{gameResults.length}</Text>
+                    </div>
+                    <div>
+                      <Text size="sm" color="dimmed">Wins</Text>
+                      <Text weight={700} size="xl" color="green">
+                        {gameResults.filter(game => game.outcome === 'Win').length}
+                      </Text>
+                    </div>
+                    <div>
+                      <Text size="sm" color="dimmed">Losses</Text>
+                      <Text weight={700} size="xl" color="red">
+                        {gameResults.filter(game => game.outcome === 'Loss').length}
+                      </Text>
+                    </div>
+                    <div>
+                      <Text size="sm" color="dimmed">Draws</Text>
+                      <Text weight={700} size="xl" color="yellow">
+                        {gameResults.filter(game => game.outcome === 'Draw').length}
+                      </Text>
+                    </div>
+                    <div>
+                      <Text size="sm" color="dimmed">Win Rate</Text>
+                      <Text weight={700} size="xl" color="blue">
+                        {gameResults.length > 0 
+                          ? Math.round((gameResults.filter(game => game.outcome === 'Win').length / gameResults.length) * 100)
+                          : 0}%
+                      </Text>
+                    </div>
+                  </Group>
+                </Paper>
+
+                {/* Game Results Table */}
+                <Table striped>
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Game</th>
+                      <th>Score</th>
+                      <th>Result</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {gameResults.map((game) => (
+                      <tr key={game.id}>
+                        <td>{game.date}</td>
+                        <td>{game.title}</td>
+                        <td>
+                          <Text>
+                            {game.homeScore} - {game.awayScore}
+                            <Text size="xs" color="dimmed" ml="xs">
+                              ({game.homeAway === 'home' ? 'Home' : 'Away'})
+                            </Text>
+                          </Text>
+                        </td>
+                        <td>
+                          <Badge 
+                            color={
+                              game.outcome === 'Win' ? 'green' : 
+                              game.outcome === 'Loss' ? 'red' : 'yellow'
+                            }
+                          >
+                            {game.outcome}
+                          </Badge>
+                        </td>
+                        <td>
+                          <Button 
+                            size="xs" 
+                            variant="subtle" 
+                            color="blue"
+                            onClick={() => handleViewMatchReport(game.id)}
+                          >
+                            View Match Report
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
+                {/* Match Report Modal */}
+                <Modal
+                  opened={matchReportModalOpen}
+                  onClose={handleCloseMatchReport}
+                  title={selectedGame ? `Match Report: ${selectedGame.title}` : 'Match Report'}
+                  size="lg"
+                  styles={{
+                    title: { fontSize: '1.2rem', fontWeight: 600 },
+                    header: { backgroundColor: '#f8f9fa', borderBottom: '1px solid #e9ecef' }
+                  }}
+                >
+                  {matchReportLoading ? (
+                    <Center p="xl">
+                      <Loader />
+                    </Center>
+                  ) : selectedGame ? (
+                    <div>
+                      {/* Match Header */}
+                      <Paper p="md" mb="md" withBorder style={{ backgroundColor: '#f8f9fa' }}>
+                        <Group position="apart" mb="sm">
+                          <div>
+                            <Text size="sm" color="dimmed">Date</Text>
+                            <Text weight={500}>{selectedGame.date}</Text>
+                          </div>
+                          <div>
+                            <Text size="sm" color="dimmed">Score</Text>
+                            <Text weight={500}>
+                              {selectedGame.homeScore} - {selectedGame.awayScore} 
+                              <Text size="xs" color="dimmed" ml="xs">
+                                ({selectedGame.homeAway === 'home' ? 'Home' : 'Away'})
+                              </Text>
+                            </Text>
+                          </div>
+                          <div>
+                            <Text size="sm" color="dimmed">Result</Text>
+                            <Badge 
+                              color={
+                                selectedGame.outcome === 'Win' ? 'green' : 
+                                selectedGame.outcome === 'Loss' ? 'red' : 'yellow'
+                              }
+                            >
+                              {selectedGame.outcome}
+                            </Badge>
+                          </div>
+                        </Group>
+                      </Paper>
+
+                      {matchReport ? (
+                        <div>
+                          {/* Match Summary */}
+                          <Paper p="md" mb="md" withBorder>
+                            <Text weight={600} size="lg" mb="md">Match Summary</Text>
+                            <Grid>
+                              <Grid.Col span={3}>
+                                <div style={{ textAlign: 'center' }}>
+                                  <Text size="xl" weight={700} color="green">
+                                    {matchReport.summary.totalGoals}
+                                  </Text>
+                                  <Text size="sm" color="dimmed">Goals</Text>
+                                </div>
+                              </Grid.Col>
+                              <Grid.Col span={3}>
+                                <div style={{ textAlign: 'center' }}>
+                                  <Text size="xl" weight={700} color="blue">
+                                    {matchReport.summary.totalAssists}
+                                  </Text>
+                                  <Text size="sm" color="dimmed">Assists</Text>
+                                </div>
+                              </Grid.Col>
+                              <Grid.Col span={3}>
+                                <div style={{ textAlign: 'center' }}>
+                                  <Text size="xl" weight={700} color="yellow">
+                                    {matchReport.summary.totalYellowCards}
+                                  </Text>
+                                  <Text size="sm" color="dimmed">Yellow Cards</Text>
+                                </div>
+                              </Grid.Col>
+                              <Grid.Col span={3}>
+                                <div style={{ textAlign: 'center' }}>
+                                  <Text size="xl" weight={700} color="red">
+                                    {matchReport.summary.totalRedCards}
+                                  </Text>
+                                  <Text size="sm" color="dimmed">Red Cards</Text>
+                                </div>
+                              </Grid.Col>
+                            </Grid>
+                          </Paper>
+
+                          {/* Man of the Match */}
+                          {matchReport.summary.manOfTheMatch && (
+                            <Paper p="md" mb="md" withBorder style={{ backgroundColor: '#fff3cd', borderColor: '#ffeaa7' }}>
+                              <Group>
+                                <div style={{ 
+                                  backgroundColor: '#FFD700', 
+                                  borderRadius: '50%', 
+                                  width: 40, 
+                                  height: 40, 
+                                  display: 'flex', 
+                                  alignItems: 'center', 
+                                  justifyContent: 'center' 
+                                }}>
+                                  <Text size="lg">⭐</Text>
+                                </div>
+                                <div>
+                                  <Text weight={600} size="sm" color="dimmed">Man of the Match</Text>
+                                  <Text weight={700} size="lg">{matchReport.summary.manOfTheMatch}</Text>
+                                </div>
+                              </Group>
+                            </Paper>
+                          )}
+
+                          {/* Match Events */}
+                          <Paper p="md" withBorder>
+                            <Text weight={600} size="lg" mb="md">Match Events</Text>
+                            
+                            {/* First Half */}
+                            {matchReport.events.filter(e => e.half === 'first').length > 0 && (
+                              <div style={{ marginBottom: '1rem' }}>
+                                <Text weight={600} size="sm" color="dimmed" mb="sm">First Half</Text>
+                                {matchReport.events
+                                  .filter(e => e.half === 'first')
+                                  .map((event, index) => (
+                                    <div key={event.id} style={{ 
+                                      display: 'flex', 
+                                      alignItems: 'center', 
+                                      padding: '0.5rem', 
+                                      backgroundColor: index % 2 === 0 ? '#f8f9fa' : 'white',
+                                      borderRadius: '0.25rem',
+                                      marginBottom: '0.25rem'
+                                    }}>
+                                      <div style={{
+                                        width: 24,
+                                        height: 24,
+                                        borderRadius: '50%',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        marginRight: '0.75rem',
+                                        backgroundColor: 
+                                          event.event_type === 'goal' ? '#43a047' :
+                                          event.event_type === 'assist' ? '#1976d2' :
+                                          event.event_type === 'yellow_card' ? '#fbc02d' :
+                                          event.event_type === 'red_card' ? '#d32f2f' : '#FFD700'
+                                      }}>
+                                        <Text size="xs" color="white" weight={600}>
+                                          {event.event_type === 'goal' ? '⚽' :
+                                           event.event_type === 'assist' ? '🤝' :
+                                           event.event_type === 'yellow_card' ? '🟨' :
+                                           event.event_type === 'red_card' ? '🟥' : '⭐'}
+                                        </Text>
+                                      </div>
+                                      <div style={{ flex: 1 }}>
+                                        <Text weight={500}>{event.player_name}</Text>
+                                        <Text size="xs" color="dimmed">
+                                          {event.event_type === 'man_of_the_match' ? 'Man of the Match' :
+                                           `min ${event.minute}`}
+                                        </Text>
+                                      </div>
+                                    </div>
+                                  ))}
+                              </div>
+                            )}
+
+                            {/* Second Half */}
+                            {matchReport.events.filter(e => e.half === 'second').length > 0 && (
+                              <div>
+                                <Text weight={600} size="sm" color="dimmed" mb="sm">Second Half</Text>
+                                {matchReport.events
+                                  .filter(e => e.half === 'second')
+                                  .map((event, index) => (
+                                    <div key={event.id} style={{ 
+                                      display: 'flex', 
+                                      alignItems: 'center', 
+                                      padding: '0.5rem', 
+                                      backgroundColor: index % 2 === 0 ? '#f8f9fa' : 'white',
+                                      borderRadius: '0.25rem',
+                                      marginBottom: '0.25rem'
+                                    }}>
+                                      <div style={{
+                                        width: 24,
+                                        height: 24,
+                                        borderRadius: '50%',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        marginRight: '0.75rem',
+                                        backgroundColor: 
+                                          event.event_type === 'goal' ? '#43a047' :
+                                          event.event_type === 'assist' ? '#1976d2' :
+                                          event.event_type === 'yellow_card' ? '#fbc02d' :
+                                          event.event_type === 'red_card' ? '#d32f2f' : '#FFD700'
+                                      }}>
+                                        <Text size="xs" color="white" weight={600}>
+                                          {event.event_type === 'goal' ? '⚽' :
+                                           event.event_type === 'assist' ? '🤝' :
+                                           event.event_type === 'yellow_card' ? '🟨' :
+                                           event.event_type === 'red_card' ? '🟥' : '⭐'}
+                                        </Text>
+                                      </div>
+                                      <div style={{ flex: 1 }}>
+                                        <Text weight={500}>{event.player_name}</Text>
+                                        <Text size="xs" color="dimmed">
+                                          {event.event_type === 'man_of_the_match' ? 'Man of the Match' :
+                                           `min ${event.minute}`}
+                                        </Text>
+                                      </div>
+                                    </div>
+                                  ))}
+                              </div>
+                            )}
+
+                            {matchReport.events.length === 0 && (
+                              <Text color="dimmed" align="center" py="md">
+                                No match events recorded yet.
+                              </Text>
+                            )}
+                          </Paper>
+                        </div>
+                      ) : (
+                        <Paper p="md" withBorder style={{ backgroundColor: '#f8f9fa' }}>
+                          <Text color="dimmed" align="center">
+                            No match report available for this game yet.
+                          </Text>
+                        </Paper>
+                      )}
+                    </div>
+                  ) : null}
+                </Modal>
+              </div>
+            )}
+          </div>
         </Tabs.Panel>
       </Tabs>
     </div>
