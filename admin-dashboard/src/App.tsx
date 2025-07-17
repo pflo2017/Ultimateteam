@@ -10,6 +10,7 @@ import ClubsList from './pages/ClubsList';
 import ClubDetail from './pages/ClubDetail';
 import UsersList from './pages/UsersList';
 import TeamsPage from './pages/TeamsPage';
+import TeamDetails from './pages/TeamDetails';
 import CoachesList from './pages/CoachesList';
 import PlayersPage from './pages/PlayersPage';
 import Parents from './pages/Parents';
@@ -76,6 +77,7 @@ function App() {
               <Route path="clubs/:id" element={<ClubDetail />} />
               <Route path="users" element={<UsersList />} />
               <Route path="teams" element={<TeamsPage />} />
+              <Route path="teams/:teamId" element={<TeamDetails />} />
               <Route path="coaches" element={<CoachesList />} />
               <Route path="players" element={<PlayersPage />} />
               <Route path="parents" element={<Parents />} />

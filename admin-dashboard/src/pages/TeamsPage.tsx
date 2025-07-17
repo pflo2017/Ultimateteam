@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Title,
   Table,
@@ -24,7 +25,8 @@ import {
   IconEdit,
   IconPlus,
   IconTrash,
-  IconUsers
+  IconUsers,
+  IconEye
 } from '@tabler/icons-react';
 import { supabase } from '../lib/supabase';
 import { notifications } from '@mantine/notifications';
@@ -41,7 +43,10 @@ interface Team {
   created_at: string;
 }
 
+
+
 const TeamsPage: React.FC = () => {
+  const navigate = useNavigate();
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -291,6 +296,12 @@ const TeamsPage: React.FC = () => {
       });
     }
   };
+
+  const handleViewTeam = (team: Team) => {
+    navigate(`/admin/teams/${team.id}`);
+  };
+
+
   
   // Filter teams based on search term
   const filteredTeams = teams.filter(team => 
@@ -370,6 +381,14 @@ const TeamsPage: React.FC = () => {
                   </td>
                   <td>
                     <Group spacing="xs">
+                      <Tooltip label="View Team Details">
+                        <ActionIcon 
+                          color="blue"
+                          onClick={() => handleViewTeam(team)}
+                        >
+                          <IconEye size={16} />
+                        </ActionIcon>
+                      </Tooltip>
                       <Tooltip label="Edit Team">
                         <ActionIcon color="blue">
                           <IconEdit size={16} />
@@ -417,6 +436,8 @@ const TeamsPage: React.FC = () => {
           </Group>
         </Stack>
       </Modal>
+
+
     </>
   );
 };
