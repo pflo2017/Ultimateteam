@@ -251,7 +251,79 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
   // Create a PlayerCard component that fetches fresh status data
   const PlayerCardWithFreshStatus = ({ player }: { player: Player }) => {
     const [isExpanded, setIsExpanded] = useState(false);
+    const [lastPaidMonth, setLastPaidMonth] = useState<string | null>(null);
+    const [lastPaidDate, setLastPaidDate] = useState<string | null>(null);
+    const [currentMonthStatus, setCurrentMonthStatus] = useState<string | null>(null);
+    const [currentMonthPaidDate, setCurrentMonthPaidDate] = useState<string | null>(null);
+    const [isLoadingPaymentData, setIsLoadingPaymentData] = useState(false);
     
+    // Function to fetch payment data
+    const fetchPaymentData = async () => {
+      setIsLoadingPaymentData(true);
+      try {
+        const currentDate = new Date();
+        const currentYear = currentDate.getFullYear();
+        const currentMonth = currentDate.getMonth() + 1;
+
+        // Get current month payment status
+        const { data: currentMonthData, error: currentMonthError } = await supabase
+          .from('monthly_payments')
+          .select('status, updated_at')
+          .eq('player_id', player.id)
+          .eq('year', currentYear)
+          .eq('month', currentMonth)
+          .single();
+
+        // Set current month status
+        if (!currentMonthError && currentMonthData) {
+          setCurrentMonthStatus(currentMonthData.status);
+          if (currentMonthData.status === 'paid' && currentMonthData.updated_at) {
+            setCurrentMonthPaidDate(new Date(currentMonthData.updated_at).toLocaleDateString('en-GB'));
+          } else {
+            setCurrentMonthPaidDate(null);
+          }
+        } else {
+          setCurrentMonthStatus('not_paid');
+          setCurrentMonthPaidDate(null);
+        }
+
+        // Find the most recent paid payment record (for last paid month)
+        const { data: lastPaidData, error } = await supabase
+          .from('monthly_payments')
+          .select('year, month, updated_at')
+          .eq('player_id', player.id)
+          .eq('status', 'paid')
+          .order('year', { ascending: false })
+          .order('month', { ascending: false })
+          .limit(1)
+          .single();
+
+        if (!error && lastPaidData) {
+          const monthName = new Date(lastPaidData.year, lastPaidData.month - 1).toLocaleString('default', { month: 'long' });
+          const year = lastPaidData.year;
+          const formattedDate = new Date(lastPaidData.updated_at).toLocaleDateString('en-GB');
+          setLastPaidMonth(`${monthName} ${year}`);
+          setLastPaidDate(formattedDate);
+        } else {
+          setLastPaidMonth(null);
+          setLastPaidDate(null);
+        }
+      } catch (error) {
+        console.error('Error fetching payment data:', error);
+        setCurrentMonthStatus('not_paid');
+        setCurrentMonthPaidDate(null);
+        setLastPaidMonth(null);
+        setLastPaidDate(null);
+      } finally {
+        setIsLoadingPaymentData(false);
+      }
+    };
+
+    // Fetch payment data when component mounts
+    useEffect(() => {
+      fetchPaymentData();
+    }, [player.id]);
+
     // Format the date if it exists
     let formattedBirthDate = t('admin.players.notAvailable');
     if (player.birth_date) {
@@ -332,79 +404,72 @@ export const ManagePlayersScreen: React.FC<ManagePlayersScreenProps> = ({
                       : t(`admin.players.medicalStatus.${player.medicalVisaStatus}`)}
                   </Text>
                 </View>
-                <View style={{ alignItems: 'flex-end', marginLeft: 'auto' }}>
-                  <Text style={{ fontSize: FONT_SIZES.xs, color: COLORS.grey[600], fontWeight: '500' }}>{t('admin.players.until')}</Text>
-                  <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '600' }}>
-                    {'N/A'}
-                  </Text>
-                </View>
-              </View>
-              
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: SPACING.md }}>
-                <MaterialCommunityIcons name="credit-card-outline" size={20} color={COLORS.primary} />
-                {(player.paymentStatus === 'paid' && player.last_payment_date) ? (
-                  <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginLeft: 8 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500', marginRight: 8 }}>
-                        {t('admin.players.paymentStatus')}
-                      </Text>
-                      <View style={{
-                        backgroundColor: getPaymentStatusColor(player.paymentStatus || '') + '20',
-                        borderRadius: 12,
-                        paddingHorizontal: SPACING.md,
-                        paddingVertical: 4,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}>
-                        <Text style={{
-                          fontSize: FONT_SIZES.xs,
-                          fontWeight: '600',
-                          color: getPaymentStatusColor(player.paymentStatus || '')
-                        }}>
-                          {t(`admin.players.${(player.paymentStatus || '').toLowerCase()}`)}
-                        </Text>
-                      </View>
-                    </View>
-                    <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500' }}>
-                      {new Date(player.last_payment_date).toLocaleDateString('en-GB')}
+                {player.medicalVisaStatus === 'valid' && player.medicalVisaIssueDate && (
+                  <View style={{ alignItems: 'flex-end', marginLeft: 'auto' }}>
+                    <Text style={{ fontSize: FONT_SIZES.xs, color: COLORS.grey[600], fontWeight: '500' }}>{t('admin.players.until')}</Text>
+                    <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '600' }}>
+                      {(() => {
+                        try {
+                          const issueDate = new Date(player.medicalVisaIssueDate);
+                          if (isNaN(issueDate.getTime())) return 'N/A';
+                          const expiryDate = new Date(issueDate);
+                          expiryDate.setMonth(expiryDate.getMonth() + 6);
+                          return expiryDate.toLocaleDateString('en-GB');
+                        } catch (e) {
+                          return 'N/A';
+                        }
+                      })()}
                     </Text>
                   </View>
-                ) : (
-                  <View style={{ flex: 1, flexDirection: 'column', marginLeft: 8 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500', marginRight: 8 }}>
-                        {t('admin.players.paymentStatus')}
-                      </Text>
-                      <View style={{
-                        backgroundColor: getPaymentStatusColor(player.paymentStatus || '') + '20',
-                        borderRadius: 12,
-                        paddingHorizontal: SPACING.md,
-                        paddingVertical: 4,
-                        alignItems: 'center',
-                        justifyContent: 'center',
+                )}
+              </View>
+              
+              <View style={{ marginBottom: SPACING.md }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <MaterialCommunityIcons name="credit-card-outline" size={20} color={COLORS.primary} />
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 8 }}>
+                    <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500', marginRight: 8 }}>
+                      {t('admin.players.paymentStatus')}
+                    </Text>
+                    <View style={{
+                      backgroundColor: getPaymentStatusColor(currentMonthStatus || player.paymentStatus || '') + '20',
+                      borderRadius: 12,
+                      paddingHorizontal: SPACING.md,
+                      paddingVertical: 4,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}>
+                      <Text style={{
+                        fontSize: FONT_SIZES.xs,
+                        fontWeight: '600',
+                        color: getPaymentStatusColor(currentMonthStatus || player.paymentStatus || '')
                       }}>
-                        <Text style={{
-                          fontSize: FONT_SIZES.xs,
-                          fontWeight: '600',
-                          color: getPaymentStatusColor(player.paymentStatus || '')
-                        }}>
-                          {t(`admin.players.${(player.paymentStatus || '').toLowerCase()}`)}
-                        </Text>
-                      </View>
+                        {t(`admin.players.${(currentMonthStatus || player.paymentStatus || '').toLowerCase()}`)}
+                      </Text>
                     </View>
-                    {/* Details below, left-aligned with label */}
-                    {player.paymentStatus !== 'paid' && player.last_payment_date && (
-                      <View style={{ flexDirection: 'row', alignItems: 'baseline', marginTop: 8, marginLeft: 0 }}>
-                        <Text style={{ fontSize: FONT_SIZES.sm, fontWeight: '700', color: COLORS.text }}>
-                          {new Date(player.last_payment_date).toLocaleDateString('en-GB', { month: 'long' })}
-                        </Text>
-                        <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.grey[600], fontWeight: '500', marginLeft: 6 }}>
-                          {t('admin.players.paidOn', { date: new Date(player.last_payment_date).toLocaleDateString('en-GB') })}
-                        </Text>
-                      </View>
+                  </View>
+                </View>
+                
+                {/* Last Payment Row */}
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <View style={{ width: 20 }} />
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 8 }}>
+                    <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500', marginRight: 8 }}>
+                      {t('admin.players.lastPayment')}
+                    </Text>
+                    {isLoadingPaymentData ? (
+                      <ActivityIndicator size="small" color={COLORS.primary} />
+                    ) : lastPaidMonth && lastPaidDate ? (
+                      <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '600' }}>
+                        {`${lastPaidMonth} - ${lastPaidDate}`}
+                      </Text>
+                    ) : (
+                      <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '600' }}>
+                        N/A
+                      </Text>
                     )}
                   </View>
-                )}
+                </View>
               </View>
               
               <View style={styles.actionButtons}>
@@ -864,7 +929,7 @@ const styles = StyleSheet.create({
     marginRight: SPACING.sm,
   },
   playerName: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: FONT_SIZES.md,
     fontWeight: '600',
     color: COLORS.text,
   },

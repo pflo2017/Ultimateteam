@@ -104,6 +104,8 @@ export const PlayerDetailsScreen = () => {
   const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
   const [isLoadingPaymentHistory, setIsLoadingPaymentHistory] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [lastPaidMonth, setLastPaidMonth] = useState<string | null>(null);
+  const [lastPaidDate, setLastPaidDate] = useState<string | null>(null);
 
   const insets = useSafeAreaInsets();
 
@@ -193,8 +195,15 @@ export const PlayerDetailsScreen = () => {
         // Set last payment date from most recent paid record
         if (latestPaid) {
           playerData.last_payment_date = latestPaid.updated_at;
+          // Set the last paid month and date for display
+          const monthName = new Date(latestPaid.year, latestPaid.month - 1).toLocaleString('default', { month: 'long' });
+          const year = latestPaid.year;
+          setLastPaidMonth(`${monthName} ${year}`);
+          setLastPaidDate(new Date(latestPaid.updated_at).toLocaleDateString('en-GB'));
         } else {
           playerData.last_payment_date = null;
+          setLastPaidMonth(null);
+          setLastPaidDate(null);
         }
 
         // Fetch parent data if available
@@ -512,17 +521,7 @@ export const PlayerDetailsScreen = () => {
           />
           <InfoRow 
             label={t('admin.players.details.lastPaymentDate')} 
-            value={(() => {
-              // Find the last paid month from payment history
-              const paidPayments = paymentHistory.filter(p => p.status === 'paid');
-              if (paidPayments.length > 0) {
-                const lastPaid = paidPayments.sort((a, b) => 
-                  new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-                )[0];
-                return `${new Date(lastPaid.year, lastPaid.month - 1).toLocaleString('default', { month: 'long' })} ${lastPaid.year} - ${formatDate(lastPaid.updated_at)}`;
-              }
-              return formatDate(player.last_payment_date);
-            })()} 
+            value={lastPaidMonth && lastPaidDate ? `${lastPaidMonth} - ${lastPaidDate}` : formatDate(player.last_payment_date)} 
           />
           <InfoRow 
             label="Current Month Status" 

@@ -148,8 +148,9 @@ const PlayerCard = ({ player, onDetailsPress, onDelete, onUpdateMedicalVisa }: {
         // Set last paid month and exact date if found
         if (statusData.last_paid_date) {
           const paidDate = new Date(statusData.last_paid_date);
-          const monthName = paidDate.toLocaleDateString('en-GB', { month: 'long' });
-          setRefreshedLastPaidMonth(monthName);
+          const monthName = paidDate.toLocaleString('default', { month: 'long' });
+          const year = paidDate.getFullYear();
+          setRefreshedLastPaidMonth(`${monthName} ${year}`);
           setRefreshedLastPaidExactDate(paidDate.toLocaleDateString('en-GB'));
         } else {
           setRefreshedLastPaidMonth(null);
@@ -195,10 +196,10 @@ const PlayerCard = ({ player, onDetailsPress, onDelete, onUpdateMedicalVisa }: {
         
         // Set last paid month and exact date if found
         if (!lastPaidError && lastPaidData && lastPaidData.status === 'paid' && lastPaidData.updated_at) {
-          const paidDate = new Date(lastPaidData.updated_at);
-          const monthName = paidDate.toLocaleDateString('en-GB', { month: 'long' });
-          setRefreshedLastPaidMonth(monthName);
-          setRefreshedLastPaidExactDate(paidDate.toLocaleDateString('en-GB'));
+          const monthName = new Date(lastPaidData.year, lastPaidData.month - 1).toLocaleString('default', { month: 'long' });
+          const year = lastPaidData.year;
+          setRefreshedLastPaidMonth(`${monthName} ${year}`);
+          setRefreshedLastPaidExactDate(new Date(lastPaidData.updated_at).toLocaleDateString('en-GB'));
         } else {
           setRefreshedLastPaidMonth(null);
           setRefreshedLastPaidExactDate(null);
@@ -372,69 +373,48 @@ const PlayerCard = ({ player, onDetailsPress, onDelete, onUpdateMedicalVisa }: {
             <View style={{ marginBottom: SPACING.md }}>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <MaterialCommunityIcons name="credit-card-outline" size={20} color={COLORS.primary} />
-                {displayStatus === 'paid' && displayPaidDate ? (
-                  <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginLeft: 8 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500', marginRight: 8 }}>
-                        {t('coach.players.payment_status')}
-                      </Text>
-                      <View style={{
-                        backgroundColor: getPaymentStatusColor(displayStatus) + '20',
-                        borderRadius: 12,
-                        paddingHorizontal: SPACING.md,
-                        paddingVertical: 4,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}>
-                        <Text style={{
-                          fontSize: FONT_SIZES.xs,
-                          fontWeight: '600',
-                          color: getPaymentStatusColor(displayStatus)
-                        }}>
-                          {getPaymentStatusText(displayStatus, t)}
-                        </Text>
-                      </View>
-                    </View>
-                    <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500' }}>
-                      {displayPaidDate}
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 8 }}>
+                  <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500', marginRight: 8 }}>
+                    {t('coach.players.payment_status')}
+                  </Text>
+                  <View style={{
+                    backgroundColor: getPaymentStatusColor(displayStatus) + '20',
+                    borderRadius: 12,
+                    paddingHorizontal: SPACING.md,
+                    paddingVertical: 4,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}>
+                    <Text style={{
+                      fontSize: FONT_SIZES.xs,
+                      fontWeight: '600',
+                      color: getPaymentStatusColor(displayStatus)
+                    }}>
+                      {getPaymentStatusText(displayStatus, t)}
                     </Text>
                   </View>
-                ) : (
-                  <View style={{ flex: 1, flexDirection: 'column', marginLeft: 8 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500', marginRight: 8 }}>
-                        {t('coach.players.payment_status')}
-                      </Text>
-                      <View style={{
-                        backgroundColor: getPaymentStatusColor(displayStatus) + '20',
-                        borderRadius: 12,
-                        paddingHorizontal: SPACING.md,
-                        paddingVertical: 4,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}>
-                        <Text style={{
-                          fontSize: FONT_SIZES.xs,
-                          fontWeight: '600',
-                          color: getPaymentStatusColor(displayStatus)
-                        }}>
-                          {getPaymentStatusText(displayStatus, t)}
-                        </Text>
-                      </View>
-                    </View>
-                    {/* Details below, left-aligned with label */}
-                    {displayStatus !== 'paid' && displayLastPaidMonth && displayLastPaidExactDate && (
-                      <View style={{ flexDirection: 'row', alignItems: 'baseline', marginTop: 8, marginLeft: 0 }}>
-                        <Text style={{ fontSize: FONT_SIZES.sm, fontWeight: '700', color: COLORS.text }}>
-                          {displayLastPaidMonth}
-                        </Text>
-                        <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.grey[600], fontWeight: '500', marginLeft: 6 }}>
-                          {t('coach.players.paid_on', { date: displayLastPaidExactDate })}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                )}
+                </View>
+              </View>
+              
+              {/* Last Payment Row */}
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <View style={{ width: 20 }} />
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 8 }}>
+                  <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '500', marginRight: 8 }}>
+                    {t('coach.players.last_payment')}
+                  </Text>
+                  {isRefreshing ? (
+                    <ActivityIndicator size="small" color={COLORS.primary} />
+                  ) : displayLastPaidMonth && displayLastPaidExactDate ? (
+                    <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '600' }}>
+                      {`${displayLastPaidMonth} - ${displayLastPaidExactDate}`}
+                    </Text>
+                  ) : (
+                    <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: '600' }}>
+                      N/A
+                    </Text>
+                  )}
+                </View>
               </View>
             </View>
             
